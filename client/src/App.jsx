@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
@@ -6,7 +6,9 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Connect to backend
-const socket = io.connect(import.meta.env.VITE_BACKEND_URL);
+const BACKEND_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+
+const socket = io.connect(BACKEND_URL);
 
 
 function App() {
