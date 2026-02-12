@@ -10,22 +10,22 @@ const app = express();
 // --- 1. CONFIGURATION ---
 // Define allowed origins: Localhost (for dev) + Production URL (from .env)
 const allowedOrigins = [
-  "http://localhost:5173", // Local Vite
-  process.env.FRONTEND_URL // Vercel Deployment URL
+  "http://localhost:5173",             // Localhost
+  "https://securechatroom.vercel.app"  // Your Vercel Domain
 ];
 
 app.use(cors({
   origin: allowedOrigins,
-  methods: ["GET", "POST"]
+  methods: ["GET", "POST"],
+  credentials: true
 }));
 
-const server = http.createServer(app);
+// Apply to Express
+app.use(cors(corsOptions));
 
+// Apply to Socket.IO (Crucial: Socket.IO has its own CORS settings)
 const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-  },
+  cors: corsOptions 
 });
 
 // --- 2. STATE MANAGEMENT ---
