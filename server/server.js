@@ -3,6 +3,8 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const crypto = require('crypto');
+const hash = (str) => crypto.createHash('sha256').update(str).digest('hex');
 const { generateRoomId } = require("./utils/roomUtils");
 
 const app = express();
@@ -35,7 +37,7 @@ const rooms = {};
 io.on("connection", (socket) => {
   // console.log(`User connected: ${socket.id}`);
 
-  socket.on("create_room", ({ username }) => {
+  socket.on("create_room", ({ username, password }) => {
     let roomId = generateRoomId();
     while (rooms[roomId]) {
       roomId = generateRoomId();
@@ -43,6 +45,7 @@ io.on("connection", (socket) => {
     rooms[roomId] = {
       hostId: socket.id,
       users: [],
+      password: hash(password)
     };
     socket.join(roomId);
     const user = { id: socket.id, username };
@@ -51,9 +54,18 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("update_users", rooms[roomId].users);
   });
 
-  socket.on("join_room", ({ username, roomId }) => {
-    if (rooms[roomId]) {
-      const isUsernameTaken = rooms[roomId].users.some(
+  socket.on("join_room", ({ username, roomId, password }) => {
+    const room = rooms[roomId];
+
+    if (room) {
+      // CHECK 1: Verify Encryption Key
+      if (room.password !== hash(password)) {
+        socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
+        return;
+      }
+
+      // CHECK 2: Verify Username
+      const isUsernameTaken = room.users.some(
         (user) => user.username.toLowerCase() === username.toLowerCase()
       );
 
@@ -64,11 +76,11 @@ io.on("connection", (socket) => {
 
       socket.join(roomId);
       const user = { id: socket.id, username };
-      rooms[roomId].users.push(user);
+      room.users.push(user);
 
       socket.emit("joined_room_success", { 
         roomId, 
-        isHost: rooms[roomId].hostId === socket.id 
+        isHost: room.hostId === socket.id 
       });
 
       io.to(roomId).emit("receive_message", {
@@ -76,7 +88,7 @@ io.on("connection", (socket) => {
         message: `${username} has joined the chat.`,
       });
 
-      io.to(roomId).emit("update_users", rooms[roomId].users);
+      io.to(roomId).emit("update_users", room.users);
     } else {
       socket.emit("error", "Room not found.");
     }

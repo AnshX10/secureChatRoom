@@ -59,14 +59,14 @@ function App() {
     if (!user || !password) return toast.error("Username and Password required");
     setUsername(user);
     setRoomPassword(password);
-    socket.emit("create_room", { username: user });
+    socket.emit("create_room", { username: user, password: password });
   };
 
   const joinRoom = (user, room, password) => {
     if (!user || !room || !password) return toast.error("All fields are required");
     setUsername(user);
     setRoomPassword(password);
-    socket.emit("join_room", { username: user, roomId: room });
+    socket.emit("join_room", { username: user, roomId: room, password: password });
   };
 
   const leaveRoom = () => {
