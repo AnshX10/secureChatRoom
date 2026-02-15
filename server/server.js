@@ -110,12 +110,8 @@ io.on("connection", (socket) => {
   });
 
   // --- TYPING INDICATOR ---
-  socket.on("typing_start", ({ roomId, username }) => {
-    socket.to(roomId).emit("display_typing", username);
-  });
-
-  socket.on("typing_stop", ({ roomId, username }) => {
-    socket.to(roomId).emit("hide_typing", username);
+  socket.on("typing_status", ({ roomId, username, isTyping }) => {
+    socket.to(roomId).emit("user_typing", { username, isTyping });
   });
 
   socket.on("close_room", ({ roomId }) => {
