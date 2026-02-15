@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   IoMdSend, IoMdPeople, IoMdLock, IoMdCopy, 
-  IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit 
+  IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit,
+  IoMdTimer // <--- New Import
 } from 'react-icons/io';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,7 +16,21 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   const [showUsers, setShowUsers] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  
+  // --- New State for Self-Destruct ---
+  const [selfDestructTime, setSelfDestructTime] = useState(0); // 0 = Off
+  const [showTimerMenu, setShowTimerMenu] = useState(false);
+
   const scrollRef = useRef(null);
+
+  // Timer Options
+  const timerOptions = [
+    { label: "OFF", value: 0 },
+    { label: "10s", value: 10000 },
+    { label: "30s", value: 30000 },
+    { label: "1m", value: 60000 },
+    { label: "10m", value: 600000 },
+  ];
 
   // --- Encryption ---
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
@@ -31,17 +46,36 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
     if (!currentMessage.trim()) return;
 
     if (editingMessageId) {
+      // Editing Mode (Timers cannot be added post-creation)
       const encrypted = encrypt(currentMessage);
       socket.emit("edit_message", { roomId, messageId: editingMessageId, newEncryptedMessage: encrypted });
-      setMessageList((list) => list.map(msg => msg.id === editingMessageId ? { ...msg, message: currentMessage, edited: true } : msg));
+      
+      setMessageList((list) => list.map(msg => 
+        msg.id === editingMessageId ? { ...msg, message: currentMessage, edited: true } : msg
+      ));
+      
       setEditingMessageId(null);
       setCurrentMessage("");
     } else {
+      // New Message Mode
       const messageId = uuidv4();
       const encrypted = encrypt(currentMessage);
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const messageData = { id: messageId, roomId, username, message: encrypted, time, edited: false, deleted: false };
+      
+      const messageData = { 
+        id: messageId, 
+        roomId, 
+        username, 
+        message: encrypted, 
+        time, 
+        edited: false, 
+        deleted: false,
+        timer: selfDestructTime // <--- Send Timer Value to Server
+      };
+
       await socket.emit("send_message", messageData);
+      
+      // Optimistic UI Update
       setMessageList((list) => [...list, { ...messageData, message: currentMessage, own: true }]);
       setCurrentMessage("");
     }
@@ -58,30 +92,59 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   };
 
   const startEditing = (msg) => {
+    // Prevent editing if message is already deleted
+    if (msg.deleted) return;
     setEditingMessageId(msg.id);
     setCurrentMessage(msg.message);
     setActiveMenuId(null);
+    setShowTimerMenu(false); // Close timer menu if open
   };
 
   // --- Listeners ---
   useEffect(() => {
     socket.on("receive_message", (data) => {
-      if(data.system) setMessageList((l) => [...l, data]);
-      else setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false }]);
+      if(data.system) {
+        setMessageList((l) => [...l, data]);
+      } else {
+        setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false }]);
+      }
     });
+
     socket.on("message_deleted", (deletedId) => {
-      setMessageList((list) => list.map((msg) => msg.id === deletedId ? { ...msg, deleted: true, message: "[ DATA EXPUNGED ]", edited: false } : msg));
+      setMessageList((list) => list.map((msg) => 
+        msg.id === deletedId ? { ...msg, deleted: true, message: "[ DATA EXPUNGED ]", edited: false } : msg
+      ));
     });
+
     socket.on("message_updated", ({ messageId, newEncryptedMessage }) => {
-      setMessageList((list) => list.map((msg) => msg.id === messageId ? { ...msg, message: decrypt(newEncryptedMessage), edited: true } : msg));
+      setMessageList((list) => list.map((msg) => 
+        msg.id === messageId ? { ...msg, message: decrypt(newEncryptedMessage), edited: true } : msg
+      ));
     });
+
     socket.on("update_users", (userList) => setUsers(userList));
-    return () => { socket.off("receive_message"); socket.off("update_users"); socket.off("message_deleted"); socket.off("message_updated"); };
+
+    return () => { 
+      socket.off("receive_message"); 
+      socket.off("update_users"); 
+      socket.off("message_deleted"); 
+      socket.off("message_updated"); 
+    };
   }, [socket, roomPassword]);
 
-  useEffect(() => !editingMessageId && scrollRef.current?.scrollIntoView({ behavior: "smooth" }), [messageList, editingMessageId]);
+  // Auto-scroll
   useEffect(() => {
-    const fn = () => setActiveMenuId(null);
+    if(!editingMessageId) {
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messageList, editingMessageId]);
+
+  // Close menus on click outside
+  useEffect(() => {
+    const fn = () => {
+      setActiveMenuId(null);
+      setShowTimerMenu(false);
+    };
     document.addEventListener("click", fn);
     return () => document.removeEventListener("click", fn);
   }, []);
@@ -162,7 +225,17 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                         ? "bg-white text-black border-white" 
                         : "bg-black text-zinc-200 border-zinc-800"
                   }`}>
-                    {!msg.own && !msg.deleted && <p className="text-[9px] font-bold text-zinc-500 mb-2 uppercase tracking-wider">{msg.username}</p>}
+                    {/* Username & Timer Indicator */}
+                    <div className="flex justify-between items-start mb-2">
+                        {!msg.own && !msg.deleted && <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">{msg.username}</p>}
+                        
+                        {/* Timer Icon */}
+                        {msg.timer > 0 && !msg.deleted && (
+                           <span className={`flex items-center gap-1 text-[8px] border border-current px-1 rounded-full opacity-60 ${msg.own ? "ml-auto" : "ml-auto"}`}>
+                             <IoMdTimer /> {msg.timer / 1000}s
+                           </span>
+                        )}
+                    </div>
                     
                     <p className="text-sm leading-relaxed whitespace-pre-wrap flex items-center gap-2">
                         {msg.deleted && <IoMdTrash />} {msg.message}
@@ -216,15 +289,61 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
         </main>
 
         {/* Input Bar */}
-        <footer className="p-4 border-t border-zinc-800 bg-black">
-          {editingMessageId && (
-            <div className="flex items-center justify-between text-xs text-white mb-2 px-4 uppercase tracking-widest border-l-2 border-white pl-2">
-              <span>Editing Transmisson...</span>
-              <button onClick={() => { setEditingMessageId(null); setCurrentMessage(""); }}><IoMdClose /></button>
-            </div>
-          )}
+        <footer className="p-4 border-t border-zinc-800 bg-black relative">
+          
+          {/* Edit / Timer Indicators */}
+          <div className="flex items-center justify-between px-2 mb-2">
+            {editingMessageId && (
+                <div className="flex items-center gap-2 text-xs text-white uppercase tracking-widest border-l-2 border-white pl-2">
+                  <span>Editing Transmisson...</span>
+                  <button onClick={() => { setEditingMessageId(null); setCurrentMessage(""); }}><IoMdClose /></button>
+                </div>
+            )}
+            
+            {/* Spacer if not editing */}
+            {!editingMessageId && <div></div>} 
+
+            {/* Timer Status Text */}
+            {selfDestructTime > 0 && !editingMessageId && (
+                 <div className="flex items-center gap-2 text-[10px] text-red-500 font-bold uppercase tracking-widest animate-pulse">
+                    <IoMdTimer /> Self-Destruct: {selfDestructTime/1000}s
+                 </div>
+            )}
+          </div>
           
           <div className={`flex items-center border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-800 focus-within:border-zinc-500"}`}>
+            
+            {/* Timer Button */}
+            <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowTimerMenu(!showTimerMenu); }}
+                  className={`p-3 transition-colors ${selfDestructTime > 0 ? "text-red-500" : "text-zinc-500 hover:text-white"}`}
+                  title="Self Destruct Timer"
+                >
+                  <IoMdTimer size={18} />
+                </button>
+
+                {/* Timer Dropdown */}
+                <AnimatePresence>
+                    {showTimerMenu && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-700 shadow-2xl z-50 w-32"
+                        >
+                            {timerOptions.map((opt) => (
+                                <button
+                                    key={opt.label}
+                                    onClick={() => { setSelfDestructTime(opt.value); setShowTimerMenu(false); }}
+                                    className={`w-full text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-400"}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
             <input
               type="text"
               value={currentMessage}
