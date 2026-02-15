@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   IoMdSend, IoMdPeople, IoMdLock, IoMdCopy, 
   IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit,
-  IoMdTimer // <--- New Import
+  IoMdTimer 
 } from 'react-icons/io';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,13 +17,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   
-  // --- New State for Self-Destruct ---
-  const [selfDestructTime, setSelfDestructTime] = useState(0); // 0 = Off
+  // --- Self-Destruct State ---
+  const [selfDestructTime, setSelfDestructTime] = useState(0); 
   const [showTimerMenu, setShowTimerMenu] = useState(false);
+
+  // --- NEW: Typing Indicator State ---
+  const [typingUsers, setTypingUsers] = useState([]);
+  const typingTimeoutRef = useRef(null); // To handle debounce
 
   const scrollRef = useRef(null);
 
-  // Timer Options
   const timerOptions = [
     { label: "OFF", value: 0 },
     { label: "10s", value: 10000 },
@@ -42,11 +45,36 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   };
 
   // --- Actions ---
+  
+  // NEW: Handle Input Change with Typing Logic
+  const handleInputChange = (e) => {
+    setCurrentMessage(e.target.value);
+
+    // Emit typing start
+    if (e.target.value.length > 0) {
+      socket.emit("typing_start", { roomId, username });
+      
+      // Clear existing timeout to keep "typing" active while typing
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      // Set timeout to stop typing after 2 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit("typing_stop", { roomId, username });
+      }, 2000);
+    } else {
+      // If field is empty, stop immediately
+      socket.emit("typing_stop", { roomId, username });
+    }
+  };
+
   const sendMessage = async () => {
     if (!currentMessage.trim()) return;
 
+    // Stop typing immediately upon send
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    socket.emit("typing_stop", { roomId, username });
+
     if (editingMessageId) {
-      // Editing Mode (Timers cannot be added post-creation)
       const encrypted = encrypt(currentMessage);
       socket.emit("edit_message", { roomId, messageId: editingMessageId, newEncryptedMessage: encrypted });
       
@@ -57,7 +85,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
       setEditingMessageId(null);
       setCurrentMessage("");
     } else {
-      // New Message Mode
       const messageId = uuidv4();
       const encrypted = encrypt(currentMessage);
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -70,17 +97,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
         time, 
         edited: false, 
         deleted: false,
-        timer: selfDestructTime // <--- Send Timer Value to Server
+        timer: selfDestructTime 
       };
 
       await socket.emit("send_message", messageData);
-      
-      // Optimistic UI Update
       setMessageList((list) => [...list, { ...messageData, message: currentMessage, own: true }]);
       setCurrentMessage("");
     }
   };
 
+  // ... (deleteForMe, deleteForEveryone, startEditing remain the same) ...
   const deleteForMe = (id) => {
     setMessageList((list) => list.filter((msg) => msg.id !== id));
     setActiveMenuId(null);
@@ -92,17 +118,19 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   };
 
   const startEditing = (msg) => {
-    // Prevent editing if message is already deleted
     if (msg.deleted) return;
     setEditingMessageId(msg.id);
     setCurrentMessage(msg.message);
     setActiveMenuId(null);
-    setShowTimerMenu(false); // Close timer menu if open
+    setShowTimerMenu(false);
   };
 
   // --- Listeners ---
   useEffect(() => {
     socket.on("receive_message", (data) => {
+      // If we receive a message from someone, force remove them from typing list
+      setTypingUsers((prev) => prev.filter(u => u !== data.username));
+      
       if(data.system) {
         setMessageList((l) => [...l, data]);
       } else {
@@ -124,11 +152,25 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
 
     socket.on("update_users", (userList) => setUsers(userList));
 
+    // --- NEW: Typing Listeners ---
+    socket.on("display_typing", (user) => {
+      setTypingUsers((prev) => {
+        if (!prev.includes(user)) return [...prev, user];
+        return prev;
+      });
+    });
+
+    socket.on("hide_typing", (user) => {
+      setTypingUsers((prev) => prev.filter((u) => u !== user));
+    });
+
     return () => { 
       socket.off("receive_message"); 
       socket.off("update_users"); 
       socket.off("message_deleted"); 
       socket.off("message_updated"); 
+      socket.off("display_typing"); // Cleanup
+      socket.off("hide_typing");    // Cleanup
     };
   }, [socket, roomPassword]);
 
@@ -137,9 +179,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
     if(!editingMessageId) {
         scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messageList, editingMessageId]);
+  }, [messageList, editingMessageId, typingUsers]); // Added typingUsers to dependencies
 
-  // Close menus on click outside
+  // ... (Close menus on click outside logic remains the same) ...
   useEffect(() => {
     const fn = () => {
       setActiveMenuId(null);
@@ -152,13 +194,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
   return (
     <div className="flex h-screen bg-black text-white font-mono selection:bg-white selection:text-black overflow-hidden">
       
-      {/* Sidebar */}
+      {/* ... Sidebar logic (Keep as is) ... */}
       <AnimatePresence>
         {(showUsers || window.innerWidth > 768) && (
           <motion.div 
             initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
             className="fixed md:relative z-40 w-72 h-full bg-zinc-950 border-r border-zinc-800 flex flex-col"
           >
+             {/* ... Sidebar Content ... */}
              <div className="p-6 border-b border-zinc-800">
                 <h2 className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
                   <IoMdLock /> CLASSIFIED
@@ -189,10 +232,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
         )}
       </AnimatePresence>
 
-      {/* Main Chat */}
       <div className="flex-1 flex flex-col relative bg-black">
-        
-        {/* Header */}
+        {/* ... Header logic (Keep as is) ... */}
         <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 z-30 bg-black">
           <div className="flex items-center gap-3">
              <button onClick={() => setShowUsers(!showUsers)} className="md:hidden text-2xl"><IoMdPeople /></button>
@@ -204,10 +245,10 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
           {isHost && <button onClick={() => socket.emit("close_room", {roomId})} className="text-[10px] border border-zinc-700 text-zinc-400 px-4 py-2 uppercase hover:bg-white hover:text-black transition">TERMINATE</button>}
         </header>
 
-        {/* Messages */}
         <main className="flex-1 overflow-y-auto p-4 space-y-6">
           {messageList.map((msg) => (
-            <motion.div 
+             /* ... existing message mapping logic ... */
+             <motion.div 
               layout key={msg.id || Math.random()} 
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"}`}
@@ -216,8 +257,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                 <span className="text-[9px] border border-zinc-800 text-zinc-500 px-3 py-1 uppercase tracking-widest">{msg.message}</span>
               ) : (
                 <div className="flex flex-col max-w-[85%] md:max-w-[60%] relative">
-                  
-                  {/* Bubble */}
                   <div className={`p-4 relative border transition-all ${
                     msg.deleted 
                       ? "bg-transparent border-zinc-800 text-zinc-600 italic"
@@ -225,29 +264,22 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                         ? "bg-white text-black border-white" 
                         : "bg-black text-zinc-200 border-zinc-800"
                   }`}>
-                    {/* Username & Timer Indicator */}
                     <div className="flex justify-between items-start mb-2">
                         {!msg.own && !msg.deleted && <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">{msg.username}</p>}
-                        
-                        {/* Timer Icon */}
                         {msg.timer > 0 && !msg.deleted && (
-                           <span className={`flex items-center gap-1 text-[8px] border border-current px-1 rounded-full opacity-60 ${msg.own ? "ml-auto" : "ml-auto"}`}>
+                           <span className={`flex items-center gap-1 text-[8px] border border-current px-1 rounded-full opacity-60 ml-auto`}>
                              <IoMdTimer /> {msg.timer / 1000}s
                            </span>
                         )}
                     </div>
-                    
                     <p className="text-sm leading-relaxed whitespace-pre-wrap flex items-center gap-2">
                         {msg.deleted && <IoMdTrash />} {msg.message}
                     </p>
-                    
                     <div className="flex items-center gap-2 justify-end mt-2">
                         {msg.edited && !msg.deleted && <span className="text-[8px] border border-current px-1 uppercase opacity-50">EDITED</span>}
                         <span className="text-[9px] opacity-50 font-bold">{msg.time}</span>
                     </div>
                   </div>
-
-                  {/* 3-Dot Menu Trigger */}
                   {!msg.deleted && (
                       <div 
                         onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === msg.id ? null : msg.id); }}
@@ -256,8 +288,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                         <IoMdMore size={20} />
                       </div>
                   )}
-
-                  {/* Context Menu */}
                   <AnimatePresence>
                     {activeMenuId === msg.id && (
                       <motion.div 
@@ -280,18 +310,38 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                       </motion.div>
                     )}
                   </AnimatePresence>
-
                 </div>
               )}
             </motion.div>
           ))}
+          
+          {/* --- NEW: Typing Indicator Bubble --- */}
+          <AnimatePresence>
+            {typingUsers.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="flex items-center gap-2"
+              >
+                <div className="bg-zinc-900 border border-zinc-700 px-4 py-3 rounded-none text-xs text-zinc-400 font-mono uppercase tracking-widest flex items-center gap-3">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  {typingUsers.length > 2 
+                    ? "MULTIPLE AGENTS TRANSMITTING..." 
+                    : typingUsers.length === 1 
+                      ? `INCOMING DATA: ${typingUsers[0]}...` 
+                      : `AGENTS ${typingUsers.join(" & ")} TRANSMITTING...`
+                  }
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div ref={scrollRef} />
         </main>
 
-        {/* Input Bar */}
         <footer className="p-4 border-t border-zinc-800 bg-black relative">
           
-          {/* Edit / Timer Indicators */}
           <div className="flex items-center justify-between px-2 mb-2">
             {editingMessageId && (
                 <div className="flex items-center gap-2 text-xs text-white uppercase tracking-widest border-l-2 border-white pl-2">
@@ -300,10 +350,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                 </div>
             )}
             
-            {/* Spacer if not editing */}
             {!editingMessageId && <div></div>} 
 
-            {/* Timer Status Text */}
             {selfDestructTime > 0 && !editingMessageId && (
                  <div className="flex items-center gap-2 text-[10px] text-red-500 font-bold uppercase tracking-widest animate-pulse">
                     <IoMdTimer /> Self-Destruct: {selfDestructTime/1000}s
@@ -313,7 +361,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
           
           <div className={`flex items-center border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-800 focus-within:border-zinc-500"}`}>
             
-            {/* Timer Button */}
             <div className="relative">
                 <button 
                   onClick={(e) => { e.stopPropagation(); setShowTimerMenu(!showTimerMenu); }}
@@ -323,7 +370,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
                   <IoMdTimer size={18} />
                 </button>
 
-                {/* Timer Dropdown */}
                 <AnimatePresence>
                     {showTimerMenu && (
                         <motion.div 
@@ -349,7 +395,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom })
               value={currentMessage}
               placeholder={editingMessageId ? "OVERWRITE DATA..." : "ENTER ENCRYPTED MESSAGE..."}
               className="flex-1 bg-transparent px-4 py-3 text-white outline-none placeholder:text-zinc-700 text-sm font-mono"
-              onChange={(e) => setCurrentMessage(e.target.value)}
+              onChange={handleInputChange} // <--- UPDATED HANDLER
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             />
             <button 
