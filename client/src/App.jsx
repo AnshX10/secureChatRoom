@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
-import ReactGA from "react-ga4";
 
 // Connect to backend
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
@@ -58,11 +57,6 @@ function App() {
 
   const createRoom = (user, password) => {
     if (!user || !password) return;
-
-    ReactGA.event({
-    category: "User",
-    action: "Created a Room",
-  });
     setUsername(user);
     setRoomPassword(password);
     socket.emit("create_room", { username: user, password: password });
@@ -70,12 +64,6 @@ function App() {
 
   const joinRoom = (user, room, password) => {
     if (!user || !room || !password) return;
-
-    // Track successful join attempt
-  ReactGA.event({
-    category: "User",
-    action: "Joined a Room",
-  });
     setUsername(user);
     setRoomPassword(password);
     socket.emit("join_room", { username: user, roomId: room, password: password });
