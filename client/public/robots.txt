@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://securechatroom.vercel.app/sitemap.xml
