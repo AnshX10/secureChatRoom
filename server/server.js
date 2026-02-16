@@ -39,64 +39,89 @@ io.on("connection", (socket) => {
 
   socket.on("create_room", ({ username, password }) => {
     let roomId = generateRoomId();
-    while (rooms[roomId]) {
-      roomId = generateRoomId();
-    }
+    while (rooms[roomId]) roomId = generateRoomId();
+
+    const createdAt = Date.now(); // <--- Capture creation time here
+
     rooms[roomId] = {
       hostId: socket.id,
       users: [],
-      password: hash(password)
+      password: hash(password),
+      createdAt: createdAt // <--- Store it in the room object
     };
+
     socket.join(roomId);
-    const user = { id: socket.id, username };
-    rooms[roomId].users.push(user);
-    socket.emit("room_created", { roomId });
+    rooms[roomId].users.push({ id: socket.id, username });
+
+    // Send createdAt to the host
+    socket.emit("room_created", { roomId, createdAt });
     io.to(roomId).emit("update_users", rooms[roomId].users);
   });
 
+
   socket.on("join_room", ({ username, roomId, password }) => {
     const room = rooms[roomId];
-
+  
     if (room) {
-      // CHECK 1: Verify Encryption Key
+      // 1. Check Encryption Key (Security Handshake)
       if (room.password !== hash(password)) {
-        socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
-        return;
+        return socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
       }
-
-      // CHECK 2: Verify Username
-      const isUsernameTaken = room.users.some(
-        (user) => user.username.toLowerCase() === username.toLowerCase()
+  
+      // 2. STRICT DUPLICATE USERNAME CHECK (The Fix)
+      const isNameTaken = room.users.some(
+        (u) => u.username.toLowerCase() === username.toLowerCase()
       );
-
-      if (isUsernameTaken) {
-        socket.emit("error", "Username is already taken in this room.");
-        return;
+  
+      if (isNameTaken) {
+        return socket.emit("error", "CODENAME ALREADY IN USE. CHOOSE ANOTHER.");
       }
-
+  
+      // 3. If passed, join the room
       socket.join(roomId);
-      const user = { id: socket.id, username };
-      room.users.push(user);
-
+      const newUser = { id: socket.id, username };
+      room.users.push(newUser);
+  
+      // 4. Notify everyone
       socket.emit("joined_room_success", { 
         roomId, 
-        isHost: room.hostId === socket.id 
+        isHost: false, 
+        createdAt: room.createdAt 
       });
-
+  
       io.to(roomId).emit("receive_message", {
         system: true,
-        message: `${username} has joined the chat.`,
+        message: `${username} has entered the frequency.`,
       });
-
+  
       io.to(roomId).emit("update_users", room.users);
     } else {
-      socket.emit("error", "Room not found.");
+      socket.emit("error", "ROOM NOT FOUND OR EXPIRED.");
+    }
+  });
+
+  // NEW: Kick User Feature
+  socket.on("kick_user", ({ roomId, userId }) => {
+    const room = rooms[roomId];
+    if (room && room.hostId === socket.id) {
+      const targetUser = room.users.find(u => u.id === userId);
+      if (targetUser) {
+        // Notify the target user they are kicked
+        io.to(userId).emit("kicked");
+
+        // Remove from room data
+        room.users = room.users.filter(u => u.id !== userId);
+
+        // Notify room
+        io.to(roomId).emit("receive_message", { system: true, message: `${targetUser.username} was removed from the session.` });
+        io.to(roomId).emit("update_users", room.users);
+      }
     }
   });
 
   socket.on("send_message", (data) => {
     const { roomId, messageId, timer } = data; // Receive timer (in ms)
-    
+
     // Broadcast message to others immediately
     socket.to(roomId).emit("receive_message", data);
 
@@ -104,7 +129,7 @@ io.on("connection", (socket) => {
     if (timer && timer > 0) {
       setTimeout(() => {
         // Trigger the delete event for everyone in the room (including sender)
-        io.to(roomId).emit("message_deleted", data.id); 
+        io.to(roomId).emit("message_deleted", data.id);
       }, timer);
     }
   });
@@ -114,10 +139,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("edit_message", ({ roomId, messageId, newEncryptedMessage }) => {
-    io.to(roomId).emit("message_updated", { 
-      messageId, 
+    io.to(roomId).emit("message_updated", {
+      messageId,
       newEncryptedMessage,
-      edited: true 
+      edited: true
     });
   });
 
@@ -142,7 +167,7 @@ io.on("connection", (socket) => {
       if (userIndex !== -1) {
         const username = room.users[userIndex].username;
         room.users.splice(userIndex, 1);
-        
+
         io.to(roomId).emit("receive_message", {
           system: true,
           message: `${username} has left.`,
@@ -150,8 +175,8 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("update_users", room.users);
 
         if (room.hostId === socket.id) {
-            io.to(roomId).emit("room_closed");
-            delete rooms[roomId];
+          io.to(roomId).emit("room_closed");
+          delete rooms[roomId];
         }
         break;
       }

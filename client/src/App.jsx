@@ -17,18 +17,21 @@ function App() {
   const [roomId, setRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
   const [isHost, setIsHost] = useState(false);
+  const [startTime, setStartTime] = useState(null);
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId }) => {
+    socket.on("room_created", ({ roomId, createdAt }) => {
       setRoomId(roomId);
+      setStartTime(createdAt);
       setIsHost(true);
       setIsInChat(true);
       toast.success(`Secure Room ${roomId} created!`);
     });
 
     // Handle Join Success
-    socket.on("joined_room_success", ({ roomId, isHost }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt }) => {
       setRoomId(roomId);
+      setStartTime(createdAt);
       setIsHost(isHost);
       setIsInChat(true);
       toast.success(`Joined room ${roomId}`);
@@ -87,6 +90,7 @@ function App() {
           roomPassword={roomPassword} // PASS THE PASSWORD
           isHost={isHost}
           leaveRoom={leaveRoom}
+          createdAt={startTime}
         />
       )}
     </div>
