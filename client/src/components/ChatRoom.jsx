@@ -7,9 +7,8 @@ import {
 } from 'react-icons/io';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
-import { toast } from 'react-toastify';
 
-// --- SUB-COMPONENT: Decrypting Text Effect (Preserved) ---
+// --- SUB-COMPONENT: Decrypting Text Effect (Glitchy HUD Style) ---
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&";
@@ -30,11 +29,19 @@ const DecryptingName = ({ name }) => {
   return <span>{displayValue}</span>;
 };
 
-// Added createdAt to props
-const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, createdAt }) => {
+const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, createdAt, initialUsers }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
-  const [users, setUsers] = useState([]);
+
+  // Initialize with initialUsers to prevent empty sidebar on join/create
+  const [users, setUsers] = useState(initialUsers || []);
+
+  useEffect(() => {
+    if (initialUsers && initialUsers.length > 0) {
+      setUsers(initialUsers);
+    }
+  }, [initialUsers]);
+
   const [showUsers, setShowUsers] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -42,8 +49,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [isLocalTyping, setIsLocalTyping] = useState(false);
   const [selfDestructTime, setSelfDestructTime] = useState(0);
   const [showTimerMenu, setShowTimerMenu] = useState(false);
-
-  // --- SESSION TIMER STATE ---
   const [sessionDuration, setSessionDuration] = useState("00:00:00");
 
   const typingTimeoutRef = useRef(null);
@@ -57,25 +62,20 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     { label: "10m", value: 600000 },
   ];
 
-  // --- UPDATED: SYNCHRONIZED SESSION TIMER ---
+  // --- SYNCHRONIZED SESSION TIMER ---
   useEffect(() => {
     if (!createdAt) return;
-
     const interval = setInterval(() => {
-      // Calculate difference between current time and the SERVER provided createdAt time
       const secondsPassed = Math.floor((Date.now() - createdAt) / 1000);
-
       const hrs = Math.floor(secondsPassed / 3600).toString().padStart(2, '0');
       const mins = Math.floor((secondsPassed % 3600) / 60).toString().padStart(2, '0');
       const secs = (secondsPassed % 60).toString().padStart(2, '0');
-
       setSessionDuration(`${hrs}:${mins}:${secs}`);
     }, 1000);
-
     return () => clearInterval(interval);
   }, [createdAt]);
 
-  // --- Encryption Logic (Preserved) ---
+  // --- Encryption Logic ---
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
   const decrypt = (cipherText) => {
     try {
@@ -84,7 +84,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     } catch { return "🚫 ERROR"; }
   };
 
-  // --- Typing Logic (Preserved) ---
+  // --- Typing Logic ---
   const handleInputChange = (e) => {
     setCurrentMessage(e.target.value);
     if (!isLocalTyping) {
@@ -98,14 +98,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     }, 2000);
   };
 
-  // --- KICK AGENT ACTION (Strictly preserved) ---
+  // --- Kick Logic ---
   const kickAgent = (userId, agentName) => {
     if (window.confirm(`TERMINATE AGENT ${agentName.toUpperCase()}?`)) {
       socket.emit("kick_user", { roomId, userId });
     }
   };
 
-  // --- Message Actions (Preserved) ---
+  // --- Message Actions ---
   const sendMessage = async () => {
     if (!currentMessage.trim()) return;
     setIsLocalTyping(false);
@@ -128,19 +128,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     }
   };
 
-  const deleteForEveryone = (id) => {
-    socket.emit("delete_message", { roomId, messageId: id });
-    setActiveMenuId(null);
-  };
-
-  const startEditing = (msg) => {
-    if (msg.deleted) return;
-    setEditingMessageId(msg.id);
-    setCurrentMessage(msg.message);
-    setActiveMenuId(null);
-  };
-
-  // --- Socket Listeners (Preserved) ---
+  // --- Socket Listeners ---
   useEffect(() => {
     socket.on("receive_message", (data) => {
       if (data.system) setMessageList((l) => [...l, data]);
@@ -158,13 +146,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     socket.on("update_users", (userList) => setUsers(userList));
 
     socket.on("kicked", () => {
-      toast.error("CONNECTION TERMINATED BY HOST");
       leaveRoom();
     });
 
     return () => {
-      socket.off("receive_message"); socket.off("user_typing"); socket.off("update_users");
-      socket.off("message_deleted"); socket.off("message_updated"); socket.off("kicked");
+      socket.off("receive_message");
+      socket.off("update_users");
+      socket.off("user_typing");
+      socket.off("message_deleted");
+      socket.off("message_updated");
+      socket.off("kicked");
     };
   }, [socket, roomPassword]);
 
@@ -183,7 +174,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   return (
     <div className="flex h-[100dvh] w-full bg-black text-white font-mono selection:bg-white selection:text-black overflow-hidden relative">
 
-      {/* MOBILE BACKDROP */}
+      {/* MOBILE SIDEBAR BACKDROP */}
       <AnimatePresence>
         {showUsers && (
           <motion.div
@@ -210,39 +201,76 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 <IoMdClose size={24} />
               </button>
             </div>
+
             <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">
               <div className="border border-zinc-800 p-4 mb-6">
                 <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-[0.2em]">Operation ID</p>
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold tracking-widest text-white">{roomId}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(roomId); toast.success("Copied"); }} className="p-2 hover:bg-white hover:text-black transition text-zinc-400"><IoMdCopy /></button>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(roomId); }}
+                    className="p-2 hover:bg-white hover:text-black transition text-zinc-400"
+                  >
+                    <IoMdCopy />
+                  </button>
                 </div>
               </div>
+
               <h3 className="text-[10px] uppercase font-bold text-zinc-500 mb-4 tracking-widest">Agents Active ({users.length})</h3>
+
               <div className="space-y-3">
-                {users.map((user, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 border border-transparent hover:bg-zinc-900 group transition-colors">
+                {users.length === 0 ? (
+                  <div className="flex items-center justify-between p-2 border border-zinc-800 bg-zinc-900 shadow-inner">
                     <div className="flex items-center gap-3 truncate">
-                      <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-zinc-400">
-                        {user.username[0].toUpperCase()}
+                      <div className="w-8 h-8 bg-zinc-800 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-white">
+                        {username[0].toUpperCase()}
                       </div>
                       <span className="text-xs uppercase tracking-wide truncate">
-                        {user.username} {user.username === username && <span className="text-zinc-600">(YOU)</span>}
+                        {username}
+                        {isHost && <span className="bg-white text-black font-black ml-2 px-1 text-[9px] tracking-tighter">HOST</span>}
+                        <span className="text-zinc-600 ml-1">(YOU)</span>
                       </span>
                     </div>
-                    {/* KICK BUTTON */}
-                    {isHost && user.id !== socket.id && (
-                      <button
-                        onClick={() => kickAgent(user.id, user.username)}
-                        className="text-red-900 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
-                      >
-                        <IoMdRemoveCircle size={20} />
-                      </button>
-                    )}
                   </div>
-                ))}
+                ) : (
+                  users.map((user, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 border border-transparent hover:bg-zinc-900 group transition-colors">
+                      <div className="flex items-center gap-3 truncate">
+                        <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-zinc-400">
+                          {user.username[0].toUpperCase()}
+                        </div>
+                        <span className="text-xs uppercase tracking-wide truncate flex items-center">
+                          {user.username}
+
+                          {/* Label 1: (YOU) */}
+                          {user.username === username && (
+                            <span className="text-zinc-600 ml-1 text-[10px] shrink-0">
+                              (YOU)
+                            </span>
+                          )}
+
+                          {/* Label 2: HOST (Moved next to YOU with new style) */}
+                          {user.isHost && (
+                            <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">
+                              HOST
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {isHost && user.id !== socket.id && (
+                        <button
+                          onClick={() => kickAgent(user.id, user.username)}
+                          className="text-red-900 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                        >
+                          <IoMdRemoveCircle size={20} />
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
+
             <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex-shrink-0">
               <button onClick={leaveRoom} className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2">
                 <IoMdExit size={16} /> ABORT MISSION
@@ -252,13 +280,12 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         )}
       </AnimatePresence>
 
-      {/* MAIN CHAT */}
+      {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col min-w-0 bg-black relative">
 
-        {/* HEADER */}
+        {/* HUD HEADER WITH CENTERED TIMER */}
         <header className="h-20 sm:h-24 border-b border-zinc-800 flex items-center justify-between px-4 sm:px-6 z-30 bg-black flex-shrink-0 relative">
 
-          {/* Left Section: Info & Toggle */}
           <div className="flex items-center gap-3 min-w-0 z-10">
             <button onClick={() => setShowUsers(true)} className="md:hidden text-2xl text-zinc-500 hover:text-white transition p-2 -ml-2">
               <IoMdPeople />
@@ -273,19 +300,18 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </div>
           </div>
 
-          {/* CENTER SECTION: Large Synchronized Timer */}
+          {/* CENTER HUD TIMER */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
             <div className="flex flex-col items-center">
               <span className="text-[8px] sm:text-[10px] text-zinc-600 uppercase tracking-[0.4em] font-black mb-1 flex items-center gap-1">
                 <IoMdTime className="text-zinc-500 animate-pulse" /> Mission Duration
               </span>
-              <h1 className="text-lg sm:text-3xl font-black tracking-[0.1em] text-white leading-none font-mono drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+              <h1 className="text-lg sm:text-3xl font-black tracking-[0.1em] text-white leading-none font-mono drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] tabular-nums">
                 {sessionDuration}
               </h1>
             </div>
           </div>
 
-          {/* Right Section: Host Actions */}
           <div className="z-10 min-w-[80px] flex justify-end">
             {isHost ? (
               <button
@@ -295,13 +321,12 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 Terminate
               </button>
             ) : (
-              // Spacer to keep timer centered for non-hosts
               <div className="w-8" />
             )}
           </div>
         </header>
 
-        {/* MESSAGE LIST */}
+        {/* MESSAGES LIST */}
         <main className="flex-1 overflow-y-auto p-4 space-y-4 sm:space-y-6 scrollbar-hide">
           {messageList.map((msg) => (
             <motion.div layout key={msg.id || Math.random()} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"}`}>
@@ -336,7 +361,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                             <button onClick={() => startEditing(msg)} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">
                               <IoMdCreate /> Edit Signal
                             </button>
-                            <button onClick={() => deleteForEveryone(msg.id)} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">
+                            <button onClick={() => { socket.emit("delete_message", { roomId, messageId: msg.id }); setActiveMenuId(null); }} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">
                               <IoMdTrash /> Expunge Global
                             </button>
                           </>
@@ -349,7 +374,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </motion.div>
           ))}
 
-          {/* PHANTOM TYPING BUBBLE */}
+          {/* HUD PHANTOM TYPING INDICATOR */}
           <AnimatePresence>
             {typingUsers.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-start">
@@ -358,7 +383,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                     <IoMdPulse className="text-zinc-500 animate-pulse text-lg" />
                     <div className="min-w-0">
                       <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">Signal Incoming...</p>
-                      <div className="text-[9px] text-white font-bold flex flex-wrap gap-x-1 uppercase truncate">
+                      <div className="text-[9px] text-white font-bold flex flex-wrap gap-x-1 uppercase truncate font-mono">
                         <span>[</span>
                         {typingUsers.map((u, i) => (
                           <span key={u} className="text-white">
@@ -376,18 +401,18 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           <div ref={scrollRef} className="h-2" />
         </main>
 
-        {/* INPUT AREA */}
+        {/* INPUT FOOTER */}
         <footer className="p-3 sm:p-4 border-t border-zinc-900 bg-black relative flex-shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between mb-2">
             {editingMessageId ? (
-              <div className="flex items-center gap-2 text-[8px] text-white uppercase tracking-widest border-l border-white pl-2">
-                <span>Modifying...</span>
+              <div className="flex items-center gap-2 text-[8px] text-white uppercase tracking-widest border-l border-white pl-2 font-bold">
+                <span>Modifying Transmission...</span>
                 <button onClick={() => { setEditingMessageId(null); setCurrentMessage(""); }}><IoMdClose /></button>
               </div>
             ) : <div />}
             {selfDestructTime > 0 && !editingMessageId && (
               <div className="flex items-center gap-2 text-[8px] text-red-600 font-bold uppercase tracking-widest animate-pulse">
-                <IoMdTimer /> Timer: {selfDestructTime / 1000}s
+                <IoMdTimer /> Destruct Enabled: {selfDestructTime / 1000}s
               </div>
             )}
           </div>
@@ -413,7 +438,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             <input
               type="text"
               value={currentMessage}
-              placeholder={editingMessageId ? "UPDATE..." : "ENCRYPT MESSAGE..."}
+              placeholder={editingMessageId ? "EDITING..." : "ENTER ENCRYPTED SIGNAL..."}
               className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-800 text-xs sm:text-sm font-mono min-w-0"
               onChange={handleInputChange}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}

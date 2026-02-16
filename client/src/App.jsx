@@ -2,14 +2,11 @@ import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 // Connect to backend
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 
 const socket = io.connect(BACKEND_URL);
-
 
 function App() {
   const [isInChat, setIsInChat] = useState(false);
@@ -18,23 +15,24 @@ function App() {
   const [roomPassword, setRoomPassword] = useState("");
   const [isHost, setIsHost] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  const [initialUsers, setInitialUsers] = useState([]);
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId, createdAt }) => {
+    socket.on("room_created", ({ roomId, createdAt, users }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
+      setInitialUsers(users);
       setIsHost(true);
       setIsInChat(true);
-      toast.success(`Secure Room ${roomId} created!`);
     });
 
     // Handle Join Success
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
+      setInitialUsers(users);
       setIsHost(isHost);
       setIsInChat(true);
-      toast.success(`Joined room ${roomId}`);
     });
 
     // Handle Room Closed (by host)
@@ -42,31 +40,30 @@ function App() {
       setIsInChat(false);
       setRoomId("");
       setIsHost(false);
-      toast.warn("The host has closed the room.");
     });
 
     // Handle Errors
     socket.on("error", (msg) => {
-      toast.error(msg);
+      console.error(msg); // Error logged to console instead of toast
     });
 
     return () => {
-      // socket.off("room_created");
-      // socket.off("joined_room_success");
-      // socket.off("room_closed");
+      socket.off("room_created");
+      socket.off("joined_room_success");
+      socket.off("room_closed");
       socket.off("error");
     };
   }, []);
 
   const createRoom = (user, password) => {
-    if (!user || !password) return toast.error("Username and Password required");
+    if (!user || !password) return;
     setUsername(user);
     setRoomPassword(password);
     socket.emit("create_room", { username: user, password: password });
   };
 
   const joinRoom = (user, room, password) => {
-    if (!user || !room || !password) return toast.error("All fields are required");
+    if (!user || !room || !password) return;
     setUsername(user);
     setRoomPassword(password);
     socket.emit("join_room", { username: user, roomId: room, password: password });
@@ -74,12 +71,11 @@ function App() {
 
   const leaveRoom = () => {
     socket.disconnect();
-    window.location.reload(); // Simple reload to reset socket completely
+    window.location.reload(); 
   };
 
   return (
     <div>
-      <ToastContainer theme="dark" position="top-center" />
       {!isInChat ? (
         <JoinRoom createRoom={createRoom} joinRoom={joinRoom} />
       ) : (
@@ -87,10 +83,11 @@ function App() {
           socket={socket} 
           username={username} 
           roomId={roomId}
-          roomPassword={roomPassword} // PASS THE PASSWORD
+          roomPassword={roomPassword} 
           isHost={isHost}
           leaveRoom={leaveRoom}
           createdAt={startTime}
+          initialUsers={initialUsers}
         />
       )}
     </div>

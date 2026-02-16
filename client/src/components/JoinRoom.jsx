@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanner } from 'react-icons/io';
-import { toast } from 'react-toastify';
 
 const JoinRoom = ({ joinRoom, createRoom }) => {
   const [view, setView] = useState("menu"); 
@@ -10,12 +9,12 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
   const [roomPassword, setRoomPassword] = useState("");
 
   const handleJoin = () => {
-    if (!username || !roomId || !roomPassword) return toast.error("Fill all fields");
+    if (!username || !roomId || !roomPassword) return;
     joinRoom(username, roomId, roomPassword);
   };
 
   const handleCreate = () => {
-    if (!username || !roomPassword) return toast.error("Fill all fields");
+    if (!username || !roomPassword) return;
     createRoom(username, roomPassword);
   };
 

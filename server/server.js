@@ -41,52 +41,49 @@ io.on("connection", (socket) => {
     let roomId = generateRoomId();
     while (rooms[roomId]) roomId = generateRoomId();
 
-    const createdAt = Date.now(); // <--- Capture creation time here
+    const createdAt = Date.now();
+    const hostUser = { id: socket.id, username, isHost: true };
 
     rooms[roomId] = {
       hostId: socket.id,
-      users: [],
+      users: [hostUser], // Add host IMMEDIATELY
       password: hash(password),
-      createdAt: createdAt // <--- Store it in the room object
+      createdAt: createdAt
     };
 
     socket.join(roomId);
-    rooms[roomId].users.push({ id: socket.id, username });
 
-    // Send createdAt to the host
-    socket.emit("room_created", { roomId, createdAt });
+    // Send the list containing the host back to the host
+    socket.emit("room_created", { 
+      roomId, 
+      createdAt, 
+      users: rooms[roomId].users 
+    });
+    
+    // Broadcast list to the room (redundant but safe)
     io.to(roomId).emit("update_users", rooms[roomId].users);
   });
 
-
   socket.on("join_room", ({ username, roomId, password }) => {
     const room = rooms[roomId];
-  
     if (room) {
-      // 1. Check Encryption Key (Security Handshake)
       if (room.password !== hash(password)) {
         return socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
       }
-  
-      // 2. STRICT DUPLICATE USERNAME CHECK (The Fix)
-      const isNameTaken = room.users.some(
-        (u) => u.username.toLowerCase() === username.toLowerCase()
-      );
-  
-      if (isNameTaken) {
-        return socket.emit("error", "CODENAME ALREADY IN USE. CHOOSE ANOTHER.");
+      if (room.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        return socket.emit("error", "CODENAME ALREADY IN USE.");
       }
   
-      // 3. If passed, join the room
       socket.join(roomId);
-      const newUser = { id: socket.id, username };
-      room.users.push(newUser);
-  
-      // 4. Notify everyone
+      const newUser = { id: socket.id, username, isHost: false }; 
+      room.users.push(newUser); // Add new user to list
+
+      // Send the FULL list including the new user to the person joining
       socket.emit("joined_room_success", { 
         roomId, 
         isHost: false, 
-        createdAt: room.createdAt 
+        createdAt: room.createdAt,
+        users: room.users 
       });
   
       io.to(roomId).emit("receive_message", {
@@ -94,9 +91,10 @@ io.on("connection", (socket) => {
         message: `${username} has entered the frequency.`,
       });
   
+      // Update everyone else
       io.to(roomId).emit("update_users", room.users);
     } else {
-      socket.emit("error", "ROOM NOT FOUND OR EXPIRED.");
+      socket.emit("error", "ROOM NOT FOUND.");
     }
   });
 
