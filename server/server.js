@@ -132,6 +132,12 @@ io.on("connection", (socket) => {
     }
   });
 
+  // --- NEW: POLL VOTING (broadcast updates) ---
+  socket.on("poll_vote", ({ roomId, messageId, optionId, action, username }) => {
+    if (!roomId || !messageId || !optionId || !username) return;
+    io.to(roomId).emit("poll_vote_update", { roomId, messageId, optionId, action, username });
+  });
+
   socket.on("delete_message", ({ roomId, messageId }) => {
     io.to(roomId).emit("message_deleted", messageId);
   });
