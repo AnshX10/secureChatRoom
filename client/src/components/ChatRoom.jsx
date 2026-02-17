@@ -234,8 +234,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       </div>
                       <span className="text-xs uppercase tracking-wide truncate">
                         {username}
-                        {isHost && <span className="bg-white text-black font-black ml-2 px-1 text-[9px] tracking-tighter">HOST</span>}
-                        <span className="text-zinc-600 ml-1">(YOU)</span>
+                        <span className="text-zinc-600 ml-1 text-[10px]">(YOU)</span>
+                        {isHost && <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">HOST</span>}
                       </span>
                     </div>
                   </div>
@@ -357,10 +357,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       <IoMdMore size={16} />
                     </div>
                   )}
+                  {/* CONTEXT MENU: Now positioned downwards with 'top-[90%]' for better mobile visibility */}
                   <AnimatePresence>
                     {activeMenuId === msg.id && (
-                      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`absolute bottom-full mb-2 ${msg.own ? "right-0" : "left-0"} z-50 bg-black border border-white shadow-2xl min-w-[130px]`}>
-                        <button onClick={() => setMessageList(l => l.filter(m => m.id !== msg.id))} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors">
+                      <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }} className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-black border border-white shadow-2xl min-w-[130px]`}>
+                        <button onClick={() => { setMessageList(l => l.filter(m => m.id !== msg.id)); setActiveMenuId(null); }} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors">
                           <IoMdTrash /> Local Hide
                         </button>
                         {msg.own && (
