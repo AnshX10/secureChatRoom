@@ -105,6 +105,13 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     }
   };
 
+    // --- Start editing a message (own messages only) ---
+    const startEditing = (msg) => {
+      setEditingMessageId(msg.id);
+      setCurrentMessage(msg.message || "");
+      setActiveMenuId(null);
+    };
+
   // --- Message Actions ---
   const sendMessage = async () => {
     if (!currentMessage.trim()) return;
