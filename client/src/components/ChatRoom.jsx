@@ -9,6 +9,7 @@ import {
 import Logo from './Logo';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
+import { encryptMagicLinkPayload } from '../utils/magicLink';
 
 // Conditional QR Code import (install qrcode.react if needed)
 // Will be dynamically imported in component if available
@@ -648,7 +649,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   </div>
                   
                   {showMagicLink && (() => {
-                    const magicLink = `${window.location.origin}${window.location.pathname}#room=${roomId}&key=${encodeURIComponent(roomPassword)}`;
+                    const encryptedPayload = encryptMagicLinkPayload(roomId, roomPassword);
+                    const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
                     return (
                       <div className="space-y-4">
                         <div className="bg-zinc-900 border border-zinc-700 p-3 rounded">

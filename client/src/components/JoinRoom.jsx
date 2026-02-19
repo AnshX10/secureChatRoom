@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanner } from 'react-icons/io';
 import Logo from './Logo';
+import { decryptMagicLinkPayload } from '../utils/magicLink';
 
 const JoinRoom = ({ joinRoom, createRoom }) => {
   const [view, setView] = useState("menu"); 
@@ -10,23 +11,25 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
   const [roomPassword, setRoomPassword] = useState("");
   const [isMagicLink, setIsMagicLink] = useState(false);
 
-  // Parse URL hash for Magic Invite Link
+  // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
     const hash = window.location.hash.substring(1); // Remove the #
     if (hash) {
       const params = new URLSearchParams(hash);
-      const hashRoomId = params.get('room');
-      const hashKey = params.get('key');
+      const invitePayload = params.get('invite');
       
-      if (hashRoomId && hashKey) {
-        // Auto-fill from magic link
-        setRoomId(hashRoomId.toUpperCase());
-        setRoomPassword(hashKey);
-        setIsMagicLink(true); // Mark as magic link join
-        setView("join"); // Auto-switch to join view
-        
-        // Clear hash from URL for security/privacy
-        window.history.replaceState(null, '', window.location.pathname);
+      if (invitePayload) {
+        const data = decryptMagicLinkPayload(invitePayload);
+        if (data) {
+          // Auto-fill from decrypted magic link
+          setRoomId(data.room.toUpperCase());
+          setRoomPassword(data.key);
+          setIsMagicLink(true);
+          setView("join");
+          
+          // Clear hash from URL for security/privacy
+          window.history.replaceState(null, '', window.location.pathname);
+        }
       }
     }
   }, []);
