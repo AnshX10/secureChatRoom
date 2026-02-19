@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanner } from 'react-icons/io';
+import Logo from './Logo';
 
 const JoinRoom = ({ joinRoom, createRoom }) => {
   const [view, setView] = useState("menu"); 
@@ -36,6 +37,9 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
         
         {/* Header */}
         <div className="text-center mb-12">
+          <div className="flex justify-center mb-3">
+            <Logo variant="shield" className="w-14 h-14 text-white" />
+          </div>
           <h1 className="text-5xl font-black tracking-tighter border-b-2 border-white inline-block pb-2 mb-2">
             <span className="font-light">CHATROOM</span>
           </h1>

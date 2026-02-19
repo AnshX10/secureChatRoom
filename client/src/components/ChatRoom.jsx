@@ -6,6 +6,7 @@ import {
   IoMdTimer, IoMdPulse, IoMdRemoveCircle, IoMdTime, IoMdWarning, IoMdReturnLeft,
   IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark
 } from 'react-icons/io';
+import Logo from './Logo';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -666,6 +667,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         {/* HUD HEADER */}
         <header className="h-20 sm:h-24 border-b border-zinc-800 flex items-center justify-between px-4 sm:px-6 z-30 bg-black flex-shrink-0 relative">
           <div className="flex items-center gap-3 min-w-0 z-10">
+            <Logo variant="shield" className="w-8 h-8 sm:w-9 sm:h-9 text-white shrink-0" />
             <button onClick={() => setShowUsers(true)} className="md:hidden text-2xl text-zinc-500 hover:text-white transition p-2 -ml-2">
               <IoMdPeople />
             </button>
