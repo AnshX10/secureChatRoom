@@ -4,11 +4,14 @@ import {
   IoMdSend, IoMdPeople, IoMdLock, IoMdCopy,
   IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit,
   IoMdTimer, IoMdPulse, IoMdRemoveCircle, IoMdTime, IoMdWarning, IoMdReturnLeft,
-  IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark
+  IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark, IoMdLink
 } from 'react-icons/io';
 import Logo from './Logo';
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
+
+// Conditional QR Code import (install qrcode.react if needed)
+// Will be dynamically imported in component if available
 
 // --- SUB-COMPONENT: Decrypting Text Effect (Glitchy HUD Style) ---
 const DecryptingName = ({ name }) => {
@@ -46,6 +49,22 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
   // --- NEW: Security State ---
   const [isSecurityBreach, setIsSecurityBreach] = useState(false);
+
+  // --- NEW: Magic Link State ---
+  const [showMagicLink, setShowMagicLink] = useState(false);
+  const [QRCodeComponent, setQRCodeComponent] = useState(null);
+
+  // Dynamically load QR code component if available
+  useEffect(() => {
+    import('qrcode.react')
+      .then((module) => {
+        setQRCodeComponent(() => module.QRCodeSVG);
+      })
+      .catch(() => {
+        // QR code library not installed - feature will work without QR code
+        setQRCodeComponent(null);
+      });
+  }, []);
 
   const typingTimeoutRef = useRef(null);
   const scrollRef = useRef(null);
@@ -612,6 +631,69 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   <button onClick={() => { navigator.clipboard.writeText(roomId); }} className="p-2 hover:bg-white hover:text-black transition text-zinc-400"><IoMdCopy /></button>
                 </div>
               </div>
+
+              {/* Magic Invite Link Section */}
+              {isHost && (
+                <div className="border border-zinc-800 p-4 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-2">
+                      <IoMdLink /> Magic Invite
+                    </p>
+                    <button 
+                      onClick={() => setShowMagicLink(!showMagicLink)}
+                      className="text-[8px] uppercase text-zinc-500 hover:text-white transition font-bold"
+                    >
+                      {showMagicLink ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  
+                  {showMagicLink && (() => {
+                    const magicLink = `${window.location.origin}${window.location.pathname}#room=${roomId}&key=${encodeURIComponent(roomPassword)}`;
+                    return (
+                      <div className="space-y-4">
+                        <div className="bg-zinc-900 border border-zinc-700 p-3 rounded">
+                          <p className="text-[8px] uppercase text-zinc-500 mb-2 tracking-widest">Invite Link</p>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="text" 
+                              value={magicLink} 
+                              readOnly
+                              className="flex-1 bg-transparent text-[9px] text-zinc-300 font-mono truncate outline-none"
+                            />
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(magicLink);
+                                // Visual feedback could be added here
+                              }}
+                              className="p-1.5 hover:bg-white hover:text-black transition text-zinc-400 shrink-0"
+                              title="Copy link"
+                            >
+                              <IoMdCopy size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* QR Code */}
+                        {QRCodeComponent && (
+                          <div className="flex justify-center bg-zinc-900 border border-zinc-700 p-4 rounded">
+                            <QRCodeComponent 
+                              value={magicLink}
+                              size={160}
+                              level="M"
+                              bgColor="#18181b"
+                              fgColor="#ffffff"
+                            />
+                          </div>
+                        )}
+                        
+                        <p className="text-[7px] text-zinc-600 text-center leading-relaxed">
+                          Share this link. Recipients only need to enter their codename.
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               <h3 className="text-[10px] uppercase font-bold text-zinc-500 mb-4 tracking-widest">Agents Active ({users.length})</h3>
 

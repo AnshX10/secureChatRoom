@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanner } from 'react-icons/io';
 import Logo from './Logo';
@@ -8,6 +8,28 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
+  const [isMagicLink, setIsMagicLink] = useState(false);
+
+  // Parse URL hash for Magic Invite Link
+  useEffect(() => {
+    const hash = window.location.hash.substring(1); // Remove the #
+    if (hash) {
+      const params = new URLSearchParams(hash);
+      const hashRoomId = params.get('room');
+      const hashKey = params.get('key');
+      
+      if (hashRoomId && hashKey) {
+        // Auto-fill from magic link
+        setRoomId(hashRoomId.toUpperCase());
+        setRoomPassword(hashKey);
+        setIsMagicLink(true); // Mark as magic link join
+        setView("join"); // Auto-switch to join view
+        
+        // Clear hash from URL for security/privacy
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, []);
 
   const handleJoin = () => {
     if (!username || !roomId || !roomPassword) return;
@@ -71,7 +93,10 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
                 </button>
 
                 <button
-                  onClick={() => setView("join")}
+                  onClick={() => {
+                    setIsMagicLink(false);
+                    setView("join");
+                  }}
                   className="w-full group bg-black text-white border border-zinc-700 hover:border-white p-6 transition-all flex items-center justify-between"
                 >
                   <div className="text-left">
@@ -113,27 +138,77 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
             {view === "join" && (
               <motion.div key="join" variants={variants} initial="initial" animate="animate" exit="exit">
                 <div className="flex items-center gap-4 mb-8">
-                  <button onClick={() => setView("menu")} className="hover:text-zinc-400 transition"><IoMdArrowBack size={24} /></button>
-                  <h2 className="text-xl font-bold uppercase tracking-widest">Uplink</h2>
+                  <button 
+                    onClick={() => {
+                      setIsMagicLink(false);
+                      setRoomId("");
+                      setRoomPassword("");
+                      setView("menu");
+                    }} 
+                    className="hover:text-zinc-400 transition"
+                  >
+                    <IoMdArrowBack size={24} />
+                  </button>
+                  <h2 className="text-xl font-bold uppercase tracking-widest">
+                    {isMagicLink ? "Magic Link Detected" : "Uplink"}
+                  </h2>
                 </div>
 
                 <div className="space-y-6">
+                  {/* Magic Link Info Banner */}
+                  {isMagicLink && (
+                    <div className="bg-zinc-900 border border-zinc-700 p-4 mb-4">
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-widest text-center">
+                        Room credentials pre-filled via magic link
+                      </p>
+                    </div>
+                  )}
+
                   <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
                     <IoMdPerson className="text-zinc-500" />
-                    <input type="text" placeholder="CODENAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase" onChange={(e) => setUsername(e.target.value)} />
+                    <input 
+                      type="text" 
+                      placeholder="CODENAME" 
+                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase" 
+                      onChange={(e) => setUsername(e.target.value)}
+                      value={username}
+                      autoFocus={isMagicLink}
+                    />
                   </div>
 
-                  <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
-                    <IoMdQrScanner className="text-zinc-500" />
-                    <input type="text" placeholder="ROOM ID" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase font-mono" maxLength={6} onChange={(e) => setRoomId(e.target.value.toUpperCase())} />
-                  </div>
+                  {/* Only show Room ID and Encryption Key if NOT from magic link */}
+                  {!isMagicLink && (
+                    <>
+                      <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
+                        <IoMdQrScanner className="text-zinc-500" />
+                        <input 
+                          type="text" 
+                          placeholder="ROOM ID" 
+                          className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase font-mono" 
+                          maxLength={6} 
+                          onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                          value={roomId}
+                        />
+                      </div>
 
-                  <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
-                    <IoMdKey className="text-zinc-500" />
-                    <input type="text" placeholder="ENCRYPTION KEY" className="bg-transparent w-full outline-none placeholder:text-zinc-700" onChange={(e) => setRoomPassword(e.target.value)} />
-                  </div>
+                      <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
+                        <IoMdKey className="text-zinc-500" />
+                        <input 
+                          type="text" 
+                          placeholder="ENCRYPTION KEY" 
+                          className="bg-transparent w-full outline-none placeholder:text-zinc-700" 
+                          onChange={(e) => setRoomPassword(e.target.value)}
+                          value={roomPassword}
+                        />
+                      </div>
+                    </>
+                  )}
 
-                  <button onClick={handleJoin} className="w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest hover:bg-zinc-300 transition-colors">
+                  <button 
+                    onClick={handleJoin} 
+                    className="w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest hover:bg-zinc-300 transition-colors"
+                    disabled={!username || (!isMagicLink && (!roomId || !roomPassword))}
+                  >
                     Connect
                   </button>
                 </div>
