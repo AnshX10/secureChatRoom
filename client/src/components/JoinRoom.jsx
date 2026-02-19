@@ -4,7 +4,7 @@ import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanne
 import Logo from './Logo';
 import { decryptMagicLinkPayload } from '../utils/magicLink';
 
-const JoinRoom = ({ joinRoom, createRoom }) => {
+const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
   const [view, setView] = useState("menu"); 
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
@@ -130,8 +130,23 @@ const JoinRoom = ({ joinRoom, createRoom }) => {
                     <input type="text" placeholder="ENCRYPTION KEY" className="bg-transparent w-full outline-none placeholder:text-zinc-700" onChange={(e) => setRoomPassword(e.target.value)} />
                   </div>
 
-                  <button onClick={handleCreate} className="w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest hover:bg-zinc-300 transition-colors">
-                    Establish Link
+                  <button
+                    onClick={handleCreate}
+                    disabled={isCreatingRoom}
+                    className={`w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest transition-colors ${
+                      isCreatingRoom
+                        ? "opacity-70 cursor-not-allowed"
+                        : "hover:bg-zinc-300"
+                    }`}
+                  >
+                    {isCreatingRoom ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="h-4 w-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                        <span>Establishing Link...</span>
+                      </div>
+                    ) : (
+                      "Establish Link"
+                    )}
                   </button>
                 </div>
               </motion.div>

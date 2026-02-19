@@ -16,6 +16,7 @@ function App() {
   const [isHost, setIsHost] = useState(false);
   const [startTime, setStartTime] = useState(null);
   const [initialUsers, setInitialUsers] = useState([]);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
   useEffect(() => {
     socket.on("room_created", ({ roomId, createdAt, users }) => {
@@ -24,6 +25,7 @@ function App() {
       setInitialUsers(users);
       setIsHost(true);
       setIsInChat(true);
+      setIsCreatingRoom(false);
     });
 
     // Handle Join Success
@@ -45,6 +47,7 @@ function App() {
     // Handle Errors
     socket.on("error", (msg) => {
       console.error(msg); // Error logged to console instead of toast
+      setIsCreatingRoom(false);
     });
 
     return () => {
@@ -57,6 +60,7 @@ function App() {
 
   const createRoom = (user, password) => {
     if (!user || !password) return;
+    setIsCreatingRoom(true);
     setUsername(user);
     setRoomPassword(password);
     socket.emit("create_room", { username: user, password: password });
@@ -77,7 +81,11 @@ function App() {
   return (
     <div>
       {!isInChat ? (
-        <JoinRoom createRoom={createRoom} joinRoom={joinRoom} />
+        <JoinRoom 
+          createRoom={createRoom} 
+          joinRoom={joinRoom} 
+          isCreatingRoom={isCreatingRoom}
+        />
       ) : (
         <ChatRoom 
           socket={socket} 
