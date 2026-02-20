@@ -1,4 +1,103 @@
+# robots.txt for Secure Chatroom
+# Comprehensive robots.txt for optimal SEO crawling
+# Last updated: 2026-02-20
+
+# Default rules for all crawlers
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /static/
+Disallow: /*.json$
+Disallow: /*?*
 
+# Crawl-delay for respectful crawling (1 second)
+Crawl-delay: 1
+
+# Sitemap location
 Sitemap: https://securechatroom.vercel.app/sitemap.xml
+
+# Google-specific rules
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Crawl-delay: 1
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /og-image.png
+Allow: /favicon.svg
+
+User-agent: Googlebot-Mobile
+Allow: /
+
+# Bing-specific rules
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Crawl-delay: 1
+
+# Yahoo/Slurp rules
+User-agent: Slurp
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Crawl-delay: 2
+
+# DuckDuckBot rules
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# Baidu Spider rules
+User-agent: Baiduspider
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Crawl-delay: 2
+
+# Yandex Bot rules
+User-agent: Yandex
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Crawl-delay: 2
+
+# Facebook External Hit
+User-agent: facebookexternalhit
+Allow: /
+
+# Twitter Bot
+User-agent: Twitterbot
+Allow: /
+
+# LinkedIn Bot
+User-agent: LinkedInBot
+Allow: /
+
+# Pinterest Bot
+User-agent: Pinterest
+Allow: /
+
+# Block bad bots and scrapers
+User-agent: AhrefsBot
+Crawl-delay: 10
+
+User-agent: SemrushBot
+Crawl-delay: 10
+
+User-agent: MJ12bot
+Crawl-delay: 10
+
+User-agent: DotBot
+Crawl-delay: 10
+
+# Allow all other legitimate bots
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
