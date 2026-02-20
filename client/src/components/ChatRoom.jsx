@@ -91,6 +91,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState(() => new Set());
 
+  // --- NEW: Sliding button confirmation state ---
+  const [showSlideConfirm, setShowSlideConfirm] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // 'terminate' or 'leave'
+  const [slidePosition, setSlidePosition] = useState(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const slideButtonRef = useRef(null);
+  const slideTrackRef = useRef(null);
+  const slidePositionRef = useRef(0);
+  const confirmActionRef = useRef(null);
+
   const timerOptions = [
     { label: "OFF", value: 0 },
     { label: "10s", value: 10000 },
@@ -446,6 +456,130 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     }
   };
 
+  // --- NEW: Sliding Button Confirmation Handlers ---
+  const handleTerminateClick = () => {
+    setConfirmAction('terminate');
+    confirmActionRef.current = 'terminate';
+    setShowSlideConfirm(true);
+    setSlidePosition(0);
+    slidePositionRef.current = 0;
+  };
+
+  const handleLeaveClick = () => {
+    setConfirmAction('leave');
+    confirmActionRef.current = 'leave';
+    setShowSlideConfirm(true);
+    setSlidePosition(0);
+    slidePositionRef.current = 0;
+  };
+
+  useEffect(() => {
+    slidePositionRef.current = slidePosition;
+  }, [slidePosition]);
+
+  useEffect(() => {
+    confirmActionRef.current = confirmAction;
+  }, [confirmAction]);
+
+  useEffect(() => {
+    if (!isSliding || !showSlideConfirm) return;
+
+    const executeConfirmedAction = () => {
+      const action = confirmActionRef.current;
+      if (action === 'terminate') {
+        socket.emit("close_room", { roomId });
+      } else if (action === 'leave') {
+        leaveRoom();
+      }
+      setShowSlideConfirm(false);
+      setSlidePosition(0);
+      slidePositionRef.current = 0;
+      setConfirmAction(null);
+      confirmActionRef.current = null;
+      setIsSliding(false);
+    };
+
+    const handleMouseMove = (e) => {
+      if (!slideTrackRef.current) return;
+      
+      const track = slideTrackRef.current;
+      const rect = track.getBoundingClientRect();
+      const trackWidth = rect.width;
+      const buttonWidth = 60;
+      
+      let clientX = e.clientX;
+      let newPosition = clientX - rect.left - buttonWidth / 2;
+      
+      const maxPosition = trackWidth - buttonWidth;
+      newPosition = Math.max(0, Math.min(maxPosition, newPosition));
+      
+      setSlidePosition(newPosition);
+      slidePositionRef.current = newPosition;
+    };
+
+    const handleTouchMove = (e) => {
+      if (!slideTrackRef.current) return;
+      
+      const track = slideTrackRef.current;
+      const rect = track.getBoundingClientRect();
+      const trackWidth = rect.width;
+      const buttonWidth = 60;
+      
+      let clientX = e.touches[0].clientX;
+      let newPosition = clientX - rect.left - buttonWidth / 2;
+      
+      const maxPosition = trackWidth - buttonWidth;
+      newPosition = Math.max(0, Math.min(maxPosition, newPosition));
+      
+      setSlidePosition(newPosition);
+      slidePositionRef.current = newPosition;
+    };
+
+    const handleEnd = () => {
+      setIsSliding(false);
+      if (slideTrackRef.current) {
+        const maxPosition = slideTrackRef.current.offsetWidth - 60;
+        const currentPos = slidePositionRef.current;
+        if (currentPos >= maxPosition - 5) {
+          executeConfirmedAction();
+          return;
+        }
+        if (currentPos < maxPosition - 5) {
+          setSlidePosition(0);
+          slidePositionRef.current = 0;
+        }
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isSliding, showSlideConfirm, roomId, socket, leaveRoom]);
+
+  const handleSlideStart = (e) => {
+    setIsSliding(true);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+
+  const closeSlideConfirm = () => {
+    setShowSlideConfirm(false);
+    setSlidePosition(0);
+    slidePositionRef.current = 0;
+    setConfirmAction(null);
+    confirmActionRef.current = null;
+    setIsSliding(false);
+  };
+
   const startEditing = (msg) => {
     setEditingMessageId(msg.id);
     setCurrentMessage(msg.message || "");
@@ -737,9 +871,15 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </div>
 
             <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex-shrink-0">
-              <button onClick={leaveRoom} className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2">
-                <IoMdExit size={16} /> ABORT MISSION
-              </button>
+              {isHost ? (
+                <button onClick={handleTerminateClick} className="w-full border border-red-900/50 text-red-700 py-3 uppercase text-xs font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2">
+                  <IoMdExit size={16} /> TERMINATE
+                </button>
+              ) : (
+                <button onClick={handleLeaveClick} className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2">
+                  <IoMdExit size={16} /> LEAVE ROOM
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -786,9 +926,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             >
               Select
             </button>
-            {isHost ? (
-              <button onClick={() => socket.emit("close_room", { roomId })} className="text-[8px] sm:text-[10px] border border-red-900/50 text-red-700 px-3 py-2 uppercase hover:bg-red-600 hover:text-white hover:border-red-600 transition-all shrink-0 font-bold">Terminate</button>
-            ) : null}
           </div>
         </header>
 
@@ -1308,6 +1445,92 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                     </button>
                   </div>
                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Sliding Button Confirmation Modal */}
+        <AnimatePresence>
+          {showSlideConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+              onClick={closeSlideConfirm}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-zinc-950 border-2 border-zinc-800 p-8 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-center mb-6">
+                  <IoMdWarning className="text-red-600 mx-auto mb-4" size={48} />
+                  <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
+                    {confirmAction === 'terminate' ? 'TERMINATE ROOM' : 'LEAVE ROOM'}
+                  </h2>
+                  <p className="text-zinc-400 text-sm uppercase tracking-wide">
+                    {confirmAction === 'terminate' 
+                      ? 'This will close the room for all users. Slide to confirm.'
+                      : 'Are you sure you want to leave? Slide to confirm.'}
+                  </p>
+                </div>
+
+                {/* Sliding Button Track */}
+                <div
+                  ref={slideTrackRef}
+                  className="relative w-full h-16 bg-zinc-900 border-2 border-zinc-700 mb-4 select-none"
+                  onMouseDown={handleSlideStart}
+                  onTouchStart={handleSlideStart}
+                >
+                  {/* Track Background Text */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-zinc-600 text-xs uppercase tracking-widest font-bold">
+                      SLIDE TO {confirmAction === 'terminate' ? 'TERMINATE' : 'LEAVE'}
+                    </span>
+                  </div>
+
+                  {/* Sliding Button */}
+                  <motion.div
+                    ref={slideButtonRef}
+                    className="absolute top-0 left-0 h-full bg-red-600 border-2 border-red-500 flex items-center justify-center cursor-grab active:cursor-grabbing z-10"
+                    style={{
+                      width: '60px',
+                      x: slidePosition,
+                    }}
+                    animate={{
+                      x: slidePosition,
+                    }}
+                    transition={isSliding ? { duration: 0 } : {
+                      type: 'spring',
+                      stiffness: 300,
+                      damping: 30,
+                    }}
+                  >
+                    <IoMdExit className="text-white" size={24} />
+                  </motion.div>
+
+                  {/* Success Indicator */}
+                  {slideTrackRef.current && slidePosition >= (slideTrackRef.current.offsetWidth - 65) && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute inset-0 flex items-center justify-center bg-green-600/20 pointer-events-none"
+                    >
+                      <IoMdCheckmark className="text-green-500" size={32} />
+                    </motion.div>
+                  )}
+                </div>
+
+                <button
+                  onClick={closeSlideConfirm}
+                  className="w-full border border-zinc-700 text-zinc-400 py-2 uppercase text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all"
+                >
+                  Cancel
+                </button>
               </motion.div>
             </motion.div>
           )}
