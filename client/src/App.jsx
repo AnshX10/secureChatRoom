@@ -17,6 +17,7 @@ function App() {
   const [startTime, setStartTime] = useState(null);
   const [initialUsers, setInitialUsers] = useState([]);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     socket.on("room_created", ({ roomId, createdAt, users }) => {
@@ -44,9 +45,9 @@ function App() {
       setIsHost(false);
     });
 
-    // Handle Errors
+    // Handle Errors (show in UI)
     socket.on("error", (msg) => {
-      console.error(msg); // Error logged to console instead of toast
+      setErrorMessage(msg);
       setIsCreatingRoom(false);
     });
 
@@ -60,6 +61,7 @@ function App() {
 
   const createRoom = (user, password) => {
     if (!user || !password) return;
+    setErrorMessage("");
     setIsCreatingRoom(true);
     setUsername(user);
     setRoomPassword(password);
@@ -68,6 +70,7 @@ function App() {
 
   const joinRoom = (user, room, password) => {
     if (!user || !room || !password) return;
+    setErrorMessage(""); // clear previous error when trying again
     setUsername(user);
     setRoomPassword(password);
     socket.emit("join_room", { username: user, roomId: room, password: password });
@@ -85,6 +88,9 @@ function App() {
           createRoom={createRoom} 
           joinRoom={joinRoom} 
           isCreatingRoom={isCreatingRoom}
+          errorMessage={errorMessage}
+          setErrorMessage={setErrorMessage}
+          clearError={() => setErrorMessage("")}
         />
       ) : (
         <ChatRoom 

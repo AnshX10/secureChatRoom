@@ -1,5 +1,11 @@
+const crypto = require('crypto');
+
+/**
+ * Generates a cryptographically random 8-character hex room ID.
+ * Collision chance is negligible (2^32 space per generation).
+ */
 const generateRoomId = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  };
-  
-  module.exports = { generateRoomId };
+  return crypto.randomBytes(4).toString('hex').toUpperCase();
+};
+
+module.exports = { generateRoomId };

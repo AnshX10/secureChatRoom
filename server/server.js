@@ -31,13 +31,54 @@ const io = new Server(server, {
   cors: corsOptions // Use the same options here
 });
 
+// --- ROOM LIMITS & CLEANUP ---
+const MAX_ROOMS = parseInt(process.env.MAX_ROOMS, 10) || 50_000;
+const MIN_ENCRYPTION_KEY_LENGTH = parseInt(process.env.MIN_ENCRYPTION_KEY_LENGTH, 10) || 6;
+const MAX_ENCRYPTION_KEY_LENGTH = parseInt(process.env.MAX_ENCRYPTION_KEY_LENGTH, 10) || 64;
+const MAX_ROOM_AGE_MS = parseInt(process.env.MAX_ROOM_AGE_MS, 10) || 24 * 60 * 60 * 1000; // 24h
+const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS, 10) || 15 * 60 * 1000; // 15 min
+const DESTROYED_ROOM_MEMORY_MS = 7 * 24 * 60 * 60 * 1000; // remember destroyed rooms for 7 days
+
 // --- SOCKET LOGIC ---
 const rooms = {};
+/** @type {Map<string, number>} roomId -> destroyedAt (so we can tell "room destroyed" from "room never existed") */
+const destroyedRooms = new Map();
+
+function markRoomDestroyed(roomId) {
+  destroyedRooms.set(roomId, Date.now());
+}
+
+function cleanupStaleRooms() {
+  const now = Date.now();
+  for (const roomId in rooms) {
+    if (now - rooms[roomId].createdAt > MAX_ROOM_AGE_MS) {
+      io.to(roomId).emit("room_closed");
+      io.in(roomId).socketsLeave(roomId);
+      markRoomDestroyed(roomId);
+      delete rooms[roomId];
+    }
+  }
+  // Prune old destroyed-room entries so memory doesn't grow forever
+  for (const [id, destroyedAt] of destroyedRooms.entries()) {
+    if (now - destroyedAt > DESTROYED_ROOM_MEMORY_MS) destroyedRooms.delete(id);
+  }
+}
+
+setInterval(cleanupStaleRooms, CLEANUP_INTERVAL_MS);
 
 io.on("connection", (socket) => {
   // console.log(`User connected: ${socket.id}`);
 
   socket.on("create_room", ({ username, password }) => {
+    cleanupStaleRooms();
+    if (Object.keys(rooms).length >= MAX_ROOMS) {
+      return socket.emit("error", "ROOM_LIMIT_REACHED");
+    }
+    const keyLen = typeof password === "string" ? password.length : 0;
+    if (keyLen < MIN_ENCRYPTION_KEY_LENGTH || keyLen > MAX_ENCRYPTION_KEY_LENGTH) {
+      return socket.emit("error", `ENCRYPTION KEY MUST BE BETWEEN ${MIN_ENCRYPTION_KEY_LENGTH} AND ${MAX_ENCRYPTION_KEY_LENGTH} CHARACTERS.`);
+    }
+
     let roomId = generateRoomId();
     while (rooms[roomId]) roomId = generateRoomId();
 
@@ -65,6 +106,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("join_room", ({ username, roomId, password }) => {
+    const keyLen = typeof password === "string" ? password.length : 0;
+    if (keyLen < MIN_ENCRYPTION_KEY_LENGTH || keyLen > MAX_ENCRYPTION_KEY_LENGTH) {
+      return socket.emit("error", `ENCRYPTION KEY MUST BE BETWEEN ${MIN_ENCRYPTION_KEY_LENGTH} AND ${MAX_ENCRYPTION_KEY_LENGTH} CHARACTERS.`);
+    }
     const room = rooms[roomId];
     if (room) {
       if (room.password !== hash(password)) {
@@ -94,7 +139,11 @@ io.on("connection", (socket) => {
       // Update everyone else
       io.to(roomId).emit("update_users", room.users);
     } else {
-      socket.emit("error", "ROOM NOT FOUND.");
+      if (destroyedRooms.has(roomId)) {
+        socket.emit("error", "THIS ROOM HAS ALREADY BEEN TERMINATED.");
+      } else {
+        socket.emit("error", "ROOM NOT FOUND.");
+      }
     }
   });
 
@@ -159,6 +208,7 @@ io.on("connection", (socket) => {
     if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
       io.to(roomId).emit("room_closed");
       io.in(roomId).socketsLeave(roomId);
+      markRoomDestroyed(roomId);
       delete rooms[roomId];
     }
   });
@@ -180,6 +230,7 @@ io.on("connection", (socket) => {
 
         if (room.hostId === socket.id) {
           io.to(roomId).emit("room_closed");
+          markRoomDestroyed(roomId);
           delete rooms[roomId];
         }
         break;

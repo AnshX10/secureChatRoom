@@ -4,7 +4,10 @@ import { IoMdRocket, IoMdLogIn, IoMdArrowBack, IoMdKey, IoMdPerson, IoMdQrScanne
 import Logo from './Logo';
 import { decryptMagicLinkPayload } from '../utils/magicLink';
 
-const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
+const MIN_ENCRYPTION_KEY_LENGTH = 6;
+const MAX_ENCRYPTION_KEY_LENGTH = 64;
+
+const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError }) => {
   const [view, setView] = useState("menu"); 
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
@@ -34,13 +37,24 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
     }
   }, []);
 
+  const validateEncryptionKey = (key) => {
+    const len = (key || "").length;
+    if (len < MIN_ENCRYPTION_KEY_LENGTH || len > MAX_ENCRYPTION_KEY_LENGTH) {
+      setErrorMessage?.(`Encryption key must be between ${MIN_ENCRYPTION_KEY_LENGTH} and ${MAX_ENCRYPTION_KEY_LENGTH} characters.`);
+      return false;
+    }
+    return true;
+  };
+
   const handleJoin = () => {
     if (!username || !roomId || !roomPassword) return;
+    if (!validateEncryptionKey(roomPassword)) return;
     joinRoom(username, roomId, roomPassword);
   };
 
   const handleCreate = () => {
     if (!username || !roomPassword) return;
+    if (!validateEncryptionKey(roomPassword)) return;
     createRoom(username, roomPassword);
   };
 
@@ -72,6 +86,20 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
         </div>
 
         <div className="bg-zinc-950 border border-zinc-800 p-8 rounded-none shadow-2xl relative">
+          {/* Error banner – show at top for menu/create; join view shows error inline above Connect */}
+          {errorMessage && view !== "join" && (
+            <div className="mb-6 bg-red-950 border border-red-700 text-red-200 px-4 py-3 flex items-start justify-between gap-3">
+              <p className="text-sm uppercase tracking-wide flex-1">{errorMessage}</p>
+              <button
+                type="button"
+                onClick={clearError}
+                className="text-red-400 hover:text-white shrink-0 uppercase text-xs tracking-wider"
+                aria-label="Dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           <AnimatePresence mode="wait">
             
             {/* === MAIN MENU === */}
@@ -85,7 +113,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
                 className="space-y-4"
               >
                 <button
-                  onClick={() => setView("create")}
+                  onClick={() => { clearError?.(); setView("create"); }}
                   className="w-full group bg-white text-black p-6 border border-white hover:bg-zinc-200 transition-all flex items-center justify-between"
                 >
                   <div className="text-left">
@@ -97,6 +125,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
 
                 <button
                   onClick={() => {
+                    clearError?.();
                     setIsMagicLink(false);
                     setView("join");
                   }}
@@ -115,7 +144,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
             {view === "create" && (
               <motion.div key="create" variants={variants} initial="initial" animate="animate" exit="exit">
                 <div className="flex items-center gap-4 mb-8">
-                  <button onClick={() => setView("menu")} className="hover:text-zinc-400 transition"><IoMdArrowBack size={24} /></button>
+                  <button onClick={() => { clearError?.(); setView("menu"); }} className="hover:text-zinc-400 transition"><IoMdArrowBack size={24} /></button>
                   <h2 className="text-xl font-bold uppercase tracking-widest">Init Host</h2>
                 </div>
 
@@ -127,7 +156,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
 
                   <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
                     <IoMdKey className="text-zinc-500" />
-                    <input type="text" placeholder="ENCRYPTION KEY" className="bg-transparent w-full outline-none placeholder:text-zinc-700" onChange={(e) => setRoomPassword(e.target.value)} />
+                    <input type="text" placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} />
                   </div>
 
                   <button
@@ -158,6 +187,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
                 <div className="flex items-center gap-4 mb-8">
                   <button 
                     onClick={() => {
+                      clearError?.();
                       setIsMagicLink(false);
                       setRoomId("");
                       setRoomPassword("");
@@ -203,7 +233,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
                           type="text" 
                           placeholder="ROOM ID" 
                           className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase font-mono" 
-                          maxLength={6} 
+                          maxLength={8} 
                           onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                           value={roomId}
                         />
@@ -213,13 +243,29 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom }) => {
                         <IoMdKey className="text-zinc-500" />
                         <input 
                           type="text" 
-                          placeholder="ENCRYPTION KEY" 
+                          placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} 
                           className="bg-transparent w-full outline-none placeholder:text-zinc-700" 
                           onChange={(e) => setRoomPassword(e.target.value)}
                           value={roomPassword}
+                          maxLength={MAX_ENCRYPTION_KEY_LENGTH}
                         />
                       </div>
                     </>
+                  )}
+
+                  {/* Error when joining (magic link or JOIN FREQUENCY): room destroyed, not found, wrong key, etc. */}
+                  {errorMessage && view === "join" && (
+                    <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 flex items-start justify-between gap-3">
+                      <p className="text-sm uppercase tracking-wide flex-1">{errorMessage}</p>
+                      <button
+                        type="button"
+                        onClick={clearError}
+                        className="text-red-400 hover:text-white shrink-0 uppercase text-xs tracking-wider"
+                        aria-label="Dismiss"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   )}
 
                   <button 
