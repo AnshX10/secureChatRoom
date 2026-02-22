@@ -18,22 +18,25 @@ function App() {
   const [initialUsers, setInitialUsers] = useState([]);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [roomName, setRoomName] = useState("");
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId, createdAt, users }) => {
+    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
+      setRoomName(serverRoomName || "");
       setIsHost(true);
       setIsInChat(true);
       setIsCreatingRoom(false);
     });
 
     // Handle Join Success
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
+      setRoomName(serverRoomName || "");
       setIsHost(isHost);
       setIsInChat(true);
     });
@@ -59,13 +62,14 @@ function App() {
     };
   }, []);
 
-  const createRoom = (user, password) => {
-    if (!user || !password) return;
+  const createRoom = (user, password, name) => {
+    if (!user || !password || !name) return;
     setErrorMessage("");
     setIsCreatingRoom(true);
     setUsername(user);
     setRoomPassword(password);
-    socket.emit("create_room", { username: user, password: password });
+    setRoomName(name);
+    socket.emit("create_room", { username: user, password: password, roomName: name });
   };
 
   const joinRoom = (user, room, password) => {
@@ -102,6 +106,7 @@ function App() {
           leaveRoom={leaveRoom}
           createdAt={startTime}
           initialUsers={initialUsers}
+          roomName={roomName}
         />
       )}
     </div>

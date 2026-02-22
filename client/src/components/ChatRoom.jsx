@@ -35,7 +35,7 @@ const DecryptingName = ({ name }) => {
   return <span>{displayValue}</span>;
 };
 
-const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, createdAt, initialUsers }) => {
+const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, createdAt, initialUsers, roomName }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [users, setUsers] = useState(initialUsers || []);
@@ -897,19 +897,19 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </button>
             <div className="hidden sm:block truncate">
               <h1 className="font-bold uppercase tracking-[0.2em] text-[13px] text-zinc-400 truncate">Secure Link Active</h1>
-              <p className="text-[11px] text-zinc-600 uppercase tracking-widest flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-zinc-600 rounded-full"></span> ID: {roomId}
+              <p className="text-[15px] text-zinc-700 uppercase tracking-widest flex items-center gap-1 mt-0.5 font-bold">
+                <IoMdTime className="text-zinc-600" size={12} /> {sessionDuration}
               </p>
             </div>
           </div>
 
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
             <div className="flex flex-col items-center">
-              <span className="text-[8px] sm:text-[10px] text-zinc-600 uppercase tracking-[0.4em] font-black mb-1 flex items-center gap-1">
-                <IoMdTime className="text-zinc-500 animate-pulse" /> Mission Duration
+              <span className="text-[8px] sm:text-[10px] text-zinc-600 uppercase tracking-[0.4em] font-black mb-1">
+                Room Name
               </span>
-              <h1 className="text-lg sm:text-3xl font-black tracking-[0.1em] text-white leading-none font-mono drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] tabular-nums">
-                {sessionDuration}
+              <h1 className="text-lg sm:text-2xl font-black tracking-[0.15em] text-white leading-none uppercase">
+                {roomName || `OPERATION ${roomId}`}
               </h1>
             </div>
           </div>

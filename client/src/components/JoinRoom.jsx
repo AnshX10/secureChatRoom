@@ -12,6 +12,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
+  const [roomName, setRoomName] = useState("");
   const [isMagicLink, setIsMagicLink] = useState(false);
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
@@ -53,9 +54,9 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   };
 
   const handleCreate = () => {
-    if (!username || !roomPassword) return;
+    if (!username || !roomPassword || !roomName) return;
     if (!validateEncryptionKey(roomPassword)) return;
-    createRoom(username, roomPassword);
+    createRoom(username, roomPassword, roomName);
   };
 
   const variants = {
@@ -152,6 +153,11 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
                     <IoMdPerson className="text-zinc-500" />
                     <input type="text" placeholder="CODENAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase" onChange={(e) => setUsername(e.target.value)} />
+                  </div>
+
+                  <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
+                    <IoMdRocket className="text-zinc-500" />
+                    <input type="text" placeholder="ROOM NAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase" onChange={(e) => setRoomName(e.target.value)} maxLength={32} />
                   </div>
 
                   <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">

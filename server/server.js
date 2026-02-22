@@ -69,7 +69,7 @@ setInterval(cleanupStaleRooms, CLEANUP_INTERVAL_MS);
 io.on("connection", (socket) => {
   // console.log(`User connected: ${socket.id}`);
 
-  socket.on("create_room", ({ username, password }) => {
+  socket.on("create_room", ({ username, password, roomName }) => {
     cleanupStaleRooms();
     if (Object.keys(rooms).length >= MAX_ROOMS) {
       return socket.emit("error", "ROOM_LIMIT_REACHED");
@@ -89,7 +89,8 @@ io.on("connection", (socket) => {
       hostId: socket.id,
       users: [hostUser], // Add host IMMEDIATELY
       password: hash(password),
-      createdAt: createdAt
+      createdAt: createdAt,
+      roomName: roomName || ""
     };
 
     socket.join(roomId);
@@ -98,7 +99,8 @@ io.on("connection", (socket) => {
     socket.emit("room_created", { 
       roomId, 
       createdAt, 
-      users: rooms[roomId].users 
+      users: rooms[roomId].users,
+      roomName: rooms[roomId].roomName
     });
     
     // Broadcast list to the room (redundant but safe)
@@ -128,7 +130,8 @@ io.on("connection", (socket) => {
         roomId, 
         isHost: false, 
         createdAt: room.createdAt,
-        users: room.users 
+        users: room.users,
+        roomName: room.roomName || ""
       });
   
       io.to(roomId).emit("receive_message", {
