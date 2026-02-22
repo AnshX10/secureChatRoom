@@ -4,7 +4,7 @@ import {
   IoMdSend, IoMdPeople, IoMdLock, IoMdCopy,
   IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit,
   IoMdTimer, IoMdPulse, IoMdRemoveCircle, IoMdTime, IoMdWarning, IoMdReturnLeft,
-  IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark, IoMdLink
+  IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark, IoMdLink, IoMdKey, IoMdDownload
 } from 'react-icons/io';
 import Logo from './Logo';
 import CryptoJS from 'crypto-js';
@@ -86,6 +86,19 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [pollAnswers, setPollAnswers] = useState(["", "", ""]);
   const [pollDurationMs, setPollDurationMs] = useState(60 * 60 * 1000); // 1 hour
   const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
+
+  // --- NEW: Image attachment state ---
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [showImagePasswordModal, setShowImagePasswordModal] = useState(false);
+  const [imagePasswordInput, setImagePasswordInput] = useState("");
+  const [imagePasswordError, setImagePasswordError] = useState("");
+  const [pendingImageAction, setPendingImageAction] = useState(null); // 'send' or message object for viewing
+  const [imageViewTimers, setImageViewTimers] = useState({}); // Track timers for auto-locking images
+  const [imageCountdowns, setImageCountdowns] = useState({}); // Track countdown seconds for each image
+  const fileInputRef = useRef(null);
+  const imageTimerRefs = useRef({});
+  const imageCountdownRefs = useRef({});
 
   // --- NEW: Bulk select/delete state ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -236,6 +249,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     };
   }, []);
 
+  // Cleanup image view timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(imageTimerRefs.current).forEach(timerId => clearTimeout(timerId));
+      Object.values(imageCountdownRefs.current).forEach(intervalId => clearInterval(intervalId));
+    };
+  }, []);
+
   const toggleStarMessage = (messageId) => {
     if (!messageId) return;
     setStarredMessageIds((prev) => {
@@ -356,6 +377,176 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     setMessageList((list) => [...list, { ...messageData, own: true }]);
     setShowPollModal(false);
     resetPollDraft();
+  };
+
+  // --- NEW: Image Attachment Functions ---
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert("Image too large. Maximum size is 5MB.");
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      alert("Please select an image file.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target.result;
+      setSelectedImage(base64);
+      setImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImageAttachment = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const downloadImage = (imageData, messageId) => {
+    try {
+      // Create a temporary link element
+      const link = document.createElement('a');
+      link.href = imageData;
+      link.download = `classified_${messageId}_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to download image:', error);
+    }
+  };
+
+  const sendImageMessage = async () => {
+    if (!selectedImage) return;
+    
+    // Show password modal for confirmation
+    setPendingImageAction('send');
+    setShowImagePasswordModal(true);
+    setImagePasswordInput("");
+    setImagePasswordError("");
+  };
+
+  const confirmSendImage = async () => {
+    // Verify password matches room password
+    if (imagePasswordInput !== roomPassword) {
+      setImagePasswordError("Incorrect encryption password");
+      return;
+    }
+
+    const messageId = uuidv4();
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // Encrypt the base64 image data
+    const encryptedImage = encrypt(selectedImage);
+
+    const messageData = {
+      id: messageId,
+      roomId,
+      username,
+      message: encryptedImage,
+      time,
+      edited: false,
+      deleted: false,
+      timer: selfDestructTime,
+      replyTo: null,
+      type: "image"
+    };
+
+    await socket.emit("send_message", messageData);
+    setMessageList((list) => [...list, { ...messageData, message: selectedImage, own: true }]);
+    clearImageAttachment();
+    setShowImagePasswordModal(false);
+    setImagePasswordInput("");
+    setPendingImageAction(null);
+  };
+
+  const viewEncryptedImage = (msg) => {
+    // Show password modal to decrypt and view image
+    setPendingImageAction(msg);
+    setShowImagePasswordModal(true);
+    setImagePasswordInput("");
+    setImagePasswordError("");
+  };
+
+  const confirmViewImage = () => {
+    // Verify password matches room password
+    if (imagePasswordInput !== roomPassword) {
+      setImagePasswordError("Incorrect encryption password");
+      return;
+    }
+
+    // Password is correct, update the message to show decrypted image
+    const msg = pendingImageAction;
+    setMessageList((list) => list.map((m) => 
+      m.id === msg.id ? { ...m, imageDecrypted: true } : m
+    ));
+    
+    // Clear any existing timers for this image
+    if (imageTimerRefs.current[msg.id]) {
+      clearTimeout(imageTimerRefs.current[msg.id]);
+    }
+    if (imageCountdownRefs.current[msg.id]) {
+      clearInterval(imageCountdownRefs.current[msg.id]);
+    }
+
+    // Set initial countdown
+    const lockDuration = 10; // 10 seconds
+    setImageCountdowns(prev => ({ ...prev, [msg.id]: lockDuration }));
+
+    // Countdown interval (update every second)
+    const countdownInterval = setInterval(() => {
+      setImageCountdowns(prev => {
+        const newCount = (prev[msg.id] || 0) - 1;
+        if (newCount <= 0) {
+          clearInterval(countdownInterval);
+          delete imageCountdownRefs.current[msg.id];
+          const newState = { ...prev };
+          delete newState[msg.id];
+          return newState;
+        }
+        return { ...prev, [msg.id]: newCount };
+      });
+    }, 1000);
+
+    imageCountdownRefs.current[msg.id] = countdownInterval;
+
+    // Set timer to auto-lock the image after duration
+    const timerId = setTimeout(() => {
+      setMessageList((list) => list.map((m) => 
+        m.id === msg.id ? { ...m, imageDecrypted: false } : m
+      ));
+      clearInterval(countdownInterval);
+      delete imageTimerRefs.current[msg.id];
+      delete imageCountdownRefs.current[msg.id];
+      setImageCountdowns(prev => {
+        const newState = { ...prev };
+        delete newState[msg.id];
+        return newState;
+      });
+    }, lockDuration * 1000);
+
+    imageTimerRefs.current[msg.id] = timerId;
+    
+    setShowImagePasswordModal(false);
+    setImagePasswordInput("");
+    setPendingImageAction(null);
+  };
+
+  const closeImagePasswordModal = () => {
+    setShowImagePasswordModal(false);
+    setImagePasswordInput("");
+    setImagePasswordError("");
+    setPendingImageAction(null);
   };
 
   const applyPollVoteUpdate = ({ messageId, optionId, action, username: voter }) => {
@@ -633,6 +824,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     socket.on("receive_message", (data) => {
       if (data.system) setMessageList((l) => [...l, data]);
       else if (data.type === "poll" || data.poll) setMessageList((l) => [...l, { ...data, own: false }]);
+      else if (data.type === "image") setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false, imageDecrypted: false }]);
       else setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false }]);
     });
     socket.on("poll_vote_update", (payload) => applyPollVoteUpdate(payload));
@@ -1139,6 +1331,72 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                           </button>
                         </div>
                       </div>
+                    ) : msg.type === "image" ? (
+                      <div className="space-y-2">
+                        {msg.own || msg.imageDecrypted ? (
+                          <div className="relative border-2 border-zinc-800 bg-zinc-900 overflow-hidden group">
+                            <img 
+                              src={msg.message} 
+                              alt="Classified attachment" 
+                              className="max-w-full max-h-96 object-contain w-full"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div style={{ display: 'none' }} className="p-4 text-center text-zinc-500 text-xs">
+                              <IoMdWarning className="inline mr-2" />
+                              Failed to decrypt image
+                            </div>
+                            <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
+                              <IoMdLock className="inline mr-1" /> Classified Attachment
+                            </div>
+                            {!msg.own && imageCountdowns[msg.id] && (
+                              <div className={`absolute top-2 right-2 px-2 py-1 text-[10px] uppercase tracking-widest border font-bold ${
+                                imageCountdowns[msg.id] <= 3 
+                                  ? 'bg-red-600/95 text-white border-red-500 animate-pulse' 
+                                  : 'bg-red-900/90 text-red-200 border-red-700'
+                              }`}>
+                                <IoMdTimer className="inline mr-1" />
+                                {imageCountdowns[msg.id] <= 3 ? 'LOCKING' : 'Auto-lock'} in {imageCountdowns[msg.id]}s
+                              </div>
+                            )}
+                            {/* Download Button - Shows on hover or when countdown is active */}
+                            {(msg.own || msg.imageDecrypted) && (
+                              <div className={`absolute bottom-2 right-2 ${msg.own ? 'opacity-0 group-hover:opacity-100' : ''} transition-opacity`}>
+                                <button
+                                  onClick={() => downloadImage(msg.message, msg.id)}
+                                  className="bg-black/80 hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white font-bold transition-all flex items-center gap-1"
+                                  title="Download image"
+                                >
+                                  <IoMdDownload size={14} />
+                                  Download
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="relative border-2 border-zinc-800 bg-zinc-900 p-8 text-center">
+                            <div className="flex flex-col items-center gap-4">
+                              <IoMdLock className="text-zinc-600" size={48} />
+                              <div>
+                                <p className="text-zinc-400 text-sm uppercase tracking-widest font-bold mb-1">
+                                  Encrypted Image
+                                </p>
+                                <p className="text-zinc-600 text-xs">
+                                  Enter encryption password to view
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => viewEncryptedImage(msg)}
+                                className="px-4 py-2 bg-white text-black text-xs uppercase font-bold tracking-widest hover:bg-zinc-300 transition"
+                              >
+                                Unlock Image
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.deleted && <IoMdTrash className="inline mr-1" />} {msg.message}</p>
                     )}
@@ -1271,56 +1529,102 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </div>
           )}
 
-          <div className={`flex items-center border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-900 focus-within:border-zinc-700"}`}>
-            <div className="flex items-center">
-              <div className="relative">
-                <button onClick={(e) => { e.stopPropagation(); setShowTimerMenu(!showTimerMenu); }} className={`p-2 sm:p-3 transition-colors ${selfDestructTime > 0 ? "text-red-600" : "text-zinc-600 hover:text-white"}`}>
-                  <IoMdTimer size={18} />
+          <div className={`flex ${imagePreview ? 'flex-col' : 'items-center'} border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-900 focus-within:border-zinc-700"}`}>
+            <div className="flex items-center w-full">
+              <div className="flex items-center">
+                <div className="relative">
+                  <button onClick={(e) => { e.stopPropagation(); setShowTimerMenu(!showTimerMenu); }} className={`p-2 sm:p-3 transition-colors ${selfDestructTime > 0 ? "text-red-600" : "text-zinc-600 hover:text-white"}`}>
+                    <IoMdTimer size={18} />
+                  </button>
+                  <AnimatePresence>
+                    {showTimerMenu && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-800 shadow-2xl z-50 w-24 sm:w-32">
+                        {timerOptions.map((opt) => (
+                          <button key={opt.label} onClick={() => { setSelfDestructTime(opt.value); setShowTimerMenu(false); }} className={`w-full text-left px-3 py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-500"}`}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* POLL BUTTON (next to destruct timer) */}
+                <button
+                  type="button"
+                  onClick={togglePollModal}
+                  className={`p-2 sm:p-3 transition-colors ${showPollModal ? "text-indigo-400" : "text-zinc-600 hover:text-white"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title="Create a poll"
+                  disabled={!!editingMessageId}
+                >
+                  <IoMdStats size={18} />
                 </button>
-                <AnimatePresence>
-                  {showTimerMenu && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-800 shadow-2xl z-50 w-24 sm:w-32">
-                      {timerOptions.map((opt) => (
-                        <button key={opt.label} onClick={() => { setSelfDestructTime(opt.value); setShowTimerMenu(false); }} className={`w-full text-left px-3 py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-500"}`}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+
+                {/* IMAGE ATTACHMENT BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-2 sm:p-3 transition-colors ${selectedImage ? "text-green-400" : "text-zinc-600 hover:text-white"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title="Attach classified image"
+                  disabled={!!editingMessageId}
+                >
+                  <IoMdLink size={18} />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+
               </div>
 
-              {/* POLL BUTTON (next to destruct timer) */}
-              <button
-                type="button"
-                onClick={togglePollModal}
-                className={`p-2 sm:p-3 transition-colors ${showPollModal ? "text-indigo-400" : "text-zinc-600 hover:text-white"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                title="Create a poll"
-                disabled={!!editingMessageId}
-              >
-                <IoMdStats size={18} />
-              </button>
+              {replyingTo && !editingMessageId && !imagePreview && (
+                <div className="flex items-center gap-2 text-[8px] text-zinc-400 uppercase tracking-widest border-l border-zinc-500 pl-2 font-bold">
+                  <span className="flex items-center gap-1"><IoMdReturnLeft /> Replying to: {replyingTo.username}</span>
+                  <button onClick={() => setReplyingTo(null)} className="hover:text-white"><IoMdClose /></button>
+                </div>
+              )}
 
+              {!imagePreview && (
+                <input
+                  type="text"
+                  value={currentMessage}
+                  placeholder={editingMessageId ? "EDITING..." : "ENTER ENCRYPTED SIGNAL..."}
+                  className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-800 text-xs sm:text-sm font-mono min-w-0"
+                  onChange={handleInputChange}
+                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                />
+              )}
+              
+              <button 
+                onClick={selectedImage ? sendImageMessage : sendMessage} 
+                className={`p-2 sm:p-3 text-black transition-all ${editingMessageId ? "bg-white" : "bg-white hover:bg-zinc-200"}`}
+                disabled={!selectedImage && !currentMessage.trim()}
+              >
+                {editingMessageId ? <IoMdCreate size={18} /> : <IoMdSend size={18} />}
+              </button>
             </div>
 
-            {replyingTo && !editingMessageId && (
-              <div className="flex items-center gap-2 text-[8px] text-zinc-400 uppercase tracking-widest border-l border-zinc-500 pl-2 font-bold mb-2">
-                <span className="flex items-center gap-1"><IoMdReturnLeft /> Replying to: {replyingTo.username}</span>
-                <button onClick={() => setReplyingTo(null)} className="hover:text-white"><IoMdClose /></button>
+            {/* IMAGE PREVIEW */}
+            {imagePreview && !editingMessageId && (
+              <div className="w-full px-2 py-2 border-t border-zinc-800">
+                <div className="relative inline-block border-2 border-zinc-700 bg-zinc-900">
+                  <img src={imagePreview} alt="Preview" className="max-h-32 max-w-full object-contain" />
+                  <button
+                    onClick={clearImageAttachment}
+                    className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition"
+                    title="Remove image"
+                  >
+                    <IoMdClose size={16} />
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest flex items-center gap-1">
+                    <IoMdLock size={10} /> Classified Attachment • Will be encrypted
+                  </div>
+                </div>
               </div>
             )}
-
-            <input
-              type="text"
-              value={currentMessage}
-              placeholder={editingMessageId ? "EDITING..." : "ENTER ENCRYPTED SIGNAL..."}
-              className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-800 text-xs sm:text-sm font-mono min-w-0"
-              onChange={handleInputChange}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            />
-            <button onClick={sendMessage} className={`p-2 sm:p-3 text-black transition-all ${editingMessageId ? "bg-white" : "bg-white hover:bg-zinc-200"}`}>
-              {editingMessageId ? <IoMdCreate size={18} /> : <IoMdSend size={18} />}
-            </button>
           </div>
         </footer>
 
@@ -1531,6 +1835,83 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 >
                   Cancel
                 </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Image Password Modal */}
+        <AnimatePresence>
+          {showImagePasswordModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4"
+              onClick={closeImagePasswordModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-zinc-950 border-2 border-zinc-800 p-8 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-center mb-6">
+                  <IoMdLock className="text-zinc-400 mx-auto mb-4" size={48} />
+                  <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
+                    {pendingImageAction === 'send' ? 'CONFIRM SEND' : 'DECRYPT IMAGE'}
+                  </h2>
+                  <p className="text-zinc-400 text-sm uppercase tracking-wide">
+                    {pendingImageAction === 'send' 
+                      ? 'Enter room encryption password to send classified attachment'
+                      : 'Enter room encryption password to view classified attachment'}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
+                    <IoMdKey className="text-zinc-500" />
+                    <input
+                      type="password"
+                      value={imagePasswordInput}
+                      onChange={(e) => {
+                        setImagePasswordInput(e.target.value);
+                        setImagePasswordError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          pendingImageAction === 'send' ? confirmSendImage() : confirmViewImage();
+                        }
+                      }}
+                      placeholder="ENCRYPTION PASSWORD"
+                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-white"
+                      autoFocus
+                    />
+                  </div>
+
+                  {imagePasswordError && (
+                    <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 text-sm uppercase tracking-wide text-center">
+                      {imagePasswordError}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={closeImagePasswordModal}
+                      className="flex-1 border border-zinc-700 text-zinc-400 py-3 uppercase text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={pendingImageAction === 'send' ? confirmSendImage : confirmViewImage}
+                      className="flex-1 bg-white text-black py-3 uppercase text-xs font-bold hover:bg-zinc-300 transition-all"
+                      disabled={!imagePasswordInput}
+                    >
+                      {pendingImageAction === 'send' ? 'Send' : 'Decrypt'}
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             </motion.div>
           )}
