@@ -909,7 +909,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 Room Name
               </span>
               <h1 className="text-lg sm:text-2xl font-black tracking-[0.15em] text-white leading-none uppercase">
-                {roomName || `OPERATION ${roomId}`}
+                {roomName}
               </h1>
             </div>
           </div>
