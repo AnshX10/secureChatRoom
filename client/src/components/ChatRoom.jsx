@@ -135,6 +135,31 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   // --- NEW: Pending join requests (host-only) ---
   const [joinRequests, setJoinRequests] = useState([]);
 
+  // --- NEW: Helper to make URLs in text clickable ---
+  const renderMessageText = (text, keyPrefix = "msg") => {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+
+    return parts.map((part, idx) => {
+      const isUrl = part.startsWith("http://") || part.startsWith("https://");
+      if (!isUrl) {
+        return <span key={`${keyPrefix}-part-${idx}`}>{part}</span>;
+      }
+      return (
+        <a
+          key={`${keyPrefix}-link-${idx}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 decoration-dotted hover:text-blue-300 break-all"
+        >
+          {part}
+        </a>
+      );
+    });
+  };
+
   // --- NEW: Local Star / Pin state (per room, per device) ---
   const [starredMessageIds, setStarredMessageIds] = useState(() => new Set());
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
@@ -1562,7 +1587,10 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.deleted && <IoMdTrash className="inline mr-1" />} {msg.message}</p>
+                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        {msg.deleted && <IoMdTrash className="inline mr-1" />}{" "}
+                        {renderMessageText(msg.message, msg.id || "message")}
+                      </p>
                     )}
                     <div className="flex items-center gap-2 justify-end mt-2 opacity-40">
                       {msg.edited && !msg.deleted && <span className="text-[7px] border border-current px-1 uppercase font-bold">Edited</span>}
