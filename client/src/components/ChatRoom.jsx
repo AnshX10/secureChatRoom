@@ -183,6 +183,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const fileInputRef = useRef(null);
   const imageTimerRefs = useRef({});
   const imageCountdownRefs = useRef({});
+  const imageRevealRefs = useRef({});
 
   // --- NEW: Bulk select/delete state ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -338,6 +339,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     return () => {
       Object.values(imageTimerRefs.current).forEach(timerId => clearTimeout(timerId));
       Object.values(imageCountdownRefs.current).forEach(intervalId => clearInterval(intervalId));
+      Object.values(imageRevealRefs.current).forEach(timeoutId => clearTimeout(timeoutId));
     };
   }, []);
 
@@ -571,9 +573,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
     // Password is correct, update the message to show decrypted image
     const msg = pendingImageAction;
-    setMessageList((list) => list.map((m) => 
-      m.id === msg.id ? { ...m, imageDecrypted: true } : m
-    ));
     
     // Clear any existing timers for this image
     if (imageTimerRefs.current[msg.id]) {
@@ -582,48 +581,69 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     if (imageCountdownRefs.current[msg.id]) {
       clearInterval(imageCountdownRefs.current[msg.id]);
     }
+    if (imageRevealRefs.current[msg.id]) {
+      clearTimeout(imageRevealRefs.current[msg.id]);
+    }
 
-    // Set initial countdown
-    const lockDuration = 10; // 10 seconds
-    setImageCountdowns(prev => ({ ...prev, [msg.id]: lockDuration }));
+    // Immediately switch UI into a pre-reveal "scanning" state (recipient only)
+    setMessageList((list) => list.map((m) =>
+      m.id === msg.id ? { ...m, imageDecrypted: true, imageScanning: true } : m
+    ));
 
-    // Countdown interval (update every second)
-    const countdownInterval = setInterval(() => {
-      setImageCountdowns(prev => {
-        const newCount = (prev[msg.id] || 0) - 1;
-        if (newCount <= 0) {
-          clearInterval(countdownInterval);
-          delete imageCountdownRefs.current[msg.id];
-          const newState = { ...prev };
-          delete newState[msg.id];
-          return newState;
-        }
-        return { ...prev, [msg.id]: newCount };
-      });
-    }, 1000);
-
-    imageCountdownRefs.current[msg.id] = countdownInterval;
-
-    // Set timer to auto-lock the image after duration
-    const timerId = setTimeout(() => {
-      setMessageList((list) => list.map((m) => 
-        m.id === msg.id ? { ...m, imageDecrypted: false } : m
-      ));
-      clearInterval(countdownInterval);
-      delete imageTimerRefs.current[msg.id];
-      delete imageCountdownRefs.current[msg.id];
-      setImageCountdowns(prev => {
-        const newState = { ...prev };
-        delete newState[msg.id];
-        return newState;
-      });
-    }, lockDuration * 1000);
-
-    imageTimerRefs.current[msg.id] = timerId;
-    
     setShowImagePasswordModal(false);
     setImagePasswordInput("");
     setPendingImageAction(null);
+
+    const scanDurationMs = 1400;
+    const lockDuration = 10; // seconds
+
+    const revealTimeout = setTimeout(() => {
+      // End scanning overlay and start the auto-lock window
+      setMessageList((list) => list.map((m) =>
+        m.id === msg.id ? { ...m, imageScanning: false } : m
+      ));
+
+      // Set initial countdown (starts after reveal)
+      setImageCountdowns(prev => ({ ...prev, [msg.id]: lockDuration }));
+
+      // Countdown interval (update every second)
+      const countdownInterval = setInterval(() => {
+        setImageCountdowns(prev => {
+          const newCount = (prev[msg.id] || 0) - 1;
+          if (newCount <= 0) {
+            clearInterval(countdownInterval);
+            delete imageCountdownRefs.current[msg.id];
+            const newState = { ...prev };
+            delete newState[msg.id];
+            return newState;
+          }
+          return { ...prev, [msg.id]: newCount };
+        });
+      }, 1000);
+
+      imageCountdownRefs.current[msg.id] = countdownInterval;
+
+      // Set timer to auto-lock the image after duration
+      const timerId = setTimeout(() => {
+        setMessageList((list) => list.map((m) =>
+          m.id === msg.id ? { ...m, imageDecrypted: false, imageScanning: false } : m
+        ));
+        clearInterval(countdownInterval);
+        delete imageTimerRefs.current[msg.id];
+        delete imageCountdownRefs.current[msg.id];
+        delete imageRevealRefs.current[msg.id];
+        setImageCountdowns(prev => {
+          const newState = { ...prev };
+          delete newState[msg.id];
+          return newState;
+        });
+      }, lockDuration * 1000);
+
+      imageTimerRefs.current[msg.id] = timerId;
+      delete imageRevealRefs.current[msg.id];
+    }, scanDurationMs);
+
+    imageRevealRefs.current[msg.id] = revealTimeout;
   };
 
   const closeImagePasswordModal = () => {
@@ -1014,6 +1034,115 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             box-shadow: 0 0 0 rgba(251, 191, 36, 0);
             filter: brightness(1);
           }
+        }
+
+        /* Classified image pre-reveal "scanning" overlay */
+        .scan-overlay {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(1200px 500px at 20% 10%, rgba(99, 102, 241, 0.16), transparent 50%),
+                      radial-gradient(900px 400px at 80% 30%, rgba(16, 185, 129, 0.10), transparent 45%),
+                      linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.92));
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          pointer-events: none;
+          overflow: hidden;
+        }
+
+        .scan-grid {
+          position: absolute;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+          background-size: 24px 24px;
+          opacity: 0.18;
+          transform: translateZ(0);
+          animation: scan-grid-flicker 900ms steps(2, end) infinite;
+        }
+
+        .scan-noise {
+          position: absolute;
+          inset: 0;
+          background:
+            repeating-linear-gradient(
+              0deg,
+              rgba(255,255,255,0.04) 0px,
+              rgba(255,255,255,0.04) 1px,
+              transparent 2px,
+              transparent 4px
+            );
+          mix-blend-mode: overlay;
+          opacity: 0.14;
+          animation: scan-noise 700ms linear infinite;
+        }
+
+        .scan-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 80px;
+          background: linear-gradient(
+            180deg,
+            transparent,
+            rgba(99, 102, 241, 0.10) 25%,
+            rgba(255,255,255,0.16) 50%,
+            rgba(16, 185, 129, 0.10) 75%,
+            transparent
+          );
+          box-shadow: 0 0 18px rgba(99, 102, 241, 0.22);
+          animation: scan-sweep 900ms linear infinite;
+        }
+
+        .scan-hud {
+          position: absolute;
+          left: 12px;
+          right: 12px;
+          bottom: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          font-size: 10px;
+          letter-spacing: 0.25em;
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.70);
+        }
+
+        .scan-bar {
+          flex: 1;
+          height: 8px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(0,0,0,0.35);
+          overflow: hidden;
+        }
+
+        .scan-bar > span {
+          display: block;
+          height: 100%;
+          width: 40%;
+          background: linear-gradient(90deg, rgba(99,102,241,0.65), rgba(16,185,129,0.55));
+          animation: scan-progress 620ms ease-in-out infinite alternate;
+        }
+
+        @keyframes scan-sweep {
+          0% { transform: translateY(-120%); }
+          100% { transform: translateY(420%); }
+        }
+
+        @keyframes scan-noise {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(12px); }
+        }
+
+        @keyframes scan-grid-flicker {
+          0% { opacity: 0.16; }
+          50% { opacity: 0.26; }
+          100% { opacity: 0.18; }
+        }
+
+        @keyframes scan-progress {
+          0% { transform: translateX(-30%); opacity: 0.65; }
+          100% { transform: translateX(160%); opacity: 1; }
         }
       `}</style>
 
@@ -1527,7 +1656,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                             <img 
                               src={msg.message} 
                               alt="Classified attachment" 
-                              className="max-w-full max-h-96 object-contain w-full"
+                              className={`max-w-full max-h-96 object-contain w-full transition-opacity duration-300 ${!msg.own && msg.imageDecrypted && msg.imageScanning ? "opacity-0" : "opacity-100"}`}
                               onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'block';
@@ -1537,6 +1666,28 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                               <IoMdWarning className="inline mr-2" />
                               Failed to decrypt image
                             </div>
+                            {!msg.own && msg.imageDecrypted && msg.imageScanning && (
+                              <div className="scan-overlay" aria-hidden="true">
+                                <div className="scan-grid" />
+                                <div className="scan-noise" />
+                                <div className="scan-line" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="text-center px-6">
+                                    <p className="text-[10px] text-zinc-300 uppercase tracking-[0.45em] font-black">
+                                      Scanning
+                                    </p>
+                                    <p className="text-[9px] text-zinc-500 uppercase tracking-[0.25em] font-bold mt-1">
+                                      Verifying classified payload
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="scan-hud">
+                                  <span className="shrink-0">SCAN</span>
+                                  <div className="scan-bar" aria-hidden="true"><span /></div>
+                                  <span className="shrink-0">OK</span>
+                                </div>
+                              </div>
+                            )}
                             <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
                               <IoMdLock className="inline mr-1" /> Classified Attachment
                             </div>
@@ -1551,7 +1702,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                               </div>
                             )}
                             {/* Download Button - Shows on hover or when countdown is active */}
-                            {(msg.own || msg.imageDecrypted) && (
+                            {(msg.own || (msg.imageDecrypted && !msg.imageScanning)) && (
                               <div className={`absolute bottom-2 right-2 ${msg.own ? 'opacity-0 group-hover:opacity-100' : ''} transition-opacity`}>
                                 <button
                                   onClick={() => downloadImage(msg.message, msg.id)}
