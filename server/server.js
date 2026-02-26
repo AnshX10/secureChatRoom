@@ -28,7 +28,8 @@ app.use(cors(corsOptions));
 
 // --- 4. APPLY CORS TO SOCKET.IO ---
 const io = new Server(server, {
-  cors: corsOptions // Use the same options here
+  cors: corsOptions,
+  maxHttpBufferSize: 10 * 1024 * 1024 // Use the same options here
 });
 
 // --- ROOM LIMITS & CLEANUP ---
