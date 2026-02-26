@@ -11,9 +11,6 @@ import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
 import { encryptMagicLinkPayload } from '../utils/magicLink';
 
-// Conditional QR Code import (install qrcode.react if needed)
-// Will be dynamically imported in component if available
-
 // --- SUB-COMPONENT: Decrypting Text Effect (Glitchy HUD Style) ---
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
@@ -55,6 +52,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
 
+  // --- NEW: Browser Notifications State ---
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
+
   // Dynamically load QR code component if available
   useEffect(() => {
     import('qrcode.react')
@@ -66,6 +68,60 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         setQRCodeComponent(null);
       });
   }, []);
+
+  // --- NEW: Request Notification Permission on Mount ---
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().then((permission) => {
+        setNotificationPermission(permission);
+      });
+    }
+  }, []);
+
+  // --- NEW: Show Browser Notification for New Messages ---
+  const showBrowserNotification = (message) => {
+    // Only show notification if:
+    // 1. Notifications are supported
+    // 2. Permission is granted
+    // 3. Tab is not focused (in background)
+    // 4. Message is not from current user (check both own flag and username)
+    // 5. Message is not a system message
+    if (
+      typeof Notification === 'undefined' ||
+      notificationPermission !== 'granted' ||
+      document.hasFocus() ||
+      message.own ||
+      message.username === username ||
+      message.system
+    ) {
+      return;
+    }
+
+    const title = `${roomName || 'Secure Chat'}`;
+    const body = message.poll
+      ? `${message.username}: [POLL] ${decrypt(message.poll.question).substring(0, 50)}`
+      : message.type === 'image'
+      ? `${message.username}: [Classified Image]`
+      : `${message.username}: ${message.message.substring(0, 100)}`;
+
+    const notification = new Notification(title, {
+      body,
+      icon: '/og-image.png', // Use your app icon
+      badge: '/og-image.png',
+      tag: `chat-${roomId}`, // Prevents duplicate notifications
+      requireInteraction: false,
+      silent: false,
+    });
+
+    // Focus window when notification is clicked
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    // Auto-close after 5 seconds
+    setTimeout(() => notification.close(), 5000);
+  };
 
   const typingTimeoutRef = useRef(null);
   const scrollRef = useRef(null);
@@ -822,10 +878,27 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   // Socket Listeners
   useEffect(() => {
     socket.on("receive_message", (data) => {
-      if (data.system) setMessageList((l) => [...l, data]);
-      else if (data.type === "poll" || data.poll) setMessageList((l) => [...l, { ...data, own: false }]);
-      else if (data.type === "image") setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false, imageDecrypted: false }]);
-      else setMessageList((l) => [...l, { ...data, message: decrypt(data.message), own: false }]);
+      let messageToAdd;
+      
+      // Check if message is from current user
+      const isOwnMessage = data.username === username;
+      
+      if (data.system) {
+        messageToAdd = data;
+      } else if (data.type === "poll" || data.poll) {
+        messageToAdd = { ...data, own: isOwnMessage };
+      } else if (data.type === "image") {
+        messageToAdd = { ...data, message: decrypt(data.message), own: isOwnMessage, imageDecrypted: false };
+      } else {
+        messageToAdd = { ...data, message: decrypt(data.message), own: isOwnMessage };
+      }
+      
+      setMessageList((l) => [...l, messageToAdd]);
+      
+      // Show browser notification for new message (only if not from current user)
+      if (!isOwnMessage) {
+        showBrowserNotification(messageToAdd);
+      }
     });
     socket.on("poll_vote_update", (payload) => applyPollVoteUpdate(payload));
     socket.on("user_typing", ({ username: typingUser, isTyping }) => {
@@ -858,7 +931,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       socket.off("message_deleted"); socket.off("message_updated"); socket.off("kicked");
       socket.off("poll_vote_update");
     };
-  }, [socket, roomPassword]);
+  }, [socket, roomPassword, username, roomName, roomId, notificationPermission]);
 
   useEffect(() => {
     setTimeout(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, 100);
@@ -1107,6 +1180,45 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           </div>
 
           <div className="z-10 min-w-[80px] flex justify-end items-center gap-2">
+            {/* Notification Bell Icon */}
+            {typeof Notification !== 'undefined' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (notificationPermission === 'default') {
+                    Notification.requestPermission().then((permission) => {
+                      setNotificationPermission(permission);
+                    });
+                  } else if (notificationPermission === 'denied') {
+                    alert('Notifications are blocked. Please enable them in your browser settings.');
+                  }
+                }}
+                className={`p-2 transition-all ${
+                  notificationPermission === 'granted'
+                    ? 'text-green-500 hover:text-green-400'
+                    : notificationPermission === 'denied'
+                    ? 'text-red-600 hover:text-red-500'
+                    : 'text-zinc-500 hover:text-white animate-pulse'
+                }`}
+                title={
+                  notificationPermission === 'granted'
+                    ? 'Notifications enabled'
+                    : notificationPermission === 'denied'
+                    ? 'Notifications blocked - click for help'
+                    : 'Click to enable notifications'
+                }
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                </svg>
+              </button>
+            )}
+            
             <button
               type="button"
               onClick={toggleSelectMode}
