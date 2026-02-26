@@ -7,13 +7,14 @@ import { decryptMagicLinkPayload } from '../utils/magicLink';
 const MIN_ENCRYPTION_KEY_LENGTH = 6;
 const MAX_ENCRYPTION_KEY_LENGTH = 64;
 
-const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError }) => {
+const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
   const [view, setView] = useState("menu"); 
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
   const [roomName, setRoomName] = useState("");
   const [isMagicLink, setIsMagicLink] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(false);
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
@@ -56,7 +57,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   const handleCreate = () => {
     if (!username || !roomPassword || !roomName) return;
     if (!validateEncryptionKey(roomPassword)) return;
-    createRoom(username, roomPassword, roomName);
+    createRoom(username, roomPassword, roomName, requireApproval);
   };
 
   const variants = {
@@ -165,6 +166,28 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                     <input type="text" placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} />
                   </div>
 
+                  <div className="flex items-center justify-between gap-3 pt-3 text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px]">Require Host Approval</span>
+                      <span className="text-[8px] text-zinc-600">New agents must be accepted by you</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRequireApproval((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
+                        requireApproval
+                          ? "bg-white border-white shadow-[0_0_0_1px_rgba(255,255,255,0.2)]"
+                          : "bg-zinc-900 border-zinc-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-black transition-transform duration-200 ${
+                          requireApproval ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
                   <button
                     onClick={handleCreate}
                     disabled={isCreatingRoom}
@@ -259,6 +282,13 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                     </>
                   )}
 
+                  {/* Inline notice while waiting for host approval */}
+                  {isWaitingApproval && (
+                    <div className="bg-zinc-900 border border-zinc-700 px-4 py-3 text-[10px] text-zinc-300 uppercase tracking-widest text-center">
+                      Wait — host must accept your join request. Keep this window open.
+                    </div>
+                  )}
+
                   {/* Error when joining (magic link or JOIN FREQUENCY): room destroyed, not found, wrong key, etc. */}
                   {errorMessage && view === "join" && (
                     <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 flex items-start justify-between gap-3">
@@ -276,10 +306,10 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
 
                   <button 
                     onClick={handleJoin} 
-                    className="w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest hover:bg-zinc-300 transition-colors"
-                    disabled={!username || (!isMagicLink && (!roomId || !roomPassword))}
+                    className="w-full mt-6 bg-white text-black font-bold py-4 uppercase tracking-widest hover:bg-zinc-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isWaitingApproval || !username || (!isMagicLink && (!roomId || !roomPassword))}
                   >
-                    Connect
+                    {isWaitingApproval ? "Waiting For Host..." : "Connect"}
                   </button>
                 </div>
               </motion.div>

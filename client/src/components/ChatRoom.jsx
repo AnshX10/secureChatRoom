@@ -132,6 +132,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [replyingTo, setReplyingTo] = useState(null);
   const inputRef = useRef(null);
 
+  // --- NEW: Pending join requests (host-only) ---
+  const [joinRequests, setJoinRequests] = useState([]);
+
   // --- NEW: Local Star / Pin state (per room, per device) ---
   const [starredMessageIds, setStarredMessageIds] = useState(() => new Set());
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
@@ -703,6 +706,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     }
   };
 
+  const decideJoinRequest = (socketId, approve) => {
+    socket.emit("approve_join_request", { roomId, socketId, approve });
+    setJoinRequests((prev) => prev.filter((r) => r.socketId !== socketId));
+  };
+
   // --- NEW: Sliding Button Confirmation Handlers ---
   const handleTerminateClick = () => {
     setConfirmAction('terminate');
@@ -926,10 +934,20 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     socket.on("update_users", (userList) => setUsers(userList));
     socket.on("kicked", () => { leaveRoom(); });
 
+    // Host receives join requests for approval
+    socket.on("join_request", ({ roomId: incomingRoomId, username: requesterUsername, socketId }) => {
+      if (incomingRoomId !== roomId) return;
+      setJoinRequests((prev) => {
+        if (prev.some((r) => r.socketId === socketId)) return prev;
+        return [...prev, { socketId, username: requesterUsername }];
+      });
+    });
+
     return () => {
       socket.off("receive_message"); socket.off("update_users"); socket.off("user_typing");
       socket.off("message_deleted"); socket.off("message_updated"); socket.off("kicked");
       socket.off("poll_vote_update");
+      socket.off("join_request");
     };
   }, [socket, roomPassword, username, roomName, roomId, notificationPermission]);
 
@@ -1093,6 +1111,40 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* Pending Join Requests (host approval) */}
+              {isHost && joinRequests.length > 0 && (
+                <div className="border border-amber-500/60 bg-black/60 p-4 mb-6">
+                  <p className="text-[9px] uppercase font-black text-amber-400 tracking-[0.25em] mb-2">
+                    Join Requests
+                  </p>
+                  <div className="space-y-3">
+                    {joinRequests.map((req) => (
+                      <div key={req.socketId} className="flex items-center justify-between gap-3">
+                        <span className="text-xs uppercase tracking-wide text-white truncate">
+                          {req.username}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => decideJoinRequest(req.socketId, true)}
+                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-green-600 text-green-400 hover:bg-green-500 hover:text-black transition-colors"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => decideJoinRequest(req.socketId, false)}
+                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-red-700 text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

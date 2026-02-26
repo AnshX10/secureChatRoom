@@ -70,7 +70,7 @@ setInterval(cleanupStaleRooms, CLEANUP_INTERVAL_MS);
 io.on("connection", (socket) => {
   // console.log(`User connected: ${socket.id}`);
 
-  socket.on("create_room", ({ username, password, roomName }) => {
+  socket.on("create_room", ({ username, password, roomName, requireApproval }) => {
     cleanupStaleRooms();
     if (Object.keys(rooms).length >= MAX_ROOMS) {
       return socket.emit("error", "ROOM_LIMIT_REACHED");
@@ -91,7 +91,9 @@ io.on("connection", (socket) => {
       users: [hostUser], // Add host IMMEDIATELY
       password: hash(password),
       createdAt: createdAt,
-      roomName: roomName || ""
+      roomName: roomName || "",
+      requireApproval: !!requireApproval,
+      pendingRequests: []
     };
 
     socket.join(roomId);
@@ -121,6 +123,24 @@ io.on("connection", (socket) => {
       if (room.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         return socket.emit("error", "CODENAME ALREADY IN USE.");
       }
+
+      // If this room requires host approval, queue the request instead of joining immediately
+      if (room.requireApproval) {
+        room.pendingRequests = room.pendingRequests || [];
+        if (room.pendingRequests.some(r => r.username.toLowerCase() === username.toLowerCase())) {
+          return socket.emit("error", "JOIN REQUEST ALREADY PENDING FOR THIS CODENAME.");
+        }
+
+        room.pendingRequests.push({ socketId: socket.id, username });
+
+        // Notify requester to wait
+        socket.emit("join_request_pending", { roomId });
+
+        // Notify host about the join request
+        io.to(room.hostId).emit("join_request", { roomId, username, socketId: socket.id });
+
+        return;
+      }
   
       socket.join(roomId);
       const newUser = { id: socket.id, username, isHost: false }; 
@@ -149,6 +169,53 @@ io.on("connection", (socket) => {
         socket.emit("error", "ROOM NOT FOUND.");
       }
     }
+  });
+
+  // Host approves or rejects a pending join request
+  socket.on("approve_join_request", ({ roomId, socketId, approve }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    room.pendingRequests = room.pendingRequests || [];
+    const idx = room.pendingRequests.findIndex((r) => r.socketId === socketId);
+    if (idx === -1) return;
+
+    const request = room.pendingRequests[idx];
+    room.pendingRequests.splice(idx, 1);
+
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (!targetSocket) return;
+
+    if (!approve) {
+      return targetSocket.emit("join_request_result", {
+        approved: false,
+        reason: "JOIN REQUEST REJECTED BY HOST."
+      });
+    }
+
+    // Ensure codename is still unique at approval time
+    if (room.users.some((u) => u.username.toLowerCase() === request.username.toLowerCase())) {
+      return targetSocket.emit("error", "CODENAME ALREADY IN USE.");
+    }
+
+    targetSocket.join(roomId);
+    const newUser = { id: socketId, username: request.username, isHost: false };
+    room.users.push(newUser);
+
+    targetSocket.emit("joined_room_success", {
+      roomId,
+      isHost: false,
+      createdAt: room.createdAt,
+      users: room.users,
+      roomName: room.roomName || ""
+    });
+
+    io.to(roomId).emit("receive_message", {
+      system: true,
+      message: `${request.username} has entered the frequency.`,
+    });
+
+    io.to(roomId).emit("update_users", room.users);
   });
 
   // NEW: Kick User Feature
@@ -220,6 +287,10 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     for (const roomId in rooms) {
       const room = rooms[roomId];
+      // Clean up any pending join requests for this socket
+      if (room.pendingRequests && room.pendingRequests.length > 0) {
+        room.pendingRequests = room.pendingRequests.filter((r) => r.socketId !== socket.id);
+      }
       const userIndex = room.users.findIndex((u) => u.id === socket.id);
 
       if (userIndex !== -1) {

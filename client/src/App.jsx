@@ -19,6 +19,7 @@ function App() {
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [roomName, setRoomName] = useState("");
+  const [isWaitingApproval, setIsWaitingApproval] = useState(false);
 
   useEffect(() => {
     socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName }) => {
@@ -31,7 +32,7 @@ function App() {
       setIsCreatingRoom(false);
     });
 
-    // Handle Join Success
+    // Handle Join Success (direct or after host approval)
     socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
@@ -39,6 +40,21 @@ function App() {
       setRoomName(serverRoomName || "");
       setIsHost(isHost);
       setIsInChat(true);
+      setIsWaitingApproval(false);
+    });
+
+    // Join request is pending host approval
+    socket.on("join_request_pending", () => {
+      setIsWaitingApproval(true);
+      setErrorMessage("");
+    });
+
+    // Host decided about our join request
+    socket.on("join_request_result", ({ approved, reason }) => {
+      if (!approved) {
+        setIsWaitingApproval(false);
+        setErrorMessage(reason || "JOIN REQUEST REJECTED BY HOST.");
+      }
     });
 
     // Handle Room Closed (by host)
@@ -52,24 +68,27 @@ function App() {
     socket.on("error", (msg) => {
       setErrorMessage(msg);
       setIsCreatingRoom(false);
+      setIsWaitingApproval(false);
     });
 
     return () => {
       socket.off("room_created");
       socket.off("joined_room_success");
+      socket.off("join_request_pending");
+      socket.off("join_request_result");
       socket.off("room_closed");
       socket.off("error");
     };
   }, []);
 
-  const createRoom = (user, password, name) => {
+  const createRoom = (user, password, name, requireApproval) => {
     if (!user || !password || !name) return;
     setErrorMessage("");
     setIsCreatingRoom(true);
     setUsername(user);
     setRoomPassword(password);
     setRoomName(name);
-    socket.emit("create_room", { username: user, password: password, roomName: name });
+    socket.emit("create_room", { username: user, password: password, roomName: name, requireApproval: !!requireApproval });
   };
 
   const joinRoom = (user, room, password) => {
@@ -95,6 +114,7 @@ function App() {
           errorMessage={errorMessage}
           setErrorMessage={setErrorMessage}
           clearError={() => setErrorMessage("")}
+          isWaitingApproval={isWaitingApproval}
         />
       ) : (
         <ChatRoom 
