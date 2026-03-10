@@ -81,6 +81,7 @@ const ChatRoom = ({
   const [isPanicMode, setIsPanicMode] = useState(false);
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscIndicator, setShowEscIndicator] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const escTimeoutRef = useRef(null);
   const escIndicatorTimeoutRef = useRef(null);
 
@@ -225,6 +226,21 @@ const ChatRoom = ({
   ];
 
   useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                           window.innerWidth <= 768;
+      setIsMobile(isMobileDevice);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) return;
+    
     const handleKeyDown = (e) => {
       if (isPanicMode) {
         if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
@@ -280,7 +296,7 @@ const ChatRoom = ({
         clearTimeout(escIndicatorTimeoutRef.current);
       }
     };
-  }, [isPanicMode]);
+  }, [isPanicMode, isMobile]);
 
   useEffect(() => {
     const handleContextMenu = (e) => e.preventDefault();
@@ -1710,17 +1726,19 @@ const ChatRoom = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => setIsPanicMode(true)}
-              className={`p-2 transition-all opacity-20 hover:opacity-60 ${escPressCount > 0 ? "text-amber-500 opacity-80 animate-pulse" : "text-zinc-700 hover:text-zinc-500"}`}
-              title="Panic Mode (or press ESC twice quickly)"
-            >
-              <IoMdWarning size={16} />
-            </button>
+            {!isMobile && (
+              <button
+                type="button"
+                onClick={() => setIsPanicMode(true)}
+                className={`p-2 transition-all opacity-20 hover:opacity-60 ${escPressCount > 0 ? "text-amber-500 opacity-80 animate-pulse" : "text-zinc-700 hover:text-zinc-500"}`}
+                title="Panic Mode (or press ESC twice quickly)"
+              >
+                <IoMdWarning size={16} />
+              </button>
+            )}
 
             <AnimatePresence>
-              {showEscIndicator && (
+              {!isMobile && showEscIndicator && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8, x: 10 }}
                   animate={{ opacity: 1, scale: 1, x: 0 }}
