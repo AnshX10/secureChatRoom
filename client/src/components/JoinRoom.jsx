@@ -139,6 +139,19 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   </div>
                   <IoMdLogIn className="text-2xl text-zinc-500 group-hover:text-white transition-colors" />
                 </button>
+
+                <button
+                  onClick={() => {
+                    window.location.hash = '#demo';
+                  }}
+                  className="w-full group bg-zinc-900 text-white border border-zinc-700 hover:border-white p-6 transition-all flex items-center justify-between"
+                >
+                  <div className="text-left">
+                    <span className="block font-bold text-lg tracking-wide">BIOMETRIC DEMO</span>
+                    <span className="text-zinc-500 text-xs uppercase">Security Test</span>
+                  </div>
+                  <IoMdKey className="text-2xl text-zinc-500 group-hover:text-white transition-colors" />
+                </button>
               </motion.div>
             )}
 
