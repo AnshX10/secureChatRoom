@@ -238,13 +238,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send_message", (data) => {
-    const { roomId, messageId, timer } = data; // Receive timer (in ms)
+    const { roomId, messageId, timer, type } = data; // Receive timer (in ms) and message type
 
     // Broadcast message to others immediately
     socket.to(roomId).emit("receive_message", data);
 
-    // --- NEW: Handle Self-Destruct ---
-    if (timer && timer > 0) {
+    // --- Handle Self-Destruct (not for high-clearance messages) ---
+    if (timer && timer > 0 && type !== "high-clearance") {
       setTimeout(() => {
         // Trigger the delete event for everyone in the room (including sender)
         io.to(roomId).emit("message_deleted", data.id);

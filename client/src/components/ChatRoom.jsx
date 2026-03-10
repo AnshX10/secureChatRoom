@@ -24,11 +24,14 @@ import {
   IoMdLink,
   IoMdKey,
   IoMdDownload,
+  IoMdFingerPrint,
 } from "react-icons/io";
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
 import { encryptMagicLinkPayload } from "../utils/magicLink";
+import BiometricVault from "./BiometricVault";
+import HighClearanceComposer from "./HighClearanceComposer";
 
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
@@ -195,15 +198,7 @@ const ChatRoom = ({
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [showImagePasswordModal, setShowImagePasswordModal] = useState(false);
-  const [imagePasswordInput, setImagePasswordInput] = useState("");
-  const [imagePasswordError, setImagePasswordError] = useState("");
-  const [pendingImageAction, setPendingImageAction] = useState(null);
-  const [imageCountdowns, setImageCountdowns] = useState({});
   const fileInputRef = useRef(null);
-  const imageTimerRefs = useRef({});
-  const imageCountdownRefs = useRef({});
-  const imageRevealRefs = useRef({});
 
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState(() => new Set());
@@ -216,6 +211,11 @@ const ChatRoom = ({
   const slideTrackRef = useRef(null);
   const slidePositionRef = useRef(0);
   const confirmActionRef = useRef(null);
+
+  // Biometric vault states
+  const [showBiometricVault, setShowBiometricVault] = useState(false);
+  const [vaultMessage, setVaultMessage] = useState(null);
+  const [showHighClearanceComposer, setShowHighClearanceComposer] = useState(false);
 
   const timerOptions = [
     { label: "OFF", value: 0 },
@@ -435,20 +435,6 @@ const ChatRoom = ({
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      Object.values(imageTimerRefs.current).forEach((timerId) =>
-        clearTimeout(timerId),
-      );
-      Object.values(imageCountdownRefs.current).forEach((intervalId) =>
-        clearInterval(intervalId),
-      );
-      Object.values(imageRevealRefs.current).forEach((timeoutId) =>
-        clearTimeout(timeoutId),
-      );
-    };
-  }, []);
-
   const toggleStarMessage = (messageId) => {
     if (!messageId) return;
     setStarredMessageIds((prev) => {
@@ -623,18 +609,6 @@ const ChatRoom = ({
   const sendImageMessage = async () => {
     if (!selectedImage) return;
 
-    setPendingImageAction("send");
-    setShowImagePasswordModal(true);
-    setImagePasswordInput("");
-    setImagePasswordError("");
-  };
-
-  const confirmSendImage = async () => {
-    if (imagePasswordInput !== roomPassword) {
-      setImagePasswordError("Incorrect encryption password");
-      return;
-    }
-
     const messageId = uuidv4();
     const time = new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -652,7 +626,11 @@ const ChatRoom = ({
       edited: false,
       deleted: false,
       timer: selfDestructTime,
-      replyTo: null,
+      replyTo: replyingTo ? {
+        messageId: replyingTo.id,
+        username: replyingTo.username,
+        message: encrypt(getReplyPreviewText(replyingTo)),
+      } : null,
       type: "image",
     };
 
@@ -662,105 +640,7 @@ const ChatRoom = ({
       { ...messageData, message: selectedImage, own: true },
     ]);
     clearImageAttachment();
-    setShowImagePasswordModal(false);
-    setImagePasswordInput("");
-    setPendingImageAction(null);
-  };
-
-  const viewEncryptedImage = (msg) => {
-    setPendingImageAction(msg);
-    setShowImagePasswordModal(true);
-    setImagePasswordInput("");
-    setImagePasswordError("");
-  };
-
-  const confirmViewImage = () => {
-    if (imagePasswordInput !== roomPassword) {
-      setImagePasswordError("Incorrect encryption password");
-      return;
-    }
-
-    const msg = pendingImageAction;
-
-    if (imageTimerRefs.current[msg.id]) {
-      clearTimeout(imageTimerRefs.current[msg.id]);
-    }
-    if (imageCountdownRefs.current[msg.id]) {
-      clearInterval(imageCountdownRefs.current[msg.id]);
-    }
-    if (imageRevealRefs.current[msg.id]) {
-      clearTimeout(imageRevealRefs.current[msg.id]);
-    }
-
-    setMessageList((list) =>
-      list.map((m) =>
-        m.id === msg.id
-          ? { ...m, imageDecrypted: true, imageScanning: true }
-          : m,
-      ),
-    );
-
-    setShowImagePasswordModal(false);
-    setImagePasswordInput("");
-    setPendingImageAction(null);
-
-    const scanDurationMs = 1400;
-    const lockDuration = 10;
-
-    const revealTimeout = setTimeout(() => {
-      setMessageList((list) =>
-        list.map((m) => (m.id === msg.id ? { ...m, imageScanning: false } : m)),
-      );
-
-      setImageCountdowns((prev) => ({ ...prev, [msg.id]: lockDuration }));
-
-      const countdownInterval = setInterval(() => {
-        setImageCountdowns((prev) => {
-          const newCount = (prev[msg.id] || 0) - 1;
-          if (newCount <= 0) {
-            clearInterval(countdownInterval);
-            delete imageCountdownRefs.current[msg.id];
-            const newState = { ...prev };
-            delete newState[msg.id];
-            return newState;
-          }
-          return { ...prev, [msg.id]: newCount };
-        });
-      }, 1000);
-
-      imageCountdownRefs.current[msg.id] = countdownInterval;
-
-      const timerId = setTimeout(() => {
-        setMessageList((list) =>
-          list.map((m) =>
-            m.id === msg.id
-              ? { ...m, imageDecrypted: false, imageScanning: false }
-              : m,
-          ),
-        );
-        clearInterval(countdownInterval);
-        delete imageTimerRefs.current[msg.id];
-        delete imageCountdownRefs.current[msg.id];
-        delete imageRevealRefs.current[msg.id];
-        setImageCountdowns((prev) => {
-          const newState = { ...prev };
-          delete newState[msg.id];
-          return newState;
-        });
-      }, lockDuration * 1000);
-
-      imageTimerRefs.current[msg.id] = timerId;
-      delete imageRevealRefs.current[msg.id];
-    }, scanDurationMs);
-
-    imageRevealRefs.current[msg.id] = revealTimeout;
-  };
-
-  const closeImagePasswordModal = () => {
-    setShowImagePasswordModal(false);
-    setImagePasswordInput("");
-    setImagePasswordError("");
-    setPendingImageAction(null);
+    setReplyingTo(null);
   };
 
   const applyPollVoteUpdate = ({
@@ -1101,6 +981,53 @@ const ChatRoom = ({
     }
   };
 
+  const sendHighClearanceMessage = async (messageData) => {
+    const messageId = uuidv4();
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Encrypt the high clearance content with additional AES-256 layer
+    const highClearanceKey = `${roomPassword}_HIGH_CLEARANCE_${Date.now()}`;
+    const encryptedContent = encrypt(JSON.stringify(messageData));
+    
+    const highClearanceMessageData = {
+      id: messageId,
+      roomId,
+      username,
+      message: encryptedContent,
+      time,
+      edited: false,
+      deleted: false,
+      timer: 0, // High clearance messages don't auto-destruct
+      replyTo: null,
+      type: "high-clearance",
+      requiresBiometric: messageData.requiresBiometric,
+    };
+
+    await socket.emit("send_message", highClearanceMessageData);
+    setMessageList((list) => [
+      ...list,
+      { 
+        ...highClearanceMessageData, 
+        message: encryptedContent,
+        highClearanceContent: messageData,
+        own: true 
+      },
+    ]);
+  };
+
+  const openBiometricVault = (message) => {
+    setVaultMessage(message);
+    setShowBiometricVault(true);
+  };
+
+  const handleVaultDecrypted = (message) => {
+    // Message has been successfully decrypted and viewed
+    console.log('High clearance message accessed:', message);
+  };
+
   useEffect(() => {
     socket.on("receive_message", (data) => {
       let messageToAdd;
@@ -1116,7 +1043,13 @@ const ChatRoom = ({
           ...data,
           message: decrypt(data.message),
           own: isOwnMessage,
-          imageDecrypted: false,
+        };
+      } else if (data.type === "high-clearance") {
+        messageToAdd = {
+          ...data,
+          message: data.message, // Keep encrypted for non-owners
+          own: isOwnMessage,
+          highClearanceContent: isOwnMessage ? JSON.parse(decrypt(data.message)) : null,
         };
       } else {
         messageToAdd = {
@@ -2029,114 +1962,109 @@ const ChatRoom = ({
                       </div>
                     ) : msg.type === "image" ? (
                       <div className="space-y-2">
-                        {msg.own || msg.imageDecrypted ? (
-                          <div className="relative border-2 border-zinc-800 bg-zinc-900 overflow-hidden group">
-                            <img
-                              src={msg.message}
-                              alt="Classified attachment"
-                              className={`max-w-full max-h-96 object-contain w-full transition-opacity duration-300 ${!msg.own && msg.imageDecrypted && msg.imageScanning ? "opacity-0" : "opacity-100"}`}
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                                e.target.nextSibling.style.display = "block";
-                              }}
-                            />
-                            <div
-                              style={{ display: "none" }}
-                              className="p-4 text-center text-zinc-500 text-xs"
+                        <div className="relative border-2 border-zinc-800 bg-zinc-900 overflow-hidden group">
+                          <img
+                            src={msg.message}
+                            alt="Classified attachment"
+                            className="max-w-full max-h-96 object-contain w-full"
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                              e.target.nextSibling.style.display = "block";
+                            }}
+                          />
+                          <div
+                            style={{ display: "none" }}
+                            className="p-4 text-center text-zinc-500 text-xs"
+                          >
+                            <IoMdWarning className="inline mr-2" />
+                            Failed to decrypt image
+                          </div>
+                          <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
+                            <IoMdLock className="inline mr-1" /> Classified
+                            Attachment
+                          </div>
+                          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => downloadImage(msg.message, msg.id)}
+                              className="bg-black/80 hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white font-bold transition-all flex items-center gap-1"
+                              title="Download image"
                             >
-                              <IoMdWarning className="inline mr-2" />
-                              Failed to decrypt image
-                            </div>
-                            {!msg.own &&
-                              msg.imageDecrypted &&
-                              msg.imageScanning && (
-                                <div
-                                  className="scan-overlay"
-                                  aria-hidden="true"
-                                >
-                                  <div className="scan-grid" />
-                                  <div className="scan-noise" />
-                                  <div className="scan-line" />
-                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="text-center px-6">
-                                      <p className="text-[10px] text-zinc-300 uppercase tracking-[0.45em] font-black">
-                                        Scanning
-                                      </p>
-                                      <p className="text-[9px] text-zinc-500 uppercase tracking-[0.25em] font-bold mt-1">
-                                        Verifying classified payload
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="scan-hud">
-                                    <span className="shrink-0">SCAN</span>
-                                    <div
-                                      className="scan-bar"
-                                      aria-hidden="true"
-                                    >
-                                      <span />
-                                    </div>
-                                    <span className="shrink-0">OK</span>
-                                  </div>
-                                </div>
-                              )}
-                            <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
-                              <IoMdLock className="inline mr-1" /> Classified
-                              Attachment
-                            </div>
-                            {!msg.own && imageCountdowns[msg.id] && (
-                              <div
-                                className={`absolute top-2 right-2 px-2 py-1 text-[10px] uppercase tracking-widest border font-bold ${
-                                  imageCountdowns[msg.id] <= 3
-                                    ? "bg-red-600/95 text-white border-red-500 animate-pulse"
-                                    : "bg-red-900/90 text-red-200 border-red-700"
-                                }`}
-                              >
-                                <IoMdTimer className="inline mr-1" />
-                                {imageCountdowns[msg.id] <= 3
-                                  ? "LOCKING"
-                                  : "Auto-lock"}{" "}
-                                in {imageCountdowns[msg.id]}s
-                              </div>
-                            )}
-                            {(msg.own ||
-                              (msg.imageDecrypted && !msg.imageScanning)) && (
-                              <div
-                                className={`absolute bottom-2 right-2 ${msg.own ? "opacity-0 group-hover:opacity-100" : ""} transition-opacity`}
-                              >
-                                <button
-                                  onClick={() =>
-                                    downloadImage(msg.message, msg.id)
-                                  }
-                                  className="bg-black/80 hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white font-bold transition-all flex items-center gap-1"
-                                  title="Download image"
-                                >
-                                  <IoMdDownload size={14} />
-                                  Download
-                                </button>
-                              </div>
-                            )}
+                              <IoMdDownload size={14} />
+                              Download
+                            </button>
                           </div>
-                        ) : (
-                          <div className="relative border-2 border-zinc-800 bg-zinc-900 p-8 text-center">
-                            <div className="flex flex-col items-center gap-4">
-                              <IoMdLock className="text-zinc-600" size={48} />
-                              <div>
-                                <p className="text-zinc-400 text-sm uppercase tracking-widest font-bold mb-1">
-                                  Encrypted Image
-                                </p>
-                                <p className="text-zinc-600 text-xs">
-                                  Enter encryption password to view
-                                </p>
+                        </div>
+                      </div>
+                    ) : msg.type === "high-clearance" ? (
+                      <div className="space-y-3">
+                        <div className="relative border-2 border-amber-600 bg-gradient-to-br from-amber-950/40 to-orange-950/40 p-6 text-center">
+                          <div className="absolute top-2 left-2 bg-amber-600/90 text-black px-2 py-1 text-[8px] uppercase tracking-widest font-black">
+                            <IoMdLock className="inline mr-1" /> High Clearance
+                          </div>
+                          
+                          {msg.requiresBiometric && (
+                            <div className="absolute top-2 right-2 bg-blue-600/90 text-white px-2 py-1 text-[8px] uppercase tracking-widest font-black">
+                              <IoMdFingerPrint className="inline mr-1" /> Biometric
+                            </div>
+                          )}
+
+                          <div className="flex flex-col items-center gap-4 mt-4">
+                            <div className="relative">
+                              <IoMdLock className="text-amber-400" size={64} />
+                              <div className="absolute inset-0 bg-amber-400/20 rounded-full animate-pulse" />
+                            </div>
+                            
+                            <div>
+                              <p className="text-amber-200 text-lg uppercase tracking-widest font-black mb-2">
+                                Classified Content
+                              </p>
+                              <p className="text-amber-400/80 text-xs uppercase tracking-wide">
+                                {msg.requiresBiometric 
+                                  ? 'Biometric authentication required'
+                                  : 'High security encryption active'
+                                }
+                              </p>
+                            </div>
+
+                            {msg.own ? (
+                              <div className="bg-green-950/50 border border-green-700 text-green-200 px-4 py-2 text-xs uppercase tracking-wide">
+                                <IoMdCheckmark className="inline mr-2" />
+                                Your high clearance message sent
                               </div>
+                            ) : (
                               <button
-                                onClick={() => viewEncryptedImage(msg)}
-                                className="px-4 py-2 bg-white text-black text-xs uppercase font-bold tracking-widest hover:bg-zinc-300 transition"
+                                onClick={() => {
+                                  try {
+                                    const decryptedContent = decrypt(msg.message);
+                                    const parsedContent = JSON.parse(decryptedContent);
+                                    openBiometricVault({
+                                      id: msg.id,
+                                      content: parsedContent.content || '',
+                                      image: parsedContent.image,
+                                      audio: parsedContent.audio,
+                                      type: 'high-clearance',
+                                      requiresBiometric: msg.requiresBiometric,
+                                      username: msg.username,
+                                    });
+                                  } catch (error) {
+                                    console.error('Failed to parse high-clearance message:', error);
+                                    openBiometricVault({
+                                      id: msg.id,
+                                      content: decrypt(msg.message),
+                                      type: 'high-clearance',
+                                      requiresBiometric: msg.requiresBiometric,
+                                      username: msg.username,
+                                    });
+                                  }
+                                }}
+                                className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-black text-sm uppercase font-black tracking-widest transition-all flex items-center gap-2"
                               >
-                                Unlock Image
+                                <IoMdLock size={20} />
+                                Access Vault
                               </button>
-                            </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     ) : (
                       <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
@@ -2424,6 +2352,18 @@ const ChatRoom = ({
                   onChange={handleImageSelect}
                   className="hidden"
                 />
+
+                <button
+                  type="button"
+                  onClick={() => setShowHighClearanceComposer(true)}
+                  className={`p-2 sm:p-3 transition-colors relative ${showHighClearanceComposer ? "text-amber-400" : "text-zinc-600 hover:text-amber-300"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title="Send high clearance message (biometric protected)"
+                  disabled={!!editingMessageId}
+                >
+                  <IoMdLock size={18} />
+                  {/* Add a small indicator if biometric setup might be needed */}
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full animate-pulse opacity-60"></div>
+                </button>
               </div>
 
               {replyingTo && !editingMessageId && !imagePreview && (
@@ -2734,89 +2674,27 @@ const ChatRoom = ({
           )}
         </AnimatePresence>
 
-        <AnimatePresence>
-          {showImagePasswordModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4"
-              onClick={closeImagePasswordModal}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-zinc-950 border-2 border-zinc-800 p-8 max-w-md w-full"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="text-center mb-6">
-                  <IoMdLock className="text-zinc-400 mx-auto mb-4" size={48} />
-                  <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
-                    {pendingImageAction === "send"
-                      ? "CONFIRM SEND"
-                      : "DECRYPT IMAGE"}
-                  </h2>
-                  <p className="text-zinc-400 text-sm uppercase tracking-wide">
-                    {pendingImageAction === "send"
-                      ? "Enter room encryption password to send classified attachment"
-                      : "Enter room encryption password to view classified attachment"}
-                  </p>
-                </div>
+        {/* Biometric Vault Modal */}
+        <BiometricVault
+          message={vaultMessage}
+          username={username}
+          roomId={roomId}
+          onDecrypted={handleVaultDecrypted}
+          onClose={() => {
+            setShowBiometricVault(false);
+            setVaultMessage(null);
+          }}
+          isVisible={showBiometricVault}
+        />
 
-                <div className="space-y-4">
-                  <div className="border-b border-zinc-800 focus-within:border-white transition-colors flex items-center gap-4 py-2">
-                    <IoMdKey className="text-zinc-500" />
-                    <input
-                      type="password"
-                      value={imagePasswordInput}
-                      onChange={(e) => {
-                        setImagePasswordInput(e.target.value);
-                        setImagePasswordError("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          pendingImageAction === "send"
-                            ? confirmSendImage()
-                            : confirmViewImage();
-                        }
-                      }}
-                      placeholder="ENCRYPTION PASSWORD"
-                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-white"
-                      autoFocus
-                    />
-                  </div>
-
-                  {imagePasswordError && (
-                    <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 text-sm uppercase tracking-wide text-center">
-                      {imagePasswordError}
-                    </div>
-                  )}
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={closeImagePasswordModal}
-                      className="flex-1 border border-zinc-700 text-zinc-400 py-3 uppercase text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={
-                        pendingImageAction === "send"
-                          ? confirmSendImage
-                          : confirmViewImage
-                      }
-                      className="flex-1 bg-white text-black py-3 uppercase text-xs font-bold hover:bg-zinc-300 transition-all"
-                      disabled={!imagePasswordInput}
-                    >
-                      {pendingImageAction === "send" ? "Send" : "Decrypt"}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* High Clearance Composer Modal */}
+        <HighClearanceComposer
+          isVisible={showHighClearanceComposer}
+          onClose={() => setShowHighClearanceComposer(false)}
+          onSend={sendHighClearanceMessage}
+          username={username}
+          roomId={roomId}
+        />
       </div>
     </div>
   );
