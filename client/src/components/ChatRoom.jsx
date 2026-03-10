@@ -1,28 +1,49 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  IoMdSend, IoMdPeople, IoMdLock, IoMdCopy,
-  IoMdMore, IoMdTrash, IoMdCreate, IoMdClose, IoMdExit,
-  IoMdTimer, IoMdPulse, IoMdRemoveCircle, IoMdTime, IoMdWarning, IoMdReturnLeft,
-  IoMdStar, IoMdStarOutline, IoMdPin, IoMdStats, IoMdCheckmark, IoMdLink, IoMdKey, IoMdDownload
-} from 'react-icons/io';
-import Logo from './Logo';
-import CryptoJS from 'crypto-js';
-import { v4 as uuidv4 } from 'uuid';
-import { encryptMagicLinkPayload } from '../utils/magicLink';
+  IoMdSend,
+  IoMdPeople,
+  IoMdLock,
+  IoMdCopy,
+  IoMdMore,
+  IoMdTrash,
+  IoMdCreate,
+  IoMdClose,
+  IoMdExit,
+  IoMdTimer,
+  IoMdPulse,
+  IoMdRemoveCircle,
+  IoMdTime,
+  IoMdWarning,
+  IoMdReturnLeft,
+  IoMdStar,
+  IoMdStarOutline,
+  IoMdPin,
+  IoMdStats,
+  IoMdCheckmark,
+  IoMdLink,
+  IoMdKey,
+  IoMdDownload,
+} from "react-icons/io";
+import Logo from "./Logo";
+import CryptoJS from "crypto-js";
+import { v4 as uuidv4 } from "uuid";
+import { encryptMagicLinkPayload } from "../utils/magicLink";
 
-// --- SUB-COMPONENT: Decrypting Text Effect (Glitchy HUD Style) ---
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&";
   useEffect(() => {
     let iteration = 0;
     const interval = setInterval(() => {
-      setDisplayValue(prev =>
-        prev.split("").map((letter, index) => {
-          if (index < iteration) return name[index];
-          return chars[Math.floor(Math.random() * chars.length)];
-        }).join("")
+      setDisplayValue((prev) =>
+        prev
+          .split("")
+          .map((letter, index) => {
+            if (index < iteration) return name[index];
+            return chars[Math.floor(Math.random() * chars.length)];
+          })
+          .join(""),
       );
       if (iteration >= name.length) clearInterval(interval);
       iteration += 1 / 3;
@@ -32,7 +53,17 @@ const DecryptingName = ({ name }) => {
   return <span>{displayValue}</span>;
 };
 
-const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, createdAt, initialUsers, roomName }) => {
+const ChatRoom = ({
+  socket,
+  username,
+  roomId,
+  roomPassword,
+  isHost,
+  leaveRoom,
+  createdAt,
+  initialUsers,
+  roomName,
+}) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [users, setUsers] = useState(initialUsers || []);
@@ -45,50 +76,46 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [showTimerMenu, setShowTimerMenu] = useState(false);
   const [sessionDuration, setSessionDuration] = useState("00:00:00");
 
-  // --- NEW: Security State ---
   const [isSecurityBreach, setIsSecurityBreach] = useState(false);
 
-  // --- NEW: Magic Link State ---
+  const [isPanicMode, setIsPanicMode] = useState(false);
+  const [escPressCount, setEscPressCount] = useState(0);
+  const [showEscIndicator, setShowEscIndicator] = useState(false);
+  const escTimeoutRef = useRef(null);
+  const escIndicatorTimeoutRef = useRef(null);
+
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
 
-  // --- NEW: Browser Notifications State ---
   const [notificationPermission, setNotificationPermission] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+    typeof Notification !== "undefined" ? Notification.permission : "denied",
   );
 
-  // Dynamically load QR code component if available
   useEffect(() => {
-    import('qrcode.react')
+    import("qrcode.react")
       .then((module) => {
         setQRCodeComponent(() => module.QRCodeSVG);
       })
       .catch(() => {
-        // QR code library not installed - feature will work without QR code
         setQRCodeComponent(null);
       });
   }, []);
 
-  // --- NEW: Request Notification Permission on Mount ---
   useEffect(() => {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    if (
+      typeof Notification !== "undefined" &&
+      Notification.permission === "default"
+    ) {
       Notification.requestPermission().then((permission) => {
         setNotificationPermission(permission);
       });
     }
   }, []);
 
-  // --- NEW: Show Browser Notification for New Messages ---
   const showBrowserNotification = (message) => {
-    // Only show notification if:
-    // 1. Notifications are supported
-    // 2. Permission is granted
-    // 3. Tab is not focused (in background)
-    // 4. Message is not from current user (check both own flag and username)
-    // 5. Message is not a system message
     if (
-      typeof Notification === 'undefined' ||
-      notificationPermission !== 'granted' ||
+      typeof Notification === "undefined" ||
+      notificationPermission !== "granted" ||
       document.hasFocus() ||
       message.own ||
       message.username === username ||
@@ -97,29 +124,27 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       return;
     }
 
-    const title = `${roomName || 'Secure Chat'}`;
+    const title = `${roomName || "Secure Chat"}`;
     const body = message.poll
       ? `${message.username}: [POLL] ${decrypt(message.poll.question).substring(0, 50)}`
-      : message.type === 'image'
-      ? `${message.username}: [Classified Image]`
-      : `${message.username}: ${message.message.substring(0, 100)}`;
+      : message.type === "image"
+        ? `${message.username}: [Classified Image]`
+        : `${message.username}: ${message.message.substring(0, 100)}`;
 
     const notification = new Notification(title, {
       body,
-      icon: '/og-image.png', // Use your app icon
-      badge: '/og-image.png',
-      tag: `chat-${roomId}`, // Prevents duplicate notifications
+      icon: "/og-image.png",
+      badge: "/og-image.png",
+      tag: `chat-${roomId}`,
       requireInteraction: false,
       silent: false,
     });
 
-    // Focus window when notification is clicked
     notification.onclick = () => {
       window.focus();
       notification.close();
     };
 
-    // Auto-close after 5 seconds
     setTimeout(() => notification.close(), 5000);
   };
 
@@ -132,10 +157,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const [replyingTo, setReplyingTo] = useState(null);
   const inputRef = useRef(null);
 
-  // --- NEW: Pending join requests (host-only) ---
   const [joinRequests, setJoinRequests] = useState([]);
 
-  // --- NEW: Helper to make URLs in text clickable ---
   const renderMessageText = (text, keyPrefix = "msg") => {
     if (!text) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -160,38 +183,32 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     });
   };
 
-  // --- NEW: Local Star / Pin state (per room, per device) ---
   const [starredMessageIds, setStarredMessageIds] = useState(() => new Set());
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
 
-  // --- NEW: Poll UI state ---
   const [showPollModal, setShowPollModal] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollAnswers, setPollAnswers] = useState(["", "", ""]);
-  const [pollDurationMs, setPollDurationMs] = useState(60 * 60 * 1000); // 1 hour
+  const [pollDurationMs, setPollDurationMs] = useState(60 * 60 * 1000);
   const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
 
-  // --- NEW: Image attachment state ---
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [showImagePasswordModal, setShowImagePasswordModal] = useState(false);
   const [imagePasswordInput, setImagePasswordInput] = useState("");
   const [imagePasswordError, setImagePasswordError] = useState("");
-  const [pendingImageAction, setPendingImageAction] = useState(null); // 'send' or message object for viewing
-  const [imageViewTimers, setImageViewTimers] = useState({}); // Track timers for auto-locking images
-  const [imageCountdowns, setImageCountdowns] = useState({}); // Track countdown seconds for each image
+  const [pendingImageAction, setPendingImageAction] = useState(null);
+  const [imageCountdowns, setImageCountdowns] = useState({});
   const fileInputRef = useRef(null);
   const imageTimerRefs = useRef({});
   const imageCountdownRefs = useRef({});
   const imageRevealRefs = useRef({});
 
-  // --- NEW: Bulk select/delete state ---
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState(() => new Set());
 
-  // --- NEW: Sliding button confirmation state ---
   const [showSlideConfirm, setShowSlideConfirm] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null); // 'terminate' or 'leave'
+  const [confirmAction, setConfirmAction] = useState(null);
   const [slidePosition, setSlidePosition] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
   const slideButtonRef = useRef(null);
@@ -207,29 +224,83 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     { label: "10m", value: 600000 },
   ];
 
-  // --- NEW: SCREENSHOT & SECURITY PROTECTION LOGIC ---
   useEffect(() => {
-    // 1. Disable Right Click
+    const handleKeyDown = (e) => {
+      if (isPanicMode) {
+        if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setIsPanicMode(false);
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setEscPressCount((prev) => {
+          const newCount = prev + 1;
+
+          if (escTimeoutRef.current) {
+            clearTimeout(escTimeoutRef.current);
+          }
+          if (escIndicatorTimeoutRef.current) {
+            clearTimeout(escIndicatorTimeoutRef.current);
+          }
+
+          if (newCount === 1) {
+            setShowEscIndicator(true);
+            escIndicatorTimeoutRef.current = setTimeout(() => {
+              setShowEscIndicator(false);
+            }, 800);
+          }
+
+          if (newCount >= 2) {
+            setIsPanicMode(true);
+            setShowEscIndicator(false);
+            return 0;
+          }
+
+          escTimeoutRef.current = setTimeout(() => {
+            setEscPressCount(0);
+            setShowEscIndicator(false);
+          }, 800);
+
+          return newCount;
+        });
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      if (escTimeoutRef.current) {
+        clearTimeout(escTimeoutRef.current);
+      }
+      if (escIndicatorTimeoutRef.current) {
+        clearTimeout(escIndicatorTimeoutRef.current);
+      }
+    };
+  }, [isPanicMode]);
+
+  useEffect(() => {
     const handleContextMenu = (e) => e.preventDefault();
 
-    // 2. Detect Keyboard Screenshots (PrintScreen, Ctrl+P, Mac Cmd+Shift)
-    const handleKeyDown = (e) => {
+    const handleSecurityKeyDown = (e) => {
+      if (e.key === "Escape") return;
+
       if (
-        e.key === 'PrintScreen' ||
-        (e.ctrlKey && e.key === 'p') ||
-        (e.metaKey && e.shiftKey) // Mac Screenshot combo attempt
+        e.key === "PrintScreen" ||
+        (e.ctrlKey && e.key === "p") ||
+        (e.metaKey && e.shiftKey)
       ) {
         setIsSecurityBreach(true);
-        // Clear clipboard content to prevent pasting the screenshot
-        navigator.clipboard.writeText('CLASSIFIED DATA - SCREENSHOT ATTEMPT BLOCKED');
-
-        // Keep black screen for 2s to ruin the screenshot timing
+        navigator.clipboard.writeText(
+          "CLASSIFIED DATA - SCREENSHOT ATTEMPT BLOCKED",
+        );
         setTimeout(() => setIsSecurityBreach(false), 2000);
       }
     };
 
-    // 3. Blur Detection (Anti-Snipping Tool / Task Switcher)
-    // When user clicks away (blur), screen goes black.
     const handleBlur = () => {
       setIsSecurityBreach(true);
     };
@@ -238,16 +309,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       setIsSecurityBreach(false);
     };
 
-    window.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("keydown", handleSecurityKeyDown);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
 
     return () => {
-      window.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("keydown", handleSecurityKeyDown);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -258,33 +329,36 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  // Sync Initial Users
   useEffect(() => {
     if (initialUsers && initialUsers.length > 0) {
       setUsers(initialUsers);
     }
   }, [initialUsers]);
 
-  // Timer Logic
   useEffect(() => {
     if (!createdAt) return;
     const interval = setInterval(() => {
       const secondsPassed = Math.floor((Date.now() - createdAt) / 1000);
-      const hrs = Math.floor(secondsPassed / 3600).toString().padStart(2, '0');
-      const mins = Math.floor((secondsPassed % 3600) / 60).toString().padStart(2, '0');
-      const secs = (secondsPassed % 60).toString().padStart(2, '0');
+      const hrs = Math.floor(secondsPassed / 3600)
+        .toString()
+        .padStart(2, "0");
+      const mins = Math.floor((secondsPassed % 3600) / 60)
+        .toString()
+        .padStart(2, "0");
+      const secs = (secondsPassed % 60).toString().padStart(2, "0");
       setSessionDuration(`${hrs}:${mins}:${secs}`);
     }, 1000);
     return () => clearInterval(interval);
   }, [createdAt]);
 
-  // Encryption Logic
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
   const decrypt = (cipherText) => {
     try {
       const bytes = CryptoJS.AES.decrypt(cipherText, roomPassword);
       return bytes.toString(CryptoJS.enc.Utf8) || "⚠️ DECRYPT FAIL";
-    } catch { return "🚫 ERROR"; }
+    } catch {
+      return "🚫 ERROR";
+    }
   };
 
   const storageKeyStarred = `secureChatRoom:${roomId}:starredMessageIds`;
@@ -292,28 +366,35 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
   useEffect(() => {
     try {
-      const rawStarred = JSON.parse(localStorage.getItem(storageKeyStarred) || "[]");
-      setStarredMessageIds(new Set(Array.isArray(rawStarred) ? rawStarred : []));
+      const rawStarred = JSON.parse(
+        localStorage.getItem(storageKeyStarred) || "[]",
+      );
+      setStarredMessageIds(
+        new Set(Array.isArray(rawStarred) ? rawStarred : []),
+      );
       const rawPinned = localStorage.getItem(storageKeyPinned);
       setPinnedMessageId(rawPinned || null);
     } catch {
       setStarredMessageIds(new Set());
       setPinnedMessageId(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKeyStarred, JSON.stringify(Array.from(starredMessageIds)));
-    } catch { /* ignore */ }
+      localStorage.setItem(
+        storageKeyStarred,
+        JSON.stringify(Array.from(starredMessageIds)),
+      );
+    } catch {}
   }, [storageKeyStarred, starredMessageIds]);
 
   useEffect(() => {
     try {
-      if (pinnedMessageId) localStorage.setItem(storageKeyPinned, pinnedMessageId);
+      if (pinnedMessageId)
+        localStorage.setItem(storageKeyPinned, pinnedMessageId);
       else localStorage.removeItem(storageKeyPinned);
-    } catch { /* ignore */ }
+    } catch {}
   }, [storageKeyPinned, pinnedMessageId]);
 
   const jumpToMessage = (messageId) => {
@@ -325,21 +406,30 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     setHighlightMessageId(messageId);
 
     if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-    highlightTimeoutRef.current = setTimeout(() => setHighlightMessageId(null), 2600);
+    highlightTimeoutRef.current = setTimeout(
+      () => setHighlightMessageId(null),
+      2600,
+    );
   };
 
   useEffect(() => {
     return () => {
-      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+      if (highlightTimeoutRef.current)
+        clearTimeout(highlightTimeoutRef.current);
     };
   }, []);
 
-  // Cleanup image view timers on unmount
   useEffect(() => {
     return () => {
-      Object.values(imageTimerRefs.current).forEach(timerId => clearTimeout(timerId));
-      Object.values(imageCountdownRefs.current).forEach(intervalId => clearInterval(intervalId));
-      Object.values(imageRevealRefs.current).forEach(timeoutId => clearTimeout(timeoutId));
+      Object.values(imageTimerRefs.current).forEach((timerId) =>
+        clearTimeout(timerId),
+      );
+      Object.values(imageCountdownRefs.current).forEach((intervalId) =>
+        clearInterval(intervalId),
+      );
+      Object.values(imageRevealRefs.current).forEach((timeoutId) =>
+        clearTimeout(timeoutId),
+      );
     };
   }, []);
 
@@ -413,7 +503,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   };
 
   useEffect(() => {
-    // Prune selections when list changes
     const present = new Set(messageList.map((m) => m?.id).filter(Boolean));
     setSelectedMessageIds((prev) => {
       const next = new Set([...prev].filter((id) => present.has(id)));
@@ -434,15 +523,22 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     if (!q || answers.length < 2) return;
 
     const messageId = uuidv4();
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     const now = Date.now();
 
     const poll = {
       question: encrypt(q),
-      options: answers.map((text) => ({ id: uuidv4(), text: encrypt(text), votes: [] })),
+      options: answers.map((text) => ({
+        id: uuidv4(),
+        text: encrypt(text),
+        votes: [],
+      })),
       allowMultiple: !!pollAllowMultiple,
       createdAt: now,
-      expiresAt: now + pollDurationMs
+      expiresAt: now + pollDurationMs,
     };
 
     const messageData = {
@@ -456,7 +552,7 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       timer: 0,
       replyTo: null,
       type: "poll",
-      poll
+      poll,
     };
 
     await socket.emit("send_message", messageData);
@@ -465,20 +561,17 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     resetPollDraft();
   };
 
-  // --- NEW: Image Attachment Functions ---
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Check file size (max 5MB)
+
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       alert("Image too large. Maximum size is 5MB.");
       return;
     }
 
-    // Check file type
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       alert("Please select an image file.");
       return;
     }
@@ -495,44 +588,43 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   const clearImageAttachment = () => {
     setSelectedImage(null);
     setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const downloadImage = (imageData, messageId) => {
     try {
-      // Create a temporary link element
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = imageData;
       link.download = `classified_${messageId}_${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error('Failed to download image:', error);
+      console.error("Failed to download image:", error);
     }
   };
 
   const sendImageMessage = async () => {
     if (!selectedImage) return;
-    
-    // Show password modal for confirmation
-    setPendingImageAction('send');
+
+    setPendingImageAction("send");
     setShowImagePasswordModal(true);
     setImagePasswordInput("");
     setImagePasswordError("");
   };
 
   const confirmSendImage = async () => {
-    // Verify password matches room password
     if (imagePasswordInput !== roomPassword) {
       setImagePasswordError("Incorrect encryption password");
       return;
     }
 
     const messageId = uuidv4();
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    // Encrypt the base64 image data
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
     const encryptedImage = encrypt(selectedImage);
 
     const messageData = {
@@ -545,11 +637,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       deleted: false,
       timer: selfDestructTime,
       replyTo: null,
-      type: "image"
+      type: "image",
     };
 
     await socket.emit("send_message", messageData);
-    setMessageList((list) => [...list, { ...messageData, message: selectedImage, own: true }]);
+    setMessageList((list) => [
+      ...list,
+      { ...messageData, message: selectedImage, own: true },
+    ]);
     clearImageAttachment();
     setShowImagePasswordModal(false);
     setImagePasswordInput("");
@@ -557,7 +652,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   };
 
   const viewEncryptedImage = (msg) => {
-    // Show password modal to decrypt and view image
     setPendingImageAction(msg);
     setShowImagePasswordModal(true);
     setImagePasswordInput("");
@@ -565,16 +659,13 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
   };
 
   const confirmViewImage = () => {
-    // Verify password matches room password
     if (imagePasswordInput !== roomPassword) {
       setImagePasswordError("Incorrect encryption password");
       return;
     }
 
-    // Password is correct, update the message to show decrypted image
     const msg = pendingImageAction;
-    
-    // Clear any existing timers for this image
+
     if (imageTimerRefs.current[msg.id]) {
       clearTimeout(imageTimerRefs.current[msg.id]);
     }
@@ -585,30 +676,30 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       clearTimeout(imageRevealRefs.current[msg.id]);
     }
 
-    // Immediately switch UI into a pre-reveal "scanning" state (recipient only)
-    setMessageList((list) => list.map((m) =>
-      m.id === msg.id ? { ...m, imageDecrypted: true, imageScanning: true } : m
-    ));
+    setMessageList((list) =>
+      list.map((m) =>
+        m.id === msg.id
+          ? { ...m, imageDecrypted: true, imageScanning: true }
+          : m,
+      ),
+    );
 
     setShowImagePasswordModal(false);
     setImagePasswordInput("");
     setPendingImageAction(null);
 
     const scanDurationMs = 1400;
-    const lockDuration = 10; // seconds
+    const lockDuration = 10;
 
     const revealTimeout = setTimeout(() => {
-      // End scanning overlay and start the auto-lock window
-      setMessageList((list) => list.map((m) =>
-        m.id === msg.id ? { ...m, imageScanning: false } : m
-      ));
+      setMessageList((list) =>
+        list.map((m) => (m.id === msg.id ? { ...m, imageScanning: false } : m)),
+      );
 
-      // Set initial countdown (starts after reveal)
-      setImageCountdowns(prev => ({ ...prev, [msg.id]: lockDuration }));
+      setImageCountdowns((prev) => ({ ...prev, [msg.id]: lockDuration }));
 
-      // Countdown interval (update every second)
       const countdownInterval = setInterval(() => {
-        setImageCountdowns(prev => {
+        setImageCountdowns((prev) => {
           const newCount = (prev[msg.id] || 0) - 1;
           if (newCount <= 0) {
             clearInterval(countdownInterval);
@@ -623,16 +714,19 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
       imageCountdownRefs.current[msg.id] = countdownInterval;
 
-      // Set timer to auto-lock the image after duration
       const timerId = setTimeout(() => {
-        setMessageList((list) => list.map((m) =>
-          m.id === msg.id ? { ...m, imageDecrypted: false, imageScanning: false } : m
-        ));
+        setMessageList((list) =>
+          list.map((m) =>
+            m.id === msg.id
+              ? { ...m, imageDecrypted: false, imageScanning: false }
+              : m,
+          ),
+        );
         clearInterval(countdownInterval);
         delete imageTimerRefs.current[msg.id];
         delete imageCountdownRefs.current[msg.id];
         delete imageRevealRefs.current[msg.id];
-        setImageCountdowns(prev => {
+        setImageCountdowns((prev) => {
           const newState = { ...prev };
           delete newState[msg.id];
           return newState;
@@ -653,24 +747,32 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     setPendingImageAction(null);
   };
 
-  const applyPollVoteUpdate = ({ messageId, optionId, action, username: voter }) => {
+  const applyPollVoteUpdate = ({
+    messageId,
+    optionId,
+    action,
+    username: voter,
+  }) => {
     if (!messageId || !optionId || !voter) return;
-    setMessageList((list) => list.map((m) => {
-      if (m?.id !== messageId || !m.poll || m.deleted) return m;
-      const poll = m.poll;
-      const isEnded = poll.expiresAt && poll.expiresAt <= Date.now();
-      if (isEnded) return m;
+    setMessageList((list) =>
+      list.map((m) => {
+        if (m?.id !== messageId || !m.poll || m.deleted) return m;
+        const poll = m.poll;
+        const isEnded = poll.expiresAt && poll.expiresAt <= Date.now();
+        if (isEnded) return m;
 
-      const nextOptions = (poll.options || []).map((opt) => {
-        if (opt.id !== optionId) return opt;
-        const existing = Array.isArray(opt.votes) ? opt.votes : [];
-        const has = existing.includes(voter);
-        if (action === "remove") return { ...opt, votes: existing.filter((u) => u !== voter) };
-        if (!has) return { ...opt, votes: [...existing, voter] };
-        return opt;
-      });
-      return { ...m, poll: { ...poll, options: nextOptions } };
-    }));
+        const nextOptions = (poll.options || []).map((opt) => {
+          if (opt.id !== optionId) return opt;
+          const existing = Array.isArray(opt.votes) ? opt.votes : [];
+          const has = existing.includes(voter);
+          if (action === "remove")
+            return { ...opt, votes: existing.filter((u) => u !== voter) };
+          if (!has) return { ...opt, votes: [...existing, voter] };
+          return opt;
+        });
+        return { ...m, poll: { ...poll, options: nextOptions } };
+      }),
+    );
   };
 
   const voteOnPoll = (msg, optionId) => {
@@ -683,21 +785,44 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     const option = options.find((o) => o.id === optionId);
     if (!option) return;
 
-    const myVotesForOption = Array.isArray(option.votes) ? option.votes.includes(username) : false;
+    const myVotesForOption = Array.isArray(option.votes)
+      ? option.votes.includes(username)
+      : false;
     const action = myVotesForOption ? "remove" : "add";
 
     // If single-choice poll and we're adding, remove our vote from any other option first.
     if (!poll.allowMultiple && action === "add") {
       options.forEach((o) => {
-        if (o.id !== optionId && Array.isArray(o.votes) && o.votes.includes(username)) {
-          applyPollVoteUpdate({ messageId: msg.id, optionId: o.id, action: "remove", username });
-          socket.emit("poll_vote", { roomId, messageId: msg.id, optionId: o.id, action: "remove", username });
+        if (
+          o.id !== optionId &&
+          Array.isArray(o.votes) &&
+          o.votes.includes(username)
+        ) {
+          applyPollVoteUpdate({
+            messageId: msg.id,
+            optionId: o.id,
+            action: "remove",
+            username,
+          });
+          socket.emit("poll_vote", {
+            roomId,
+            messageId: msg.id,
+            optionId: o.id,
+            action: "remove",
+            username,
+          });
         }
       });
     }
 
     applyPollVoteUpdate({ messageId: msg.id, optionId, action, username });
-    socket.emit("poll_vote", { roomId, messageId: msg.id, optionId, action, username });
+    socket.emit("poll_vote", {
+      roomId,
+      messageId: msg.id,
+      optionId,
+      action,
+      username,
+    });
   };
 
   const clearMyPollVotes = (msg) => {
@@ -705,26 +830,43 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     const options = msg.poll.options || [];
     options.forEach((o) => {
       if (Array.isArray(o.votes) && o.votes.includes(username)) {
-        applyPollVoteUpdate({ messageId: msg.id, optionId: o.id, action: "remove", username });
-        socket.emit("poll_vote", { roomId, messageId: msg.id, optionId: o.id, action: "remove", username });
+        applyPollVoteUpdate({
+          messageId: msg.id,
+          optionId: o.id,
+          action: "remove",
+          username,
+        });
+        socket.emit("poll_vote", {
+          roomId,
+          messageId: msg.id,
+          optionId: o.id,
+          action: "remove",
+          username,
+        });
       }
     });
   };
 
-  const selectedMessages = messageList.filter((m) => m?.id && selectedMessageIds.has(m.id) && !m.system);
+  const selectedMessages = messageList.filter(
+    (m) => m?.id && selectedMessageIds.has(m.id) && !m.system,
+  );
   const selectedCount = selectedMessages.length;
-  const selectionAllOwn = selectedCount > 0 && selectedMessages.every((m) => !!m.own);
-  const selectionHasOthers = selectedCount > 0 && selectedMessages.some((m) => !m.own);
+  const selectionAllOwn =
+    selectedCount > 0 && selectedMessages.every((m) => !!m.own);
+  const selectionHasOthers =
+    selectedCount > 0 && selectedMessages.some((m) => !m.own);
 
   const bulkLocalDelete = () => {
     if (selectedCount === 0) return;
-    setMessageList((list) => list.filter((m) => !selectedMessageIds.has(m?.id)));
+    setMessageList((list) =>
+      list.filter((m) => !selectedMessageIds.has(m?.id)),
+    );
     setSelectedMessageIds(new Set());
   };
 
   const bulkGlobalDelete = () => {
     if (selectedCount === 0) return;
-    if (!selectionAllOwn) return; // rule: only your messages can be globally deleted in bulk
+    if (!selectionAllOwn) return;
     selectedMessages.forEach((m) => {
       socket.emit("delete_message", { roomId, messageId: m.id });
     });
@@ -756,18 +898,17 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     setJoinRequests((prev) => prev.filter((r) => r.socketId !== socketId));
   };
 
-  // --- NEW: Sliding Button Confirmation Handlers ---
   const handleTerminateClick = () => {
-    setConfirmAction('terminate');
-    confirmActionRef.current = 'terminate';
+    setConfirmAction("terminate");
+    confirmActionRef.current = "terminate";
     setShowSlideConfirm(true);
     setSlidePosition(0);
     slidePositionRef.current = 0;
   };
 
   const handleLeaveClick = () => {
-    setConfirmAction('leave');
-    confirmActionRef.current = 'leave';
+    setConfirmAction("leave");
+    confirmActionRef.current = "leave";
     setShowSlideConfirm(true);
     setSlidePosition(0);
     slidePositionRef.current = 0;
@@ -786,9 +927,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
     const executeConfirmedAction = () => {
       const action = confirmActionRef.current;
-      if (action === 'terminate') {
+      if (action === "terminate") {
         socket.emit("close_room", { roomId });
-      } else if (action === 'leave') {
+      } else if (action === "leave") {
         leaveRoom();
       }
       setShowSlideConfirm(false);
@@ -801,36 +942,36 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
     const handleMouseMove = (e) => {
       if (!slideTrackRef.current) return;
-      
+
       const track = slideTrackRef.current;
       const rect = track.getBoundingClientRect();
       const trackWidth = rect.width;
       const buttonWidth = 60;
-      
+
       let clientX = e.clientX;
       let newPosition = clientX - rect.left - buttonWidth / 2;
-      
+
       const maxPosition = trackWidth - buttonWidth;
       newPosition = Math.max(0, Math.min(maxPosition, newPosition));
-      
+
       setSlidePosition(newPosition);
       slidePositionRef.current = newPosition;
     };
 
     const handleTouchMove = (e) => {
       if (!slideTrackRef.current) return;
-      
+
       const track = slideTrackRef.current;
       const rect = track.getBoundingClientRect();
       const trackWidth = rect.width;
       const buttonWidth = 60;
-      
+
       let clientX = e.touches[0].clientX;
       let newPosition = clientX - rect.left - buttonWidth / 2;
-      
+
       const maxPosition = trackWidth - buttonWidth;
       newPosition = Math.max(0, Math.min(maxPosition, newPosition));
-      
+
       setSlidePosition(newPosition);
       slidePositionRef.current = newPosition;
     };
@@ -851,16 +992,16 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleEnd);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleEnd);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleEnd);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleEnd);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleEnd);
     };
   }, [isSliding, showSlideConfirm, roomId, socket, leaveRoom]);
 
@@ -869,7 +1010,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
     e.preventDefault();
     e.stopPropagation();
   };
-
 
   const closeSlideConfirm = () => {
     setShowSlideConfirm(false);
@@ -893,21 +1033,35 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
     if (editingMessageId) {
       const encrypted = encrypt(currentMessage);
-      socket.emit("edit_message", { roomId, messageId: editingMessageId, newEncryptedMessage: encrypted });
-      setMessageList((list) => list.map(msg => msg.id === editingMessageId ? { ...msg, message: currentMessage, edited: true } : msg));
+      socket.emit("edit_message", {
+        roomId,
+        messageId: editingMessageId,
+        newEncryptedMessage: encrypted,
+      });
+      setMessageList((list) =>
+        list.map((msg) =>
+          msg.id === editingMessageId
+            ? { ...msg, message: currentMessage, edited: true }
+            : msg,
+        ),
+      );
       setEditingMessageId(null);
       setCurrentMessage("");
     } else {
       const messageId = uuidv4();
       const encrypted = encrypt(currentMessage);
-      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const time = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
-      // Create reply metadata if replyingTo is active
-      const replyData = replyingTo ? {
-        messageId: replyingTo.id,
-        username: replyingTo.username,
-        message: encrypt(getReplyPreviewText(replyingTo)) // Encrypt quoted text (supports polls)
-      } : null;
+      const replyData = replyingTo
+        ? {
+            messageId: replyingTo.id,
+            username: replyingTo.username,
+            message: encrypt(getReplyPreviewText(replyingTo)),
+          }
+        : null;
 
       const messageData = {
         id: messageId,
@@ -918,102 +1072,159 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         edited: false,
         deleted: false,
         timer: selfDestructTime,
-        replyTo: replyData // <--- Add this
+        replyTo: replyData,
       };
 
       await socket.emit("send_message", messageData);
-      setMessageList((list) => [...list, { ...messageData, message: currentMessage, own: true }]);
+      setMessageList((list) => [
+        ...list,
+        { ...messageData, message: currentMessage, own: true },
+      ]);
       setCurrentMessage("");
       setReplyingTo(null);
     }
   };
 
-  // Socket Listeners
   useEffect(() => {
     socket.on("receive_message", (data) => {
       let messageToAdd;
-      
-      // Check if message is from current user
+
       const isOwnMessage = data.username === username;
-      
+
       if (data.system) {
         messageToAdd = data;
       } else if (data.type === "poll" || data.poll) {
         messageToAdd = { ...data, own: isOwnMessage };
       } else if (data.type === "image") {
-        messageToAdd = { ...data, message: decrypt(data.message), own: isOwnMessage, imageDecrypted: false };
+        messageToAdd = {
+          ...data,
+          message: decrypt(data.message),
+          own: isOwnMessage,
+          imageDecrypted: false,
+        };
       } else {
-        messageToAdd = { ...data, message: decrypt(data.message), own: isOwnMessage };
+        messageToAdd = {
+          ...data,
+          message: decrypt(data.message),
+          own: isOwnMessage,
+        };
       }
-      
+
       setMessageList((l) => [...l, messageToAdd]);
-      
-      // Show browser notification for new message (only if not from current user)
+
       if (!isOwnMessage) {
         showBrowserNotification(messageToAdd);
       }
     });
     socket.on("poll_vote_update", (payload) => applyPollVoteUpdate(payload));
     socket.on("user_typing", ({ username: typingUser, isTyping }) => {
-      setTypingUsers((prev) => isTyping ? [...new Set([...prev, typingUser])] : prev.filter((u) => u !== typingUser));
+      setTypingUsers((prev) =>
+        isTyping
+          ? [...new Set([...prev, typingUser])]
+          : prev.filter((u) => u !== typingUser),
+      );
     });
     socket.on("message_deleted", (deletedId) => {
-      setMessageList((list) => list.map((msg) => (
-        msg.id === deletedId
-          ? {
-            ...msg,
-            deleted: true,
-            message: "[ DATA EXPUNGED ]",
-            edited: false,
-            // ensure special message types (e.g., polls) don't keep rendering
-            poll: null,
-            type: undefined,
-            replyTo: null
-          }
-          : msg
-      )));
+      setMessageList((list) =>
+        list.map((msg) =>
+          msg.id === deletedId
+            ? {
+                ...msg,
+                deleted: true,
+                message: "[ DATA EXPUNGED ]",
+                edited: false,
+                poll: null,
+                type: undefined,
+                replyTo: null,
+              }
+            : msg,
+        ),
+      );
     });
     socket.on("message_updated", ({ messageId, newEncryptedMessage }) => {
-      setMessageList((list) => list.map((msg) => msg.id === messageId ? { ...msg, message: decrypt(newEncryptedMessage), edited: true } : msg));
+      setMessageList((list) =>
+        list.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, message: decrypt(newEncryptedMessage), edited: true }
+            : msg,
+        ),
+      );
     });
     socket.on("update_users", (userList) => setUsers(userList));
-    socket.on("kicked", () => { leaveRoom(); });
-
-    // Host receives join requests for approval
-    socket.on("join_request", ({ roomId: incomingRoomId, username: requesterUsername, socketId }) => {
-      if (incomingRoomId !== roomId) return;
-      setJoinRequests((prev) => {
-        if (prev.some((r) => r.socketId === socketId)) return prev;
-        return [...prev, { socketId, username: requesterUsername }];
-      });
+    socket.on("kicked", () => {
+      leaveRoom();
     });
 
+    socket.on(
+      "join_request",
+      ({ roomId: incomingRoomId, username: requesterUsername, socketId }) => {
+        if (incomingRoomId !== roomId) return;
+        setJoinRequests((prev) => {
+          if (prev.some((r) => r.socketId === socketId)) return prev;
+          return [...prev, { socketId, username: requesterUsername }];
+        });
+      },
+    );
+
     return () => {
-      socket.off("receive_message"); socket.off("update_users"); socket.off("user_typing");
-      socket.off("message_deleted"); socket.off("message_updated"); socket.off("kicked");
+      socket.off("receive_message");
+      socket.off("update_users");
+      socket.off("user_typing");
+      socket.off("message_deleted");
+      socket.off("message_updated");
+      socket.off("kicked");
       socket.off("poll_vote_update");
       socket.off("join_request");
     };
-  }, [socket, roomPassword, username, roomName, roomId, notificationPermission]);
+  }, [
+    socket,
+    roomPassword,
+    username,
+    roomName,
+    roomId,
+    notificationPermission,
+  ]);
 
   useEffect(() => {
-    setTimeout(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, 100);
+    setTimeout(() => {
+      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   }, [messageList, typingUsers]);
 
   useEffect(() => {
-    const fn = () => { setActiveMenuId(null); setShowTimerMenu(false); };
+    const fn = () => {
+      setActiveMenuId(null);
+      setShowTimerMenu(false);
+    };
     document.addEventListener("click", fn);
     return () => document.removeEventListener("click", fn);
   }, []);
 
   return (
-    <div className="flex h-[100dvh] w-full bg-black text-white font-mono selection:bg-white selection:text-black overflow-hidden relative">
-
-      {/* --- NEW: SECURITY CSS INJECTION (Prevents Printing) --- */}
+    <div
+      className={`flex h-[100dvh] w-full bg-black text-white font-mono selection:bg-white selection:text-black overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
+    >
       <style>{`
         @media print { body { display: none !important; } }
 
-        /* Highlight target message with a clean flash/glow */
+        .panic-blur {
+          filter: blur(15px) brightness(0.4) saturate(0.7);
+          transition: filter 0.3s ease-out;
+          pointer-events: none;
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+        }
+        
+        .panic-blur * {
+          pointer-events: none !important;
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          -moz-user-select: none !important;
+          -ms-user-select: none !important;
+        }
+
         .highlight-flash {
           animation: highlight-flash 0.9s ease-out 0s 2;
           will-change: transform, box-shadow, filter;
@@ -1036,7 +1247,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           }
         }
 
-        /* Classified image pre-reveal "scanning" overlay */
         .scan-overlay {
           position: absolute;
           inset: 0;
@@ -1146,11 +1356,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         }
       `}</style>
 
-      {/* --- NEW: SECURITY BREACH OVERLAY (The Black Screen) --- */}
       <AnimatePresence>
         {isSecurityBreach && (
           <motion.div
-            initial={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-[9999] flex items-center justify-center select-none"
           >
             <div className="text-red-600 font-mono font-bold text-xl uppercase tracking-widest animate-pulse flex flex-col items-center gap-4 text-center p-6 border-2 border-red-900 bg-black">
@@ -1160,29 +1370,45 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 <p className="text-xs text-zinc-500">
                   Screenshot / Recording / Focus Loss Detected
                 </p>
-                <p className="text-[10px] text-zinc-700 mt-2">Display Obscured</p>
+                <p className="text-[10px] text-zinc-700 mt-2">
+                  Display Obscured
+                </p>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* MOBILE BACKDROP */}
+      <AnimatePresence>
+        {isPanicMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] cursor-pointer"
+            onClick={() => setIsPanicMode(false)}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showUsers && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             onClick={() => setShowUsers(false)}
             className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
           />
         )}
       </AnimatePresence>
 
-      {/* SIDEBAR */}
       <AnimatePresence>
         {(showUsers || window.innerWidth > 768) && (
           <motion.div
-            initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
+            initial={{ x: -300 }}
+            animate={{ x: 0 }}
+            exit={{ x: -300 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="fixed md:relative z-50 w-[85%] sm:w-72 h-full bg-zinc-950 border-r border-zinc-800 flex flex-col"
           >
@@ -1190,85 +1416,103 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
               <h2 className="text-xl font-black uppercase tracking-widest flex items-center gap-2 text-white">
                 <IoMdLock /> CLASSIFIED
               </h2>
-              <button onClick={() => setShowUsers(false)} className="md:hidden p-2 text-zinc-500 hover:text-white transition">
+              <button
+                onClick={() => setShowUsers(false)}
+                className="md:hidden p-2 text-zinc-500 hover:text-white transition"
+              >
                 <IoMdClose size={24} />
               </button>
             </div>
 
             <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">
               <div className="border border-zinc-800 p-4 mb-6">
-                <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-[0.2em]">Operation ID</p>
+                <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-[0.2em]">
+                  Operation ID
+                </p>
                 <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold tracking-widest text-white">{roomId}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(roomId); }} className="p-2 hover:bg-white hover:text-black transition text-zinc-400"><IoMdCopy /></button>
+                  <span className="text-lg font-bold tracking-widest text-white">
+                    {roomId}
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(roomId);
+                    }}
+                    className="p-2 hover:bg-white hover:text-black transition text-zinc-400"
+                  >
+                    <IoMdCopy />
+                  </button>
                 </div>
               </div>
 
-              {/* Magic Invite Link Section */}
               {isHost && (
                 <div className="border border-zinc-800 p-4 mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-2">
                       <IoMdLink /> Magic Invite
                     </p>
-                    <button 
+                    <button
                       onClick={() => setShowMagicLink(!showMagicLink)}
                       className="text-[8px] uppercase text-zinc-500 hover:text-white transition font-bold"
                     >
-                      {showMagicLink ? 'Hide' : 'Show'}
+                      {showMagicLink ? "Hide" : "Show"}
                     </button>
                   </div>
-                  
-                  {showMagicLink && (() => {
-                    const encryptedPayload = encryptMagicLinkPayload(roomId, roomPassword);
-                    const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
-                    return (
-                      <div className="space-y-4">
-                        <div className="bg-zinc-900 border border-zinc-700 p-3 rounded">
-                          <p className="text-[8px] uppercase text-zinc-500 mb-2 tracking-widest">Invite Link</p>
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="text" 
-                              value={magicLink} 
-                              readOnly
-                              className="flex-1 bg-transparent text-[9px] text-zinc-300 font-mono truncate outline-none"
-                            />
-                            <button 
-                              onClick={() => {
-                                navigator.clipboard.writeText(magicLink);
-                                // Visual feedback could be added here
-                              }}
-                              className="p-1.5 hover:bg-white hover:text-black transition text-zinc-400 shrink-0"
-                              title="Copy link"
-                            >
-                              <IoMdCopy size={14} />
-                            </button>
+
+                  {showMagicLink &&
+                    (() => {
+                      const encryptedPayload = encryptMagicLinkPayload(
+                        roomId,
+                        roomPassword,
+                      );
+                      const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-zinc-900 border border-zinc-700 p-3 rounded">
+                            <p className="text-[8px] uppercase text-zinc-500 mb-2 tracking-widest">
+                              Invite Link
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={magicLink}
+                                readOnly
+                                className="flex-1 bg-transparent text-[9px] text-zinc-300 font-mono truncate outline-none"
+                              />
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(magicLink);
+                                  // Visual feedback could be added here
+                                }}
+                                className="p-1.5 hover:bg-white hover:text-black transition text-zinc-400 shrink-0"
+                                title="Copy link"
+                              >
+                                <IoMdCopy size={14} />
+                              </button>
+                            </div>
                           </div>
+
+                          {QRCodeComponent && (
+                            <div className="flex justify-center bg-zinc-900 border border-zinc-700 p-4 rounded">
+                              <QRCodeComponent
+                                value={magicLink}
+                                size={160}
+                                level="M"
+                                bgColor="#18181b"
+                                fgColor="#ffffff"
+                              />
+                            </div>
+                          )}
+
+                          <p className="text-[7px] text-zinc-600 text-center leading-relaxed">
+                            Share this link. Recipients only need to enter their
+                            codename.
+                          </p>
                         </div>
-                        
-                        {/* QR Code */}
-                        {QRCodeComponent && (
-                          <div className="flex justify-center bg-zinc-900 border border-zinc-700 p-4 rounded">
-                            <QRCodeComponent 
-                              value={magicLink}
-                              size={160}
-                              level="M"
-                              bgColor="#18181b"
-                              fgColor="#ffffff"
-                            />
-                          </div>
-                        )}
-                        
-                        <p className="text-[7px] text-zinc-600 text-center leading-relaxed">
-                          Share this link. Recipients only need to enter their codename.
-                        </p>
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
                 </div>
               )}
 
-              {/* Pending Join Requests (host approval) */}
               {isHost && joinRequests.length > 0 && (
                 <div className="border border-amber-500/60 bg-black/60 p-4 mb-6">
                   <p className="text-[9px] uppercase font-black text-amber-400 tracking-[0.25em] mb-2">
@@ -1276,21 +1520,28 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   </p>
                   <div className="space-y-3">
                     {joinRequests.map((req) => (
-                      <div key={req.socketId} className="flex items-center justify-between gap-3">
+                      <div
+                        key={req.socketId}
+                        className="flex items-center justify-between gap-3"
+                      >
                         <span className="text-xs uppercase tracking-wide text-white truncate">
                           {req.username}
                         </span>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
-                            onClick={() => decideJoinRequest(req.socketId, true)}
+                            onClick={() =>
+                              decideJoinRequest(req.socketId, true)
+                            }
                             className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-green-600 text-green-400 hover:bg-green-500 hover:text-black transition-colors"
                           >
                             Accept
                           </button>
                           <button
                             type="button"
-                            onClick={() => decideJoinRequest(req.socketId, false)}
+                            onClick={() =>
+                              decideJoinRequest(req.socketId, false)
+                            }
                             className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-red-700 text-red-400 hover:bg-red-600 hover:text-white transition-colors"
                           >
                             Reject
@@ -1302,7 +1553,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 </div>
               )}
 
-              <h3 className="text-[10px] uppercase font-bold text-zinc-500 mb-4 tracking-widest">Agents Active ({users.length})</h3>
+              <h3 className="text-[10px] uppercase font-bold text-zinc-500 mb-4 tracking-widest">
+                Agents Active ({users.length})
+              </h3>
 
               <div className="space-y-3">
                 {users.length === 0 ? (
@@ -1312,26 +1565,45 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                         {username[0].toUpperCase()}
                       </div>
                       <span className="text-xs uppercase tracking-wide truncate">
-                        {username} <span className="text-zinc-600 ml-1">(YOU)</span>
-                        {isHost && <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">HOST</span>}
+                        {username}{" "}
+                        <span className="text-zinc-600 ml-1">(YOU)</span>
+                        {isHost && (
+                          <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">
+                            HOST
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
                 ) : (
                   users.map((user, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 border border-transparent hover:bg-zinc-900 group transition-colors">
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-2 border border-transparent hover:bg-zinc-900 group transition-colors"
+                    >
                       <div className="flex items-center gap-3 truncate">
                         <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-zinc-400">
                           {user.username[0].toUpperCase()}
                         </div>
                         <span className="text-xs uppercase tracking-wide truncate flex items-center">
                           {user.username}
-                          {user.username === username && <span className="text-zinc-600 ml-1 text-[10px] shrink-0">(YOU)</span>}
-                          {user.isHost && <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">HOST</span>}
+                          {user.username === username && (
+                            <span className="text-zinc-600 ml-1 text-[10px] shrink-0">
+                              (YOU)
+                            </span>
+                          )}
+                          {user.isHost && (
+                            <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">
+                              HOST
+                            </span>
+                          )}
                         </span>
                       </div>
                       {isHost && user.id !== socket.id && (
-                        <button onClick={() => kickAgent(user.id, user.username)} className="text-red-900 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1">
+                        <button
+                          onClick={() => kickAgent(user.id, user.username)}
+                          className="text-red-900 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                        >
                           <IoMdRemoveCircle size={20} />
                         </button>
                       )}
@@ -1343,11 +1615,17 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
             <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex-shrink-0">
               {isHost ? (
-                <button onClick={handleTerminateClick} className="w-full border border-red-900/50 text-red-700 py-3 uppercase text-xs font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={handleTerminateClick}
+                  className="w-full border border-red-900/50 text-red-700 py-3 uppercase text-xs font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2"
+                >
                   <IoMdExit size={16} /> TERMINATE
                 </button>
               ) : (
-                <button onClick={handleLeaveClick} className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={handleLeaveClick}
+                  className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
+                >
                   <IoMdExit size={16} /> LEAVE ROOM
                 </button>
               )}
@@ -1356,20 +1634,26 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
         )}
       </AnimatePresence>
 
-      {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col min-w-0 bg-black relative">
-
-        {/* HUD HEADER */}
         <header className="h-20 sm:h-24 border-b border-zinc-800 flex items-center justify-between px-4 sm:px-6 z-30 bg-black flex-shrink-0 relative">
           <div className="flex items-center gap-3 min-w-0 z-10">
-            <Logo variant="shield" className="w-8 h-8 sm:w-9 sm:h-9 text-white shrink-0" />
-            <button onClick={() => setShowUsers(true)} className="md:hidden text-2xl text-zinc-500 hover:text-white transition p-2 -ml-2">
+            <Logo
+              variant="shield"
+              className="w-8 h-8 sm:w-9 sm:h-9 text-white shrink-0"
+            />
+            <button
+              onClick={() => setShowUsers(true)}
+              className="md:hidden text-2xl text-zinc-500 hover:text-white transition p-2 -ml-2"
+            >
               <IoMdPeople />
             </button>
             <div className="hidden sm:block truncate">
-              <h1 className="font-bold uppercase tracking-[0.2em] text-[13px] text-zinc-400 truncate">Secure Link Active</h1>
+              <h1 className="font-bold uppercase tracking-[0.2em] text-[13px] text-zinc-400 truncate">
+                Secure Link Active
+              </h1>
               <p className="text-[15px] text-zinc-700 uppercase tracking-widest flex items-center gap-1 mt-0.5 font-bold">
-                <IoMdTime className="text-zinc-600" size={12} /> {sessionDuration}
+                <IoMdTime className="text-zinc-600" size={12} />{" "}
+                {sessionDuration}
               </p>
             </div>
           </div>
@@ -1386,32 +1670,33 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           </div>
 
           <div className="z-10 min-w-[80px] flex justify-end items-center gap-2">
-            {/* Notification Bell Icon */}
-            {typeof Notification !== 'undefined' && (
+            {typeof Notification !== "undefined" && (
               <button
                 type="button"
                 onClick={() => {
-                  if (notificationPermission === 'default') {
+                  if (notificationPermission === "default") {
                     Notification.requestPermission().then((permission) => {
                       setNotificationPermission(permission);
                     });
-                  } else if (notificationPermission === 'denied') {
-                    alert('Notifications are blocked. Please enable them in your browser settings.');
+                  } else if (notificationPermission === "denied") {
+                    alert(
+                      "Notifications are blocked. Please enable them in your browser settings.",
+                    );
                   }
                 }}
                 className={`p-2 transition-all ${
-                  notificationPermission === 'granted'
-                    ? 'text-green-500 hover:text-green-400'
-                    : notificationPermission === 'denied'
-                    ? 'text-red-600 hover:text-red-500'
-                    : 'text-zinc-500 hover:text-white animate-pulse'
+                  notificationPermission === "granted"
+                    ? "text-green-500 hover:text-green-400"
+                    : notificationPermission === "denied"
+                      ? "text-red-600 hover:text-red-500"
+                      : "text-zinc-500 hover:text-white animate-pulse"
                 }`}
                 title={
-                  notificationPermission === 'granted'
-                    ? 'Notifications enabled'
-                    : notificationPermission === 'denied'
-                    ? 'Notifications blocked - click for help'
-                    : 'Click to enable notifications'
+                  notificationPermission === "granted"
+                    ? "Notifications enabled"
+                    : notificationPermission === "denied"
+                      ? "Notifications blocked - click for help"
+                      : "Click to enable notifications"
                 }
               >
                 <svg
@@ -1424,14 +1709,37 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 </svg>
               </button>
             )}
-            
+
+            <button
+              type="button"
+              onClick={() => setIsPanicMode(true)}
+              className={`p-2 transition-all opacity-20 hover:opacity-60 ${escPressCount > 0 ? "text-amber-500 opacity-80 animate-pulse" : "text-zinc-700 hover:text-zinc-500"}`}
+              title="Panic Mode (or press ESC twice quickly)"
+            >
+              <IoMdWarning size={16} />
+            </button>
+
+            <AnimatePresence>
+              {showEscIndicator && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8, x: 10 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.8, x: 10 }}
+                  className="absolute top-full right-0 mt-2 bg-amber-600 text-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider border border-amber-500 shadow-lg"
+                >
+                  ESC again for panic mode
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <button
               type="button"
               onClick={toggleSelectMode}
-              className={`text-[8px] sm:text-[10px] border px-3 py-2 uppercase transition-all shrink-0 font-bold flex items-center gap-2 ${isSelectMode
+              className={`text-[8px] sm:text-[10px] border px-3 py-2 uppercase transition-all shrink-0 font-bold flex items-center gap-2 ${
+                isSelectMode
                   ? "bg-white text-black border-white"
                   : "border-zinc-800 text-zinc-500 hover:bg-white hover:text-black hover:border-white"
-                }`}
+              }`}
               title="Select multiple messages"
             >
               Select
@@ -1439,51 +1747,54 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           </div>
         </header>
 
-        {/* MESSAGES */}
         <main className="flex-1 overflow-y-auto p-4 space-y-4 sm:space-y-6 scrollbar-hide">
-          {/* PINNED MESSAGE BAR */}
-          {pinnedMessageId && (() => {
-            const pinnedMsg = messageList.find((m) => m?.id === pinnedMessageId);
-            if (!pinnedMsg) return null;
-            const preview = pinnedMsg.deleted
-              ? "[ DATA EXPUNGED ]"
-              : pinnedMsg.system
-                ? pinnedMsg.message
-                : (pinnedMsg.message || "");
-            const who = pinnedMsg.system ? "SYSTEM" : (pinnedMsg.username || "UNKNOWN");
-            return (
-              <div className="sticky top-0 z-20">
-                <div className="mb-3 border border-zinc-800 bg-black/85 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.65)]">
-                  <div className="px-3 py-2 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => jumpToMessage(pinnedMessageId)}
-                      className="min-w-0 flex items-center gap-2 text-left hover:bg-white/5 transition px-2 py-1 -mx-2"
-                      title="Jump to pinned message"
-                    >
-                      <IoMdPin className="text-amber-400 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500 truncate">
-                          Pinned • {who}
-                        </p>
-                        <p className="text-[10px] text-zinc-300 truncate max-w-[80vw]">
-                          {preview}
-                        </p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPinnedMessageId(null)}
-                      className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 transition border border-zinc-800"
-                      title="Unpin"
-                    >
-                      <IoMdClose size={16} />
-                    </button>
+          {pinnedMessageId &&
+            (() => {
+              const pinnedMsg = messageList.find(
+                (m) => m?.id === pinnedMessageId,
+              );
+              if (!pinnedMsg) return null;
+              const preview = pinnedMsg.deleted
+                ? "[ DATA EXPUNGED ]"
+                : pinnedMsg.system
+                  ? pinnedMsg.message
+                  : pinnedMsg.message || "";
+              const who = pinnedMsg.system
+                ? "SYSTEM"
+                : pinnedMsg.username || "UNKNOWN";
+              return (
+                <div className="sticky top-0 z-20">
+                  <div className="mb-3 border border-zinc-800 bg-black/85 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.65)]">
+                    <div className="px-3 py-2 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => jumpToMessage(pinnedMessageId)}
+                        className="min-w-0 flex items-center gap-2 text-left hover:bg-white/5 transition px-2 py-1 -mx-2"
+                        title="Jump to pinned message"
+                      >
+                        <IoMdPin className="text-amber-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500 truncate">
+                            Pinned • {who}
+                          </p>
+                          <p className="text-[10px] text-zinc-300 truncate max-w-[80vw]">
+                            {preview}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPinnedMessageId(null)}
+                        className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 transition border border-zinc-800"
+                        title="Unpin"
+                      >
+                        <IoMdClose size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
           {messageList.map((msg) => (
             <motion.div
@@ -1499,31 +1810,49 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
               className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"}`}
             >
               {msg.system ? (
-                <span className="text-[8px] sm:text-[9px] border border-zinc-900 text-zinc-600 px-3 py-1 uppercase tracking-[0.2em]">{msg.message}</span>
+                <span className="text-[8px] sm:text-[9px] border border-zinc-900 text-zinc-600 px-3 py-1 uppercase tracking-[0.2em]">
+                  {msg.message}
+                </span>
               ) : (
                 <div className="flex flex-col max-w-[90%] sm:max-w-[75%] md:max-w-[60%] relative">
                   {isSelectMode && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); toggleSelectMessage(msg.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelectMessage(msg.id);
+                      }}
                       className={`absolute -top-2 ${msg.own ? "left-0" : "right-0"} z-40 w-7 h-7 border border-zinc-700 bg-black flex items-center justify-center hover:border-white transition`}
-                      title={selectedMessageIds.has(msg.id) ? "Unselect" : "Select"}
+                      title={
+                        selectedMessageIds.has(msg.id) ? "Unselect" : "Select"
+                      }
                     >
-                      <span className={`w-4 h-4 border ${selectedMessageIds.has(msg.id) ? "bg-indigo-600 border-indigo-600" : "border-zinc-600"} flex items-center justify-center`}>
-                        {selectedMessageIds.has(msg.id) && <IoMdCheckmark className="text-white" />}
+                      <span
+                        className={`w-4 h-4 border ${selectedMessageIds.has(msg.id) ? "bg-indigo-600 border-indigo-600" : "border-zinc-600"} flex items-center justify-center`}
+                      >
+                        {selectedMessageIds.has(msg.id) && (
+                          <IoMdCheckmark className="text-white" />
+                        )}
                       </span>
                     </button>
                   )}
-                  <div className={`p-3 sm:p-4 relative border transition-all ${msg.deleted
-                      ? "bg-transparent border-zinc-900 text-zinc-700 italic"
-                      : msg.poll
-                        ? "bg-zinc-950 text-zinc-200 border-zinc-800"
-                        : msg.own
-                          ? "bg-white text-black border-white shadow-[3px_3px_0px_rgba(255,255,255,0.05)]"
-                          : "bg-zinc-950 text-zinc-300 border-zinc-900"
-                    } ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}>
+                  <div
+                    className={`p-3 sm:p-4 relative border transition-all ${
+                      msg.deleted
+                        ? "bg-transparent border-zinc-900 text-zinc-700 italic"
+                        : msg.poll
+                          ? "bg-zinc-950 text-zinc-200 border-zinc-800"
+                          : msg.own
+                            ? "bg-white text-black border-white shadow-[3px_3px_0px_rgba(255,255,255,0.05)]"
+                            : "bg-zinc-950 text-zinc-300 border-zinc-900"
+                    } ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}
+                  >
                     <div className="flex justify-between items-start gap-4 mb-2">
-                      {!msg.own && !msg.deleted && <p className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-widest truncate">{msg.username}</p>}
+                      {!msg.own && !msg.deleted && (
+                        <p className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-widest truncate">
+                          {msg.username}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 ml-auto shrink-0">
                         {pinnedMessageId === msg.id && !msg.deleted && (
                           <span className="flex items-center gap-1 text-[8px] opacity-70 font-bold">
@@ -1543,7 +1872,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       </div>
                     </div>
                     {msg.replyTo && (
-                      <div className={`mb-2 flex ${msg.own ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`mb-2 flex ${msg.own ? "justify-end" : "justify-start"}`}
+                      >
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1552,18 +1883,24 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") jumpToMessage(msg.replyTo?.messageId);
+                            if (e.key === "Enter" || e.key === " ")
+                              jumpToMessage(msg.replyTo?.messageId);
                           }}
                           title="Jump to replied message"
-                          className={`border-l-2 px-2 py-1 text-[10px] opacity-70 w-full ${msg.own
+                          className={`border-l-2 px-2 py-1 text-[10px] opacity-70 w-full ${
+                            msg.own
                               ? "bg-black text-white border-white/60"
                               : "bg-white text-black border-black/60"
-                            } ${msg.replyTo?.messageId ? "cursor-pointer hover:opacity-90" : ""}`}
+                          } ${msg.replyTo?.messageId ? "cursor-pointer hover:opacity-90" : ""}`}
                         >
-                          <p className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-white/70" : "text-black/70"}`}>
+                          <p
+                            className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-white/70" : "text-black/70"}`}
+                          >
                             <IoMdReturnLeft /> {msg.replyTo.username}
                           </p>
-                          <p className={`italic truncate ${msg.own ? "text-white/70" : "text-black/70"}`}>
+                          <p
+                            className={`italic truncate ${msg.own ? "text-white/70" : "text-black/70"}`}
+                          >
                             {decrypt(msg.replyTo.message)}
                           </p>
                         </div>
@@ -1576,19 +1913,34 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                             {decrypt(msg.poll.question)}
                           </p>
                           <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest font-bold">
-                            {msg.poll.allowMultiple ? "Select one or more answers" : "Select one answer"}
+                            {msg.poll.allowMultiple
+                              ? "Select one or more answers"
+                              : "Select one answer"}
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           {(() => {
                             const options = msg.poll.options || [];
-                            const totalVotes = options.reduce((sum, o) => sum + (Array.isArray(o.votes) ? o.votes.length : 0), 0);
-                            const ended = msg.poll.expiresAt && msg.poll.expiresAt <= Date.now();
+                            const totalVotes = options.reduce(
+                              (sum, o) =>
+                                sum +
+                                (Array.isArray(o.votes) ? o.votes.length : 0),
+                              0,
+                            );
+                            const ended =
+                              msg.poll.expiresAt &&
+                              msg.poll.expiresAt <= Date.now();
                             return options.map((opt) => {
-                              const votes = Array.isArray(opt.votes) ? opt.votes.length : 0;
-                              const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
-                              const iVoted = Array.isArray(opt.votes) ? opt.votes.includes(username) : false;
+                              const votes = Array.isArray(opt.votes)
+                                ? opt.votes.length
+                                : 0;
+                              const pct = totalVotes
+                                ? Math.round((votes / totalVotes) * 100)
+                                : 0;
+                              const iVoted = Array.isArray(opt.votes)
+                                ? opt.votes.includes(username)
+                                : false;
                               return (
                                 <button
                                   key={opt.id}
@@ -1605,7 +1957,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                                       </p>
                                       <div className="flex items-center gap-3 shrink-0">
                                         <span className="text-[12px] text-zinc-400 font-bold tabular-nums">
-                                          {votes} {votes === 1 ? "vote" : "votes"}
+                                          {votes}{" "}
+                                          {votes === 1 ? "vote" : "votes"}
                                         </span>
                                         <span className="text-[12px] text-zinc-400 font-bold tabular-nums">
                                           {pct}%
@@ -1633,10 +1986,17 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                         <div className="flex items-center justify-between text-[11px] text-zinc-500">
                           {(() => {
                             const options = msg.poll.options || [];
-                            const totalVotes = options.reduce((sum, o) => sum + (Array.isArray(o.votes) ? o.votes.length : 0), 0);
+                            const totalVotes = options.reduce(
+                              (sum, o) =>
+                                sum +
+                                (Array.isArray(o.votes) ? o.votes.length : 0),
+                              0,
+                            );
                             return (
                               <span className="font-bold">
-                                {totalVotes} {totalVotes === 1 ? "vote" : "votes"} • {formatTimeLeft(msg.poll.expiresAt)}
+                                {totalVotes}{" "}
+                                {totalVotes === 1 ? "vote" : "votes"} •{" "}
+                                {formatTimeLeft(msg.poll.expiresAt)}
                               </span>
                             );
                           })()}
@@ -1653,59 +2013,82 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       <div className="space-y-2">
                         {msg.own || msg.imageDecrypted ? (
                           <div className="relative border-2 border-zinc-800 bg-zinc-900 overflow-hidden group">
-                            <img 
-                              src={msg.message} 
-                              alt="Classified attachment" 
+                            <img
+                              src={msg.message}
+                              alt="Classified attachment"
                               className={`max-w-full max-h-96 object-contain w-full transition-opacity duration-300 ${!msg.own && msg.imageDecrypted && msg.imageScanning ? "opacity-0" : "opacity-100"}`}
                               onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'block';
+                                e.target.style.display = "none";
+                                e.target.nextSibling.style.display = "block";
                               }}
                             />
-                            <div style={{ display: 'none' }} className="p-4 text-center text-zinc-500 text-xs">
+                            <div
+                              style={{ display: "none" }}
+                              className="p-4 text-center text-zinc-500 text-xs"
+                            >
                               <IoMdWarning className="inline mr-2" />
                               Failed to decrypt image
                             </div>
-                            {!msg.own && msg.imageDecrypted && msg.imageScanning && (
-                              <div className="scan-overlay" aria-hidden="true">
-                                <div className="scan-grid" />
-                                <div className="scan-noise" />
-                                <div className="scan-line" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="text-center px-6">
-                                    <p className="text-[10px] text-zinc-300 uppercase tracking-[0.45em] font-black">
-                                      Scanning
-                                    </p>
-                                    <p className="text-[9px] text-zinc-500 uppercase tracking-[0.25em] font-bold mt-1">
-                                      Verifying classified payload
-                                    </p>
+                            {!msg.own &&
+                              msg.imageDecrypted &&
+                              msg.imageScanning && (
+                                <div
+                                  className="scan-overlay"
+                                  aria-hidden="true"
+                                >
+                                  <div className="scan-grid" />
+                                  <div className="scan-noise" />
+                                  <div className="scan-line" />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="text-center px-6">
+                                      <p className="text-[10px] text-zinc-300 uppercase tracking-[0.45em] font-black">
+                                        Scanning
+                                      </p>
+                                      <p className="text-[9px] text-zinc-500 uppercase tracking-[0.25em] font-bold mt-1">
+                                        Verifying classified payload
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="scan-hud">
+                                    <span className="shrink-0">SCAN</span>
+                                    <div
+                                      className="scan-bar"
+                                      aria-hidden="true"
+                                    >
+                                      <span />
+                                    </div>
+                                    <span className="shrink-0">OK</span>
                                   </div>
                                 </div>
-                                <div className="scan-hud">
-                                  <span className="shrink-0">SCAN</span>
-                                  <div className="scan-bar" aria-hidden="true"><span /></div>
-                                  <span className="shrink-0">OK</span>
-                                </div>
-                              </div>
-                            )}
+                              )}
                             <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
-                              <IoMdLock className="inline mr-1" /> Classified Attachment
+                              <IoMdLock className="inline mr-1" /> Classified
+                              Attachment
                             </div>
                             {!msg.own && imageCountdowns[msg.id] && (
-                              <div className={`absolute top-2 right-2 px-2 py-1 text-[10px] uppercase tracking-widest border font-bold ${
-                                imageCountdowns[msg.id] <= 3 
-                                  ? 'bg-red-600/95 text-white border-red-500 animate-pulse' 
-                                  : 'bg-red-900/90 text-red-200 border-red-700'
-                              }`}>
+                              <div
+                                className={`absolute top-2 right-2 px-2 py-1 text-[10px] uppercase tracking-widest border font-bold ${
+                                  imageCountdowns[msg.id] <= 3
+                                    ? "bg-red-600/95 text-white border-red-500 animate-pulse"
+                                    : "bg-red-900/90 text-red-200 border-red-700"
+                                }`}
+                              >
                                 <IoMdTimer className="inline mr-1" />
-                                {imageCountdowns[msg.id] <= 3 ? 'LOCKING' : 'Auto-lock'} in {imageCountdowns[msg.id]}s
+                                {imageCountdowns[msg.id] <= 3
+                                  ? "LOCKING"
+                                  : "Auto-lock"}{" "}
+                                in {imageCountdowns[msg.id]}s
                               </div>
                             )}
-                            {/* Download Button - Shows on hover or when countdown is active */}
-                            {(msg.own || (msg.imageDecrypted && !msg.imageScanning)) && (
-                              <div className={`absolute bottom-2 right-2 ${msg.own ? 'opacity-0 group-hover:opacity-100' : ''} transition-opacity`}>
+                            {(msg.own ||
+                              (msg.imageDecrypted && !msg.imageScanning)) && (
+                              <div
+                                className={`absolute bottom-2 right-2 ${msg.own ? "opacity-0 group-hover:opacity-100" : ""} transition-opacity`}
+                              >
                                 <button
-                                  onClick={() => downloadImage(msg.message, msg.id)}
+                                  onClick={() =>
+                                    downloadImage(msg.message, msg.id)
+                                  }
                                   className="bg-black/80 hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white font-bold transition-all flex items-center gap-1"
                                   title="Download image"
                                 >
@@ -1744,26 +2127,50 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       </p>
                     )}
                     <div className="flex items-center gap-2 justify-end mt-2 opacity-40">
-                      {msg.edited && !msg.deleted && <span className="text-[7px] border border-current px-1 uppercase font-bold">Edited</span>}
+                      {msg.edited && !msg.deleted && (
+                        <span className="text-[7px] border border-current px-1 uppercase font-bold">
+                          Edited
+                        </span>
+                      )}
                       <span className="text-[8px] font-black">{msg.time}</span>
                     </div>
                   </div>
                   {!msg.deleted && !isSelectMode && (
-                    <div onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === msg.id ? null : msg.id); }} className={`absolute -top-2 ${msg.own ? "left-0" : "right-0"} p-1 cursor-pointer text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity bg-black rounded border border-zinc-800 ${activeMenuId === msg.id ? "opacity-100" : ""}`}>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenuId(
+                          activeMenuId === msg.id ? null : msg.id,
+                        );
+                      }}
+                      className={`absolute -top-2 ${msg.own ? "left-0" : "right-0"} p-1 cursor-pointer text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity bg-black rounded border border-zinc-800 ${activeMenuId === msg.id ? "opacity-100" : ""}`}
+                    >
                       <IoMdMore size={16} />
                     </div>
                   )}
                   <AnimatePresence>
                     {activeMenuId === msg.id && (
-                      <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }} className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-black border border-white shadow-2xl min-w-[130px]`}>
-                        <button onClick={() => startReplying(msg)} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900">
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-black border border-white shadow-2xl min-w-[130px]`}
+                      >
+                        <button
+                          onClick={() => startReplying(msg)}
+                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900"
+                        >
                           <IoMdReturnLeft /> Reply
                         </button>
                         <button
                           onClick={() => toggleStarMessage(msg.id)}
                           className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900"
                         >
-                          {starredMessageIds.has(msg.id) ? <IoMdStar /> : <IoMdStarOutline />}
+                          {starredMessageIds.has(msg.id) ? (
+                            <IoMdStar />
+                          ) : (
+                            <IoMdStarOutline />
+                          )}
                           {starredMessageIds.has(msg.id) ? "Unstar" : "Star"}
                         </button>
                         <button
@@ -1773,15 +2180,51 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                           <IoMdPin />
                           {pinnedMessageId === msg.id ? "Unpin" : "Pin"}
                         </button>
-                        <button onClick={() => setMessageList(l => l.filter(m => m.id !== msg.id))} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors">Local Hide</button>
+                        <button
+                          onClick={() =>
+                            setMessageList((l) =>
+                              l.filter((m) => m.id !== msg.id),
+                            )
+                          }
+                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors"
+                        >
+                          Local Hide
+                        </button>
                         {msg.own && !msg.poll && (
                           <>
-                            <button onClick={() => startEditing(msg)} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">Edit Signal</button>
-                            <button onClick={() => { socket.emit("delete_message", { roomId, messageId: msg.id }); setActiveMenuId(null); }} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">Expunge Global</button>
+                            <button
+                              onClick={() => startEditing(msg)}
+                              className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
+                            >
+                              Edit Signal
+                            </button>
+                            <button
+                              onClick={() => {
+                                socket.emit("delete_message", {
+                                  roomId,
+                                  messageId: msg.id,
+                                });
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
+                            >
+                              Expunge Global
+                            </button>
                           </>
                         )}
                         {msg.own && msg.poll && (
-                          <button onClick={() => { socket.emit("delete_message", { roomId, messageId: msg.id }); setActiveMenuId(null); }} className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900">Expunge Global</button>
+                          <button
+                            onClick={() => {
+                              socket.emit("delete_message", {
+                                roomId,
+                                messageId: msg.id,
+                              });
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
+                          >
+                            Expunge Global
+                          </button>
                         )}
                       </motion.div>
                     )}
@@ -1793,15 +2236,27 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
 
           <AnimatePresence>
             {typingUsers.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-start">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex justify-start"
+              >
                 <div className="max-w-[90%] bg-zinc-950 border border-zinc-900 border-dashed p-3">
                   <div className="flex items-center gap-3">
                     <IoMdPulse className="text-zinc-500 animate-pulse text-lg" />
                     <div className="min-w-0">
-                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">Signal Incoming...</p>
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">
+                        Signal Incoming...
+                      </p>
                       <div className="text-[9px] text-white font-bold flex flex-wrap gap-x-1 uppercase truncate font-mono">
                         <span>[</span>
-                        {typingUsers.map((u, i) => (<span key={u} className="text-white"><DecryptingName name={u} />{i < typingUsers.length - 1 ? "," : ""}</span>))}
+                        {typingUsers.map((u, i) => (
+                          <span key={u} className="text-white">
+                            <DecryptingName name={u} />
+                            {i < typingUsers.length - 1 ? "," : ""}
+                          </span>
+                        ))}
                         <span>]</span>
                       </div>
                     </div>
@@ -1813,15 +2268,23 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           <div ref={scrollRef} className="h-2" />
         </main>
 
-        {/* INPUT FOOTER */}
         <footer className="p-3 sm:p-4 border-t border-zinc-900 bg-black relative flex-shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between mb-2">
             {editingMessageId ? (
               <div className="flex items-center gap-2 text-[8px] text-white uppercase tracking-widest border-l border-white pl-2 font-bold">
                 <span>Modifying Transmission...</span>
-                <button onClick={() => { setEditingMessageId(null); setCurrentMessage(""); }}><IoMdClose /></button>
+                <button
+                  onClick={() => {
+                    setEditingMessageId(null);
+                    setCurrentMessage("");
+                  }}
+                >
+                  <IoMdClose />
+                </button>
               </div>
-            ) : <div />}
+            ) : (
+              <div />
+            )}
             {selfDestructTime > 0 && !editingMessageId && (
               <div className="flex items-center gap-2 text-[8px] text-red-600 font-bold uppercase tracking-widest animate-pulse">
                 <IoMdTimer /> Destruct Enabled: {selfDestructTime / 1000}s
@@ -1829,7 +2292,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             )}
           </div>
 
-          {/* BULK ACTION BAR */}
           {isSelectMode && (
             <div className="mb-2 border border-zinc-800 bg-black/85 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -1838,7 +2300,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 </p>
                 <p className="text-[10px] text-zinc-300 font-bold truncate">
                   {selectedCount} selected
-                  {selectionHasOthers ? " • global delete disabled (includes others)" : ""}
+                  {selectionHasOthers
+                    ? " • global delete disabled (includes others)"
+                    : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1856,7 +2320,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   onClick={bulkGlobalDelete}
                   disabled={selectedCount === 0 || !selectionAllOwn}
                   className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest border border-red-900/60 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
-                  title={selectionAllOwn ? "Delete for everyone (your messages only)" : "Global delete only works when all selected messages are yours"}
+                  title={
+                    selectionAllOwn
+                      ? "Delete for everyone (your messages only)"
+                      : "Global delete only works when all selected messages are yours"
+                  }
                 >
                   Global Delete
                 </button>
@@ -1872,18 +2340,38 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
             </div>
           )}
 
-          <div className={`flex ${imagePreview ? 'flex-col' : 'items-center'} border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-900 focus-within:border-zinc-700"}`}>
+          <div
+            className={`flex ${imagePreview ? "flex-col" : "items-center"} border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-900 focus-within:border-zinc-700"}`}
+          >
             <div className="flex items-center w-full">
               <div className="flex items-center">
                 <div className="relative">
-                  <button onClick={(e) => { e.stopPropagation(); setShowTimerMenu(!showTimerMenu); }} className={`p-2 sm:p-3 transition-colors ${selfDestructTime > 0 ? "text-red-600" : "text-zinc-600 hover:text-white"}`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTimerMenu(!showTimerMenu);
+                    }}
+                    className={`p-2 sm:p-3 transition-colors ${selfDestructTime > 0 ? "text-red-600" : "text-zinc-600 hover:text-white"}`}
+                  >
                     <IoMdTimer size={18} />
                   </button>
                   <AnimatePresence>
                     {showTimerMenu && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-800 shadow-2xl z-50 w-24 sm:w-32">
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-800 shadow-2xl z-50 w-24 sm:w-32"
+                      >
                         {timerOptions.map((opt) => (
-                          <button key={opt.label} onClick={() => { setSelfDestructTime(opt.value); setShowTimerMenu(false); }} className={`w-full text-left px-3 py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-500"}`}>
+                          <button
+                            key={opt.label}
+                            onClick={() => {
+                              setSelfDestructTime(opt.value);
+                              setShowTimerMenu(false);
+                            }}
+                            className={`w-full text-left px-3 py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-500"}`}
+                          >
                             {opt.label}
                           </button>
                         ))}
@@ -1892,7 +2380,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   </AnimatePresence>
                 </div>
 
-                {/* POLL BUTTON (next to destruct timer) */}
                 <button
                   type="button"
                   onClick={togglePollModal}
@@ -1903,7 +2390,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   <IoMdStats size={18} />
                 </button>
 
-                {/* IMAGE ATTACHMENT BUTTON */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1920,13 +2406,19 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-
               </div>
 
               {replyingTo && !editingMessageId && !imagePreview && (
                 <div className="flex items-center gap-2 text-[8px] text-zinc-400 uppercase tracking-widest border-l border-zinc-500 pl-2 font-bold">
-                  <span className="flex items-center gap-1"><IoMdReturnLeft /> Replying to: {replyingTo.username}</span>
-                  <button onClick={() => setReplyingTo(null)} className="hover:text-white"><IoMdClose /></button>
+                  <span className="flex items-center gap-1">
+                    <IoMdReturnLeft /> Replying to: {replyingTo.username}
+                  </span>
+                  <button
+                    onClick={() => setReplyingTo(null)}
+                    className="hover:text-white"
+                  >
+                    <IoMdClose />
+                  </button>
                 </div>
               )}
 
@@ -1934,27 +2426,38 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 <input
                   type="text"
                   value={currentMessage}
-                  placeholder={editingMessageId ? "EDITING..." : "ENTER ENCRYPTED SIGNAL..."}
+                  placeholder={
+                    editingMessageId
+                      ? "EDITING..."
+                      : "ENTER ENCRYPTED SIGNAL..."
+                  }
                   className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-800 text-xs sm:text-sm font-mono min-w-0"
                   onChange={handleInputChange}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 />
               )}
-              
-              <button 
-                onClick={selectedImage ? sendImageMessage : sendMessage} 
+
+              <button
+                onClick={selectedImage ? sendImageMessage : sendMessage}
                 className={`p-2 sm:p-3 text-black transition-all ${editingMessageId ? "bg-white" : "bg-white hover:bg-zinc-200"}`}
                 disabled={!selectedImage && !currentMessage.trim()}
               >
-                {editingMessageId ? <IoMdCreate size={18} /> : <IoMdSend size={18} />}
+                {editingMessageId ? (
+                  <IoMdCreate size={18} />
+                ) : (
+                  <IoMdSend size={18} />
+                )}
               </button>
             </div>
 
-            {/* IMAGE PREVIEW */}
             {imagePreview && !editingMessageId && (
               <div className="w-full px-2 py-2 border-t border-zinc-800">
                 <div className="relative inline-block border-2 border-zinc-700 bg-zinc-900">
-                  <img src={imagePreview} alt="Preview" className="max-h-32 max-w-full object-contain" />
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="max-h-32 max-w-full object-contain"
+                  />
                   <button
                     onClick={clearImageAttachment}
                     className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition"
@@ -1963,7 +2466,8 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                     <IoMdClose size={16} />
                   </button>
                   <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest flex items-center gap-1">
-                    <IoMdLock size={10} /> Classified Attachment • Will be encrypted
+                    <IoMdLock size={10} /> Classified Attachment • Will be
+                    encrypted
                   </div>
                 </div>
               </div>
@@ -1971,7 +2475,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           </div>
         </footer>
 
-        {/* POLL MODAL */}
         <AnimatePresence>
           {showPollModal && (
             <motion.div
@@ -1979,7 +2482,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-              onClick={() => { setShowPollModal(false); }}
+              onClick={() => {
+                setShowPollModal(false);
+              }}
             >
               <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -1990,10 +2495,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="p-5 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-white">Create a Poll</h3>
+                  <h3 className="text-xl font-black text-white">
+                    Create a Poll
+                  </h3>
                   <button
                     type="button"
-                    onClick={() => { setShowPollModal(false); }}
+                    onClick={() => {
+                      setShowPollModal(false);
+                    }}
                     className="p-2 text-zinc-400 hover:text-white transition"
                     title="Close"
                   >
@@ -2007,7 +2516,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                     <div className="relative">
                       <input
                         value={pollQuestion}
-                        onChange={(e) => setPollQuestion(e.target.value.slice(0, 300))}
+                        onChange={(e) =>
+                          setPollQuestion(e.target.value.slice(0, 300))
+                        }
                         placeholder="What question do you want to ask?"
                         className="w-full bg-zinc-950 border border-zinc-800 text-white px-4 py-3 outline-none focus:border-zinc-600"
                       />
@@ -2028,14 +2539,24 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                             </div>
                             <input
                               value={ans}
-                              onChange={(e) => setPollAnswers((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))}
+                              onChange={(e) =>
+                                setPollAnswers((prev) =>
+                                  prev.map((v, i) =>
+                                    i === idx ? e.target.value : v,
+                                  ),
+                                )
+                              }
                               placeholder="Type your answer"
                               className="flex-1 bg-transparent text-white px-3 py-2 outline-none"
                             />
                           </div>
                           <button
                             type="button"
-                            onClick={() => setPollAnswers((prev) => prev.filter((_, i) => i !== idx))}
+                            onClick={() =>
+                              setPollAnswers((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
                             className="p-2 text-zinc-500 hover:text-white transition border border-zinc-800"
                             title="Remove answer"
                             disabled={pollAnswers.length <= 2}
@@ -2060,7 +2581,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                     <p className="text-sm text-zinc-300 mb-2">Duration</p>
                     <select
                       value={pollDurationMs}
-                      onChange={(e) => setPollDurationMs(Number(e.target.value))}
+                      onChange={(e) =>
+                        setPollDurationMs(Number(e.target.value))
+                      }
                       className="w-full bg-zinc-950 border border-zinc-800 text-white px-4 py-3 outline-none focus:border-zinc-600"
                     >
                       <option value={60 * 60 * 1000}>1 hour</option>
@@ -2086,7 +2609,11 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       type="button"
                       onClick={postPoll}
                       className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={pollQuestion.trim().length === 0 || pollAnswers.map((a) => a.trim()).filter(Boolean).length < 2}
+                      disabled={
+                        pollQuestion.trim().length === 0 ||
+                        pollAnswers.map((a) => a.trim()).filter(Boolean)
+                          .length < 2
+                      }
                     >
                       Post
                     </button>
@@ -2097,7 +2624,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           )}
         </AnimatePresence>
 
-        {/* Sliding Button Confirmation Modal */}
         <AnimatePresence>
           {showSlideConfirm && (
             <motion.div
@@ -2115,61 +2641,68 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="text-center mb-6">
-                  <IoMdWarning className="text-red-600 mx-auto mb-4" size={48} />
+                  <IoMdWarning
+                    className="text-red-600 mx-auto mb-4"
+                    size={48}
+                  />
                   <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
-                    {confirmAction === 'terminate' ? 'TERMINATE ROOM' : 'LEAVE ROOM'}
+                    {confirmAction === "terminate"
+                      ? "TERMINATE ROOM"
+                      : "LEAVE ROOM"}
                   </h2>
                   <p className="text-zinc-400 text-sm uppercase tracking-wide">
-                    {confirmAction === 'terminate' 
-                      ? 'This will close the room for all users. Slide to confirm.'
-                      : 'Are you sure you want to leave? Slide to confirm.'}
+                    {confirmAction === "terminate"
+                      ? "This will close the room for all users. Slide to confirm."
+                      : "Are you sure you want to leave? Slide to confirm."}
                   </p>
                 </div>
 
-                {/* Sliding Button Track */}
                 <div
                   ref={slideTrackRef}
                   className="relative w-full h-16 bg-zinc-900 border-2 border-zinc-700 mb-4 select-none"
                   onMouseDown={handleSlideStart}
                   onTouchStart={handleSlideStart}
                 >
-                  {/* Track Background Text */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="text-zinc-600 text-xs uppercase tracking-widest font-bold">
-                      SLIDE TO {confirmAction === 'terminate' ? 'TERMINATE' : 'LEAVE'}
+                      SLIDE TO{" "}
+                      {confirmAction === "terminate" ? "TERMINATE" : "LEAVE"}
                     </span>
                   </div>
 
-                  {/* Sliding Button */}
                   <motion.div
                     ref={slideButtonRef}
                     className="absolute top-0 left-0 h-full bg-red-600 border-2 border-red-500 flex items-center justify-center cursor-grab active:cursor-grabbing z-10"
                     style={{
-                      width: '60px',
+                      width: "60px",
                       x: slidePosition,
                     }}
                     animate={{
                       x: slidePosition,
                     }}
-                    transition={isSliding ? { duration: 0 } : {
-                      type: 'spring',
-                      stiffness: 300,
-                      damping: 30,
-                    }}
+                    transition={
+                      isSliding
+                        ? { duration: 0 }
+                        : {
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 30,
+                          }
+                    }
                   >
                     <IoMdExit className="text-white" size={24} />
                   </motion.div>
 
-                  {/* Success Indicator */}
-                  {slideTrackRef.current && slidePosition >= (slideTrackRef.current.offsetWidth - 65) && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute inset-0 flex items-center justify-center bg-green-600/20 pointer-events-none"
-                    >
-                      <IoMdCheckmark className="text-green-500" size={32} />
-                    </motion.div>
-                  )}
+                  {slideTrackRef.current &&
+                    slidePosition >= slideTrackRef.current.offsetWidth - 65 && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute inset-0 flex items-center justify-center bg-green-600/20 pointer-events-none"
+                      >
+                        <IoMdCheckmark className="text-green-500" size={32} />
+                      </motion.div>
+                    )}
                 </div>
 
                 <button
@@ -2183,7 +2716,6 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
           )}
         </AnimatePresence>
 
-        {/* Image Password Modal */}
         <AnimatePresence>
           {showImagePasswordModal && (
             <motion.div
@@ -2203,12 +2735,14 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                 <div className="text-center mb-6">
                   <IoMdLock className="text-zinc-400 mx-auto mb-4" size={48} />
                   <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
-                    {pendingImageAction === 'send' ? 'CONFIRM SEND' : 'DECRYPT IMAGE'}
+                    {pendingImageAction === "send"
+                      ? "CONFIRM SEND"
+                      : "DECRYPT IMAGE"}
                   </h2>
                   <p className="text-zinc-400 text-sm uppercase tracking-wide">
-                    {pendingImageAction === 'send' 
-                      ? 'Enter room encryption password to send classified attachment'
-                      : 'Enter room encryption password to view classified attachment'}
+                    {pendingImageAction === "send"
+                      ? "Enter room encryption password to send classified attachment"
+                      : "Enter room encryption password to view classified attachment"}
                   </p>
                 </div>
 
@@ -2224,7 +2758,9 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
-                          pendingImageAction === 'send' ? confirmSendImage() : confirmViewImage();
+                          pendingImageAction === "send"
+                            ? confirmSendImage()
+                            : confirmViewImage();
                         }
                       }}
                       placeholder="ENCRYPTION PASSWORD"
@@ -2247,11 +2783,15 @@ const ChatRoom = ({ socket, username, roomId, roomPassword, isHost, leaveRoom, c
                       Cancel
                     </button>
                     <button
-                      onClick={pendingImageAction === 'send' ? confirmSendImage : confirmViewImage}
+                      onClick={
+                        pendingImageAction === "send"
+                          ? confirmSendImage
+                          : confirmViewImage
+                      }
                       className="flex-1 bg-white text-black py-3 uppercase text-xs font-bold hover:bg-zinc-300 transition-all"
                       disabled={!imagePasswordInput}
                     >
-                      {pendingImageAction === 'send' ? 'Send' : 'Decrypt'}
+                      {pendingImageAction === "send" ? "Send" : "Decrypt"}
                     </button>
                   </div>
                 </div>
