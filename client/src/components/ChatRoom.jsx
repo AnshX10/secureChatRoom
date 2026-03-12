@@ -40,6 +40,12 @@ import {
   LuChevronLeft,
   LuMaximize2,
   LuZoomIn,
+  LuFile,
+  LuFileText,
+  LuMic,
+  LuSquare,
+  LuPlay,
+  LuPause,
 } from "react-icons/lu";
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
@@ -150,7 +156,11 @@ const ChatRoom = ({
       ? `${message.username}: [POLL] ${decrypt(message.poll.question).substring(0, 50)}`
       : message.type === "image"
         ? `${message.username}: [Classified Image]`
-        : `${message.username}: ${message.message.substring(0, 100)}`;
+        : message.type === "file"
+          ? `${message.username}: [Classified File]`
+          : message.type === "audio"
+            ? `${message.username}: [Voice Message]`
+            : `${message.username}: ${message.message.substring(0, 100)}`;
 
     const notification = new Notification(title, {
       body,
@@ -216,6 +226,23 @@ const ChatRoom = ({
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+
+  // File attachment state (non-image files)
+  const [selectedFile, setSelectedFile] = useState(null); // { name, size, type, data }
+
+  // Audio recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingIntervalRef = useRef(null);
+  const audioPreviewRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const [audioLevels, setAudioLevels] = useState(new Array(24).fill(0));
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -491,6 +518,10 @@ const ChatRoom = ({
     if (!msg) return "";
     if (msg.poll) return `[POLL] ${decrypt(msg.poll.question)}`;
     if (msg.system) return msg.message || "";
+    if (msg.type === "image") return "📷 Image";
+    if (msg.type === "audio") return `🎙️ Voice message${msg.audioDuration ? ` (${formatDuration(msg.audioDuration)})` : ""}`;
+    if (msg.type === "file") return `📎 ${msg.fileName || "File"}`;
+    if (msg.type === "high-clearance") return "🔒 High Clearance Message";
     return msg.message || "";
   };
 
@@ -598,33 +629,47 @@ const ChatRoom = ({
     resetPollDraft();
   };
 
-  const handleImageSelect = (e) => {
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert("Image too large. Maximum size is 5MB.");
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
+      alert("File too large. Maximum size is 5MB.");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target.result;
-      setSelectedImage(base64);
-      setImagePreview(base64);
+      if (file.type.startsWith("image/")) {
+        setSelectedImage(base64);
+        setImagePreview(base64);
+        setSelectedFile(null);
+      } else {
+        setSelectedFile({
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/octet-stream',
+          data: base64,
+        });
+        setSelectedImage(null);
+        setImagePreview(null);
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  const clearImageAttachment = () => {
+  const clearAttachment = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -674,8 +719,209 @@ const ChatRoom = ({
       ...list,
       { ...messageData, message: selectedImage, own: true },
     ]);
-    clearImageAttachment();
+    clearAttachment();
     setReplyingTo(null);
+  };
+
+  const sendFileMessage = async () => {
+    if (!selectedFile) return;
+
+    const messageId = uuidv4();
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const encryptedData = encrypt(selectedFile.data);
+    const encryptedName = encrypt(selectedFile.name);
+
+    const messageData = {
+      id: messageId,
+      roomId,
+      username,
+      message: encryptedData,
+      fileName: encryptedName,
+      fileSize: selectedFile.size,
+      fileType: selectedFile.type,
+      time,
+      edited: false,
+      deleted: false,
+      timer: selfDestructTime,
+      replyTo: replyingTo ? {
+        messageId: replyingTo.id,
+        username: replyingTo.username,
+        message: encrypt(getReplyPreviewText(replyingTo)),
+      } : null,
+      type: "file",
+    };
+
+    await socket.emit("send_message", messageData);
+    setMessageList((list) => [
+      ...list,
+      { ...messageData, message: selectedFile.data, fileName: selectedFile.name, own: true },
+    ]);
+    clearAttachment();
+    setReplyingTo(null);
+  };
+
+  const downloadFile = (fileData, fileName) => {
+    try {
+      const link = document.createElement("a");
+      link.href = fileData;
+      link.download = fileName || `classified_file_${Date.now()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Failed to download file:", error);
+    }
+  };
+
+  const getFileIcon = (fileType) => {
+    if (!fileType) return LuFile;
+    if (fileType.includes('pdf') || fileType.includes('text') || fileType.includes('document') || fileType.includes('word') || fileType.includes('sheet') || fileType.includes('presentation')) return LuFileText;
+    return LuFile;
+  };
+
+  const formatDuration = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Set up audio analyser for visualisation
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      analyserRef.current = { analyser, audioCtx, source };
+
+      const tick = () => {
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        const levels = Array.from(data).slice(0, 24).map(v => v / 255);
+        setAudioLevels(levels);
+        animFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : 'audio/ogg';
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setAudioBlob(blob);
+        setAudioPreviewUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+        if (analyserRef.current) {
+          analyserRef.current.audioCtx.close();
+          analyserRef.current = null;
+        }
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        setAudioLevels(new Array(24).fill(0));
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration(d => d + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Mic access denied:', err);
+      alert('Microphone access is required to record audio.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      clearInterval(recordingIntervalRef.current);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+      mediaRecorderRef.current = null;
+      setIsRecording(false);
+      clearInterval(recordingIntervalRef.current);
+      if (analyserRef.current) {
+        analyserRef.current.audioCtx.close();
+        analyserRef.current = null;
+      }
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      setAudioLevels(new Array(24).fill(0));
+    }
+    setAudioBlob(null);
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+    setAudioPreviewUrl(null);
+    setRecordingDuration(0);
+    setIsPlayingPreview(false);
+  };
+
+  const sendAudioMessage = async () => {
+    if (!audioBlob) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target.result;
+      const messageId = uuidv4();
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const encryptedAudio = encrypt(base64);
+
+      const messageData = {
+        id: messageId,
+        roomId,
+        username,
+        message: encryptedAudio,
+        audioDuration: recordingDuration,
+        time,
+        edited: false,
+        deleted: false,
+        timer: selfDestructTime,
+        replyTo: replyingTo ? {
+          messageId: replyingTo.id,
+          username: replyingTo.username,
+          message: encrypt(getReplyPreviewText(replyingTo)),
+        } : null,
+        type: "audio",
+      };
+
+      await socket.emit("send_message", messageData);
+      setMessageList((list) => [
+        ...list,
+        { ...messageData, message: base64, own: true },
+      ]);
+
+      // Cleanup
+      setAudioBlob(null);
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      setAudioPreviewUrl(null);
+      setRecordingDuration(0);
+      setIsPlayingPreview(false);
+      setReplyingTo(null);
+    };
+    reader.readAsDataURL(audioBlob);
   };
 
   const applyPollVoteUpdate = ({
@@ -1100,6 +1346,19 @@ const ChatRoom = ({
       } else if (data.type === "poll" || data.poll) {
         messageToAdd = { ...data, own: isOwnMessage };
       } else if (data.type === "image") {
+        messageToAdd = {
+          ...data,
+          message: decrypt(data.message),
+          own: isOwnMessage,
+        };
+      } else if (data.type === "file") {
+        messageToAdd = {
+          ...data,
+          message: decrypt(data.message),
+          fileName: decrypt(data.fileName),
+          own: isOwnMessage,
+        };
+      } else if (data.type === "audio") {
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
@@ -2105,7 +2364,7 @@ const ChatRoom = ({
                         const imgIdx = imageMessages.findIndex((m) => m.id === msg.id);
                         return (
                         <div className="space-y-2">
-                          <div className="relative border border-zinc-800/40 bg-zinc-900/60 overflow-hidden group rounded-xl">
+                          <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
                             <img
                               src={msg.message}
                               alt="Classified attachment"
@@ -2125,9 +2384,6 @@ const ChatRoom = ({
                             >
                               <LuTriangleAlert className="inline mr-2" size={14} />
                               Failed to decrypt image
-                            </div>
-                            <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest rounded-lg border border-zinc-700/30 flex items-center gap-1">
-                              <LuLock size={10} /> Classified Attachment
                             </div>
                             {/* Zoom hint overlay */}
                             <div
@@ -2151,9 +2407,135 @@ const ChatRoom = ({
                         </div>
                         );
                       })()
+                    ) : msg.type === "audio" ? (
+                      <div className="space-y-2">
+                        <div className={`relative overflow-hidden rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
+                          {(() => {
+                            const audioId = `audio-${msg.id}`;
+                            return (
+                              <div className="p-3 space-y-2">
+                                <div className="flex items-center gap-2.5">
+                                  <button
+                                    onClick={() => {
+                                      const el = document.getElementById(audioId);
+                                      if (!el) return;
+                                      if (el.paused) {
+                                        // pause all other players first
+                                        document.querySelectorAll('audio[id^="audio-"]').forEach(a => { if (a.id !== audioId) a.pause(); });
+                                        el.play().catch(() => {});
+                                      } else {
+                                        el.pause();
+                                      }
+                                    }}
+                                    className={`p-2 rounded-full transition-all active:scale-90 shrink-0 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800" : "bg-white/10 hover:bg-white/20"}`}
+                                  >
+                                    <LuPlay size={14} className={msg.own ? "text-white" : "text-white"} id={`${audioId}-play-icon`} />
+                                  </button>
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div
+                                      className={`relative h-1.5 rounded-full cursor-pointer group ${msg.own ? "bg-zinc-400/40" : "bg-zinc-700/50"}`}
+                                      onClick={(e) => {
+                                        const el = document.getElementById(audioId);
+                                        if (!el || !el.duration) return;
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                                        el.currentTime = pct * el.duration;
+                                      }}
+                                    >
+                                      <div
+                                        id={`${audioId}-progress`}
+                                        className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-150 ${msg.own ? "bg-zinc-900/70" : "bg-white/60"}`}
+                                        style={{ width: '0%' }}
+                                      />
+                                      <div className={`absolute inset-0 rounded-full transition-colors ${msg.own ? "bg-black/0 group-hover:bg-black/5" : "bg-white/0 group-hover:bg-white/5"}`} />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span id={`${audioId}-time`} className={`text-[9px] font-mono font-bold tabular-nums tracking-wider ${msg.own ? "text-zinc-600" : "text-zinc-500"}`}>
+                                        0:00 / {formatDuration(msg.audioDuration || 0)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    id={`${audioId}-speed-btn`}
+                                    onClick={() => {
+                                      const el = document.getElementById(audioId);
+                                      const btn = document.getElementById(`${audioId}-speed-btn`);
+                                      if (!el || !btn) return;
+                                      const speeds = [1, 1.5, 2, 0.5];
+                                      const cur = el.playbackRate;
+                                      const idx = speeds.indexOf(cur);
+                                      const next = speeds[(idx + 1) % speeds.length];
+                                      el.playbackRate = next;
+                                      btn.textContent = next + 'x';
+                                    }}
+                                    className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-bold transition-all active:scale-90 shrink-0 ${msg.own ? "text-zinc-600 hover:text-zinc-900 bg-zinc-300/50 hover:bg-zinc-300 border border-zinc-400/30" : "text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/30"}`}
+                                  >
+                                    1x
+                                  </button>
+                                </div>
+                                <audio
+                                  id={audioId}
+                                  src={msg.message}
+                                  preload="metadata"
+                                  onTimeUpdate={(e) => {
+                                    const el = e.target;
+                                    const prog = document.getElementById(`${audioId}-progress`);
+                                    const timeEl = document.getElementById(`${audioId}-time`);
+                                    const playIcon = document.getElementById(`${audioId}-play-icon`);
+                                    if (prog && el.duration) prog.style.width = `${(el.currentTime / el.duration) * 100}%`;
+                                    if (timeEl) timeEl.textContent = `${formatDuration(Math.floor(el.currentTime))} / ${formatDuration(Math.floor(el.duration) || msg.audioDuration || 0)}`;
+                                  }}
+                                  onPlay={(e) => {
+                                    const btn = e.target.parentElement?.querySelector('button');
+                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><line x1="6" y1="4" x2="6" y2="20"></line><line x1="18" y1="4" x2="18" y2="20"></line></svg>';
+                                  }}
+                                  onPause={(e) => {
+                                    const btn = e.target.parentElement?.querySelector('button');
+                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                                  }}
+                                  onEnded={(e) => {
+                                    const prog = document.getElementById(`${audioId}-progress`);
+                                    if (prog) prog.style.width = '0%';
+                                    e.target.currentTime = 0;
+                                    const btn = e.target.parentElement?.querySelector('button');
+                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                                  }}
+                                  className="hidden"
+                                />
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    ) : msg.type === "file" ? (
+                      <div className="space-y-2">
+                        <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
+                          <div className="flex items-center gap-3 p-3.5">
+                            <div className={`p-2.5 rounded-xl shrink-0 ${msg.own ? "bg-zinc-900/10 border border-zinc-300/40" : "bg-white/5 border border-zinc-700/30"}`}>
+                              {React.createElement(getFileIcon(msg.fileType), { size: 22, className: msg.own ? "text-zinc-700" : "text-zinc-300" })}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-[11px] sm:text-xs font-bold truncate ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
+                                {msg.fileName || 'Classified File'}
+                              </p>
+                              <p className={`text-[9px] uppercase tracking-widest font-bold mt-0.5 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}>
+                                {formatFileSize(msg.fileSize)} • {(msg.fileType || 'unknown').split('/').pop()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => downloadFile(msg.message, msg.fileName)}
+                              className={`px-3 py-2 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg shrink-0 active:scale-95 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700" : "bg-white/5 hover:bg-white hover:text-black text-zinc-400 border border-zinc-700/30 hover:border-white"}`}
+                              title="Download file"
+                            >
+                              <LuDownload size={13} />
+                              <span className="hidden sm:inline">Download</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     ) : msg.type === "high-clearance" ? (
                       <div className="space-y-2">
-                        <div className="relative border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 p-5 sm:p-6 text-center rounded-xl overflow-hidden">
+                        <div className={`relative p-5 sm:p-6 text-center rounded-xl overflow-hidden ${msg.own ? "border border-zinc-400/30 bg-gradient-to-br from-zinc-800 to-zinc-900" : "border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20"}`}>
                           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
                           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/25 to-transparent" />
                           
@@ -2203,6 +2585,7 @@ const ChatRoom = ({
                                       id: msg.id,
                                       content: parsedContent.content || '',
                                       image: parsedContent.image,
+                                      file: parsedContent.file,
                                       audio: parsedContent.audio,
                                       type: 'high-clearance',
                                       requiresBiometric: msg.requiresBiometric,
@@ -2291,7 +2674,7 @@ const ChatRoom = ({
                         >
                           <LuEyeOff size={13} /> Local Hide
                         </button>
-                        {msg.own && !msg.poll && (
+                        {msg.own && !msg.poll && !msg.type && (
                           <>
                             <button
                               onClick={() => startEditing(msg)}
@@ -2299,6 +2682,10 @@ const ChatRoom = ({
                             >
                               <LuPencil size={13} /> Edit Signal
                             </button>
+                          </>
+                        )}
+                        {msg.own && !msg.poll && (
+                          <>
                             <div className="border-t border-zinc-800/30 mx-3" />
                             <button
                               onClick={() => {
@@ -2459,7 +2846,7 @@ const ChatRoom = ({
           )}
 
           <div
-            className={`flex ${imagePreview ? "flex-col" : "items-center"} p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
+            className={`flex ${imagePreview || selectedFile ? "flex-col" : "items-center"} p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
             <div className="flex items-center w-full">
               <div className="flex items-center">
@@ -2512,17 +2899,17 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selectedImage ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                  title="Attach classified image"
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selectedImage || selectedFile ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title="Attach file or image"
                   disabled={!!editingMessageId}
                 >
-                  <LuImage size={16} />
+                  <LuPaperclip size={16} />
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
+                  accept="*/*"
+                  onChange={handleFileSelect}
                   className="hidden"
                 />
 
@@ -2536,45 +2923,141 @@ const ChatRoom = ({
                   <LuLock size={17} />
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${isRecording ? "text-red-400 bg-red-500/15 animate-pulse" : audioBlob ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title={isRecording ? "Stop recording" : "Record voice message"}
+                  disabled={!!editingMessageId}
+                >
+                  {isRecording ? <LuSquare size={14} /> : <LuMic size={16} />}
+                </button>
               </div>
 
               <div className="w-px h-6 bg-zinc-800/40 mx-1 shrink-0 hidden sm:block" />
 
-              {replyingTo && !editingMessageId && !imagePreview && (
-                <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
-                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                    <LuReply size={11} className="text-white" />
-                    <span>Replying to: {replyingTo.username}</span>
-                    <button
-                      onClick={() => setReplyingTo(null)}
-                      className="hover:text-red-400 transition-colors ml-1"
-                    >
-                      <LuX size={12} />
-                    </button>
+              {/* Recording state - animated waveform UI */}
+              {isRecording ? (
+                <div className="flex-1 flex items-center gap-3 px-2 sm:px-3">
+                  <div className="relative flex items-center gap-0.5 h-8 flex-1">
+                    {audioLevels.map((level, i) => (
+                      <motion.div
+                        key={i}
+                        className="flex-1 rounded-full bg-red-500"
+                        animate={{
+                          height: `${Math.max(4, level * 28)}px`,
+                          opacity: 0.4 + level * 0.6,
+                        }}
+                        transition={{ duration: 0.08, ease: "easeOut" }}
+                        style={{ minWidth: 2, maxWidth: 6 }}
+                      />
+                    ))}
                   </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-red-400 text-[11px] font-mono font-bold tabular-nums tracking-wider">
+                      {formatDuration(recordingDuration)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={cancelRecording}
+                    className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90"
+                    title="Cancel recording"
+                  >
+                    <LuTrash2 size={14} />
+                  </button>
                 </div>
-              )}
 
-              {!imagePreview && (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={currentMessage}
-                  placeholder={
-                    editingMessageId
-                      ? "Editing message..."
-                      : "Type your encrypted signal..."
-                  }
-                  className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-700 text-xs sm:text-sm font-mono tracking-wide min-w-0"
-                  onChange={handleInputChange}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                />
+              ) : audioBlob && audioPreviewUrl ? (
+                /* Audio preview before sending */
+                <div className="flex-1 flex items-center gap-2 px-2 sm:px-3">
+                  <button
+                    onClick={() => {
+                      if (!audioPreviewRef.current) return;
+                      if (isPlayingPreview) {
+                        audioPreviewRef.current.pause();
+                        setIsPlayingPreview(false);
+                      } else {
+                        audioPreviewRef.current.play();
+                        setIsPlayingPreview(true);
+                      }
+                    }}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
+                  >
+                    {isPlayingPreview ? <LuPause size={14} /> : <LuPlay size={14} />}
+                  </button>
+                  <audio
+                    ref={audioPreviewRef}
+                    src={audioPreviewUrl}
+                    onEnded={() => setIsPlayingPreview(false)}
+                    className="hidden"
+                  />
+                  <div className="flex-1 flex items-center gap-1.5 h-8">
+                    {/* Static waveform bars for preview */}
+                    {Array.from({ length: 32 }).map((_, i) => {
+                      const h = Math.sin(i * 0.5) * 0.5 + Math.random() * 0.5;
+                      return (
+                        <div
+                          key={i}
+                          className="flex-1 rounded-full bg-white/30"
+                          style={{ height: `${Math.max(3, h * 24)}px`, minWidth: 2, maxWidth: 5 }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="text-zinc-400 text-[10px] font-mono font-bold tabular-nums tracking-wider shrink-0">
+                    {formatDuration(recordingDuration)}
+                  </span>
+                  <button
+                    onClick={cancelRecording}
+                    className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90"
+                    title="Discard"
+                  >
+                    <LuTrash2 size={14} />
+                  </button>
+                </div>
+
+              ) : (
+                /* Normal text input */
+                <>
+                  {replyingTo && !editingMessageId && !imagePreview && !selectedFile && (
+                    <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
+                      <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                        <LuReply size={11} className="text-white" />
+                        <span>Replying to: {replyingTo.username}</span>
+                        <button
+                          onClick={() => setReplyingTo(null)}
+                          className="hover:text-red-400 transition-colors ml-1"
+                        >
+                          <LuX size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!imagePreview && !selectedFile && (
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={currentMessage}
+                      placeholder={
+                        editingMessageId
+                          ? "Editing message..."
+                          : "Type your encrypted signal..."
+                      }
+                      className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-700 text-xs sm:text-sm font-mono tracking-wide min-w-0"
+                      onChange={handleInputChange}
+                      onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                    />
+                  )}
+                </>
               )}
 
               <button
-                onClick={selectedImage ? sendImageMessage : sendMessage}
+                onClick={audioBlob ? sendAudioMessage : selectedImage ? sendImageMessage : selectedFile ? sendFileMessage : sendMessage}
                 className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 ${editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
-                disabled={!selectedImage && !currentMessage.trim()}
+                disabled={!audioBlob && !selectedImage && !selectedFile && !currentMessage.trim()}
               >
                 {editingMessageId ? (
                   <LuCheck size={16} strokeWidth={2.5} />
@@ -2584,26 +3067,50 @@ const ChatRoom = ({
               </button>
             </div>
 
-            {imagePreview && !editingMessageId && (
+            {(imagePreview || selectedFile) && !editingMessageId && !isRecording && !audioBlob && (
               <div className="w-full px-2 py-2 border-t border-zinc-800/40">
-                <div className="relative inline-block border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="max-h-32 max-w-full object-contain"
-                  />
-                  <button
-                    onClick={clearImageAttachment}
-                    className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
-                    title="Remove image"
-                  >
-                    <LuX size={14} />
-                  </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1.5 uppercase tracking-widest flex items-center gap-1">
-                    <LuLock size={9} /> Classified Attachment • Will be
-                    encrypted
+                {imagePreview ? (
+                  <div className="relative inline-block border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="max-h-32 max-w-full object-contain"
+                    />
+                    <button
+                      onClick={clearAttachment}
+                      className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
+                      title="Remove image"
+                    >
+                      <LuX size={14} />
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1.5 uppercase tracking-widest flex items-center gap-1">
+                      <LuLock size={9} /> Classified Attachment • Will be
+                      encrypted
+                    </div>
                   </div>
-                </div>
+                ) : selectedFile ? (
+                  <div className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3.5 py-3 pr-10">
+                    <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
+                      {React.createElement(getFileIcon(selectedFile.type), { size: 18, className: "text-zinc-300" })}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">{selectedFile.name}</p>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
+                        {formatFileSize(selectedFile.size)} • {(selectedFile.type || 'unknown').split('/').pop()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={clearAttachment}
+                      className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
+                      title="Remove file"
+                    >
+                      <LuX size={14} />
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest flex items-center gap-1 rounded-b-lg">
+                      <LuLock size={9} /> Encrypted File Attachment
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -2918,13 +3425,13 @@ const ChatRoom = ({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.94 }}
                     transition={{ duration: 0.18 }}
-                    className="flex flex-col items-center gap-3 px-14 sm:px-20 max-w-[95vw] max-h-[90vh]"
+                    className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100vh-5rem)] max-w-[calc(100vw-2rem)] p-4 sm:p-6"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <img
                       src={current?.message}
                       alt="Full preview"
-                      className="max-w-full max-h-[80vh] object-contain rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
+                      className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
                     />
                     {/* Sender info + download */}
                     <div className="flex items-center gap-3">

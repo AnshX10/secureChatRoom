@@ -13,6 +13,9 @@ import {
   LuImage,
   LuMic,
   LuFileText,
+  LuDownload,
+  LuFile,
+  LuMaximize2,
 } from 'react-icons/lu';
 import {
   authenticateBiometric,
@@ -38,6 +41,17 @@ const BiometricVault = ({
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [scanAnimation, setScanAnimation] = useState(false);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+
+  // Keyboard support for image preview
+  useEffect(() => {
+    if (!imagePreviewOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setImagePreviewOpen(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [imagePreviewOpen]);
 
   useEffect(() => {
     const checkCapabilities = async () => {
@@ -58,6 +72,7 @@ const BiometricVault = ({
         setCountdown(prev => {
           if (prev <= 1) {
             setIsDecrypted(false);
+            setImagePreviewOpen(false);
             return 0;
           }
           return prev - 1;
@@ -197,6 +212,7 @@ const BiometricVault = ({
                       const contentTypes = [];
                       if (message?.content) contentTypes.push('Text');
                       if (message?.image) contentTypes.push('Image');
+                      if (message?.file) contentTypes.push('File');
                       if (message?.audio) contentTypes.push('Audio');
                       const typeStr = contentTypes.length > 0 ? ` (${contentTypes.join(', ')})` : '';
                       return `High clearance message requires biometric authentication${typeStr}`;
@@ -335,22 +351,45 @@ const BiometricVault = ({
                           <LuImage size={11} />
                           Classified Image
                         </p>
-                        <div className="relative border border-zinc-800/30 bg-black/30 overflow-hidden rounded-xl">
+                        <div className="relative border border-zinc-800/30 bg-black/30 overflow-hidden rounded-xl group">
                           <img 
                             src={message.image} 
                             alt="Classified" 
-                            className="max-w-full max-h-64 object-contain w-full"
+                            className="max-w-full max-h-64 object-contain w-full cursor-zoom-in"
+                            onClick={() => setImagePreviewOpen(true)}
                             onError={(e) => {
                               e.target.style.display = 'none';
                               e.target.nextSibling.style.display = 'block';
                             }}
                           />
+                          {/* Zoom hint */}
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            <div className="bg-black/60 backdrop-blur-sm rounded-full p-2 border border-zinc-700/40">
+                              <LuMaximize2 size={16} className="text-white" />
+                            </div>
+                          </div>
                           <div
                             style={{ display: 'none' }}
                             className="p-4 text-center text-zinc-500 text-xs"
                           >
                             <LuTriangleAlert className="inline mr-2" size={13} />
                             Failed to load classified image
+                          </div>
+                          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = message.image;
+                                link.download = `classified_hc_image_${Date.now()}.png`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-1.5 text-[9px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
+                            >
+                              <LuDownload size={12} />
+                              Download
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -363,18 +402,78 @@ const BiometricVault = ({
                           <LuMic size={11} />
                           Voice Memo
                         </p>
-                        <div className="bg-black/30 p-3 border border-zinc-800/30 rounded-lg">
+                        <div className="bg-black/30 p-3 border border-zinc-800/30 rounded-lg space-y-2">
                           <audio 
                             controls 
                             src={typeof message.audio === 'string' ? message.audio : URL.createObjectURL(message.audio)}
                             className="w-full"
                           />
+                          <button
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = typeof message.audio === 'string' ? message.audio : URL.createObjectURL(message.audio);
+                              link.download = `classified_hc_audio_${Date.now()}.wav`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="w-full bg-white/5 hover:bg-white hover:text-black text-zinc-400 py-2 text-[9px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center justify-center gap-1.5 rounded-lg active:scale-95"
+                          >
+                            <LuDownload size={12} />
+                            Download Audio
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* File Content */}
+                    {message.file && (
+                      <div>
+                        <p className="text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold mb-2 flex items-center gap-1.5">
+                          <LuFile size={11} />
+                          Classified File
+                        </p>
+                        <div className="bg-black/30 border border-zinc-800/30 rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-3 p-3">
+                            <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30 shrink-0">
+                              {message.file.type && (message.file.type.includes('pdf') || message.file.type.includes('text') || message.file.type.includes('document') || message.file.type.includes('word')) ? (
+                                <LuFileText size={18} className="text-zinc-300" />
+                              ) : (
+                                <LuFile size={18} className="text-zinc-300" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] text-zinc-200 font-bold truncate">{message.file.name || 'Classified File'}</p>
+                              <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mt-0.5">
+                                {message.file.size ? (
+                                  message.file.size < 1024 ? message.file.size + ' B'
+                                  : message.file.size < 1024 * 1024 ? (message.file.size / 1024).toFixed(1) + ' KB'
+                                  : (message.file.size / (1024 * 1024)).toFixed(1) + ' MB'
+                                ) : 'Unknown size'}
+                                {message.file.type ? ` • ${message.file.type.split('/').pop()}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = message.file.data;
+                              link.download = message.file.name || `classified_hc_file_${Date.now()}`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="w-full bg-white/5 hover:bg-white hover:text-black text-zinc-400 py-2.5 text-[9px] uppercase tracking-widest border-t border-zinc-800/30 hover:border-white font-bold transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                          >
+                            <LuDownload size={12} />
+                            Download File
+                          </button>
                         </div>
                       </div>
                     )}
 
                     {/* Fallback for legacy format */}
-                    {!message.content && !message.image && !message.audio && typeof message === 'string' && (
+                    {!message.content && !message.image && !message.file && !message.audio && typeof message === 'string' && (
                       <div>
                         <p className="text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold mb-2">
                           Legacy Message
@@ -420,6 +519,60 @@ const BiometricVault = ({
             )}
           </div>
         </motion.div>
+
+        {/* Fullscreen Image Preview */}
+        <AnimatePresence>
+          {imagePreviewOpen && message?.image && (
+            <motion.div
+              key="hc-image-preview"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/95 backdrop-blur-xl"
+              onClick={() => setImagePreviewOpen(false)}
+            >
+              {/* Close button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setImagePreviewOpen(false); }}
+                className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 transition-all hover:scale-105 active:scale-95"
+              >
+                <LuX size={20} />
+              </button>
+
+              {/* Image */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.94 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100vh-5rem)] max-w-[calc(100vw-2rem)] p-4 sm:p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img
+                  src={message.image}
+                  alt="Full preview"
+                  className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
+                />
+                {/* Download */}
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = message.image;
+                    link.download = `classified_hc_image_${Date.now()}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 hover:border-white text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
+                >
+                  <LuDownload size={12} />
+                  Download
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </AnimatePresence>
   );

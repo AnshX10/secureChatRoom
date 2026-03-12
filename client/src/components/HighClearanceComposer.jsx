@@ -11,6 +11,9 @@ import {
   LuKeyRound,
   LuShieldCheck,
   LuShieldAlert,
+  LuPaperclip,
+  LuFile,
+  LuFileText,
 } from 'react-icons/lu';
 import { getBiometricCapabilities, hasBiometricCredential, registerBiometric } from '../utils/webauthn';
 
@@ -24,6 +27,7 @@ const HighClearanceComposer = ({
   const [message, setMessage] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null); // { name, size, type, data }
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [biometricCapabilities, setBiometricCapabilities] = useState(null);
@@ -31,6 +35,7 @@ const HighClearanceComposer = ({
   const [error, setError] = useState('');
   
   const fileInputRef = useRef(null);
+  const fileAttachInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -71,6 +76,41 @@ const HighClearanceComposer = ({
     reader.readAsDataURL(file);
   };
 
+  const handleFileAttachSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('File too large. Maximum size is 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSelectedFile({
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        data: event.target.result,
+      });
+      setError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileIcon = (fileType) => {
+    if (!fileType) return LuFile;
+    if (fileType.includes('pdf') || fileType.includes('text') || fileType.includes('document') || fileType.includes('word')) return LuFileText;
+    return LuFile;
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -106,14 +146,18 @@ const HighClearanceComposer = ({
   const clearAttachments = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setSelectedFile(null);
     setAudioBlob(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    if (fileAttachInputRef.current) {
+      fileAttachInputRef.current.value = '';
+    }
   };
 
   const handleSend = async () => {
-    if (!message.trim() && !selectedImage && !audioBlob) {
+    if (!message.trim() && !selectedImage && !selectedFile && !audioBlob) {
       setError('Please enter a message or attach content');
       return;
     }
@@ -154,6 +198,12 @@ const HighClearanceComposer = ({
       type: 'high-clearance',
       content: message.trim(),
       image: selectedImage,
+      file: selectedFile ? {
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type,
+        data: selectedFile.data,
+      } : null,
       audio: audioData,
       requiresBiometric: biometricCapabilities?.supported && hasCredential,
       timestamp: Date.now(),
@@ -315,12 +365,12 @@ const HighClearanceComposer = ({
               </div>
 
               {/* Attachments */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {/* Image Attachment */}
                 <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
-                      Image Attachment
+                      Image
                     </span>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -358,6 +408,58 @@ const HighClearanceComposer = ({
                     type="file"
                     accept="image/*"
                     onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* File Attachment */}
+                <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
+                      File
+                    </span>
+                    <button
+                      onClick={() => fileAttachInputRef.current?.click()}
+                      className="p-2 text-zinc-500 hover:text-white transition-all hover:bg-white/5 rounded-lg active:scale-90"
+                    >
+                      <LuPaperclip size={16} />
+                    </button>
+                  </div>
+                  
+                  {selectedFile ? (
+                    <div className="relative">
+                      <div className="flex items-center gap-2.5 p-2.5 border border-zinc-800/40 rounded-lg bg-zinc-900/40">
+                        <div className="p-1.5 bg-white/5 rounded-lg border border-zinc-700/30 shrink-0">
+                          {React.createElement(getFileIcon(selectedFile.type), { size: 16, className: 'text-zinc-300' })}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-zinc-200 font-bold truncate">{selectedFile.name}</p>
+                          <p className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold">
+                            {formatFileSize(selectedFile.size)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedFile(null);
+                          if (fileAttachInputRef.current) fileAttachInputRef.current.value = '';
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition-all rounded-lg active:scale-90"
+                      >
+                        <LuX size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-center text-zinc-600 text-[10px] py-4 uppercase tracking-wider">
+                      No file selected
+                    </div>
+                  )}
+                  
+                  <input
+                    ref={fileAttachInputRef}
+                    type="file"
+                    accept="*/*"
+                    onChange={handleFileAttachSelect}
                     className="hidden"
                   />
                 </div>
@@ -414,7 +516,7 @@ const HighClearanceComposer = ({
                 <button
                   onClick={handleSend}
                   disabled={
-                    (!message.trim() && !selectedImage && !audioBlob) ||
+                    (!message.trim() && !selectedImage && !selectedFile && !audioBlob) ||
                     (biometricCapabilities?.supported && !hasCredential)
                   }
                   className="flex-1 bg-white hover:bg-zinc-100 text-black py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-white/10 active:scale-[0.98]"
