@@ -1,37 +1,50 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  IoMdSend,
-  IoMdPeople,
-  IoMdLock,
-  IoMdCopy,
-  IoMdMore,
-  IoMdTrash,
-  IoMdCreate,
-  IoMdClose,
-  IoMdExit,
-  IoMdTimer,
-  IoMdPulse,
-  IoMdRemoveCircle,
-  IoMdTime,
-  IoMdWarning,
-  IoMdReturnLeft,
-  IoMdStar,
-  IoMdStarOutline,
-  IoMdPin,
-  IoMdStats,
-  IoMdCheckmark,
-  IoMdLink,
-  IoMdKey,
-  IoMdDownload,
-  IoMdFingerPrint,
-} from "react-icons/io";
+  LuSend,
+  LuUsers,
+  LuLock,
+  LuCopy,
+  LuEllipsisVertical,
+  LuTrash2,
+  LuPencil,
+  LuX,
+  LuLogOut,
+  LuTimer,
+  LuActivity,
+  LuUserMinus,
+  LuClock,
+  LuTriangleAlert,
+  LuReply,
+  LuStar,
+  LuPin,
+  LuChartBar,
+  LuCheck,
+  LuPaperclip,
+  LuKeyRound,
+  LuDownload,
+  LuFingerprint,
+  LuShieldCheck,
+  LuEye,
+  LuEyeOff,
+  LuBell,
+  LuBellOff,
+  LuChevronRight,
+  LuMessageSquarePlus,
+  LuShieldAlert,
+  LuImage,
+  LuHash,
+  LuCrown,
+  LuCircleDot,
+  LuCheckCheck,
+} from "react-icons/lu";
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
 import { encryptMagicLinkPayload } from "../utils/magicLink";
 import BiometricVault from "./BiometricVault";
 import HighClearanceComposer from "./HighClearanceComposer";
+import { thanosSnap } from "../utils/thanosSnap";
 
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
@@ -69,6 +82,7 @@ const ChatRoom = ({
 }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
+  const [deletingIds, setDeletingIds] = useState(new Set());
   const [users, setUsers] = useState(initialUsers || []);
   const [showUsers, setShowUsers] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -179,7 +193,7 @@ const ChatRoom = ({
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-2 decoration-dotted hover:text-blue-300 break-all"
+          className="underline underline-offset-2 decoration-dotted hover:text-zinc-300 break-all"
         >
           {part}
         </a>
@@ -752,11 +766,37 @@ const ChatRoom = ({
   const selectionHasOthers =
     selectedCount > 0 && selectedMessages.some((m) => !m.own);
 
+  // Telegram "Thanos Snap" animated deletion helper
+  const animateDelete = async (ids, mode = 'local') => {
+    const idArr = Array.isArray(ids) ? ids : [ids];
+    const idSet = new Set(idArr);
+    setDeletingIds(prev => new Set([...prev, ...idSet]));
+
+    // Run particle disintegration on each message bubble concurrently
+    const snaps = idArr.map((id) => {
+      const wrapper = messageRefs.current?.[id];
+      const bubble = wrapper?.querySelector('[data-bubble]') || wrapper;
+      return bubble ? thanosSnap(bubble) : Promise.resolve();
+    });
+    await Promise.all(snaps);
+
+    // Give framer-motion time to finish the height collapse
+    await new Promise((r) => setTimeout(r, 700));
+
+    // Clean up
+    setDeletingIds(prev => {
+      const next = new Set(prev);
+      idSet.forEach(id => next.delete(id));
+      return next;
+    });
+    if (mode === 'local') {
+      setMessageList(list => list.filter(m => !idSet.has(m?.id)));
+    }
+  };
+
   const bulkLocalDelete = () => {
     if (selectedCount === 0) return;
-    setMessageList((list) =>
-      list.filter((m) => !selectedMessageIds.has(m?.id)),
-    );
+    animateDelete([...selectedMessageIds], 'local');
     setSelectedMessageIds(new Set());
   };
 
@@ -1035,7 +1075,7 @@ const ChatRoom = ({
       const isOwnMessage = data.username === username;
 
       if (data.system) {
-        messageToAdd = data;
+        messageToAdd = { ...data, id: data.id || uuidv4() };
       } else if (data.type === "poll" || data.poll) {
         messageToAdd = { ...data, own: isOwnMessage };
       } else if (data.type === "image") {
@@ -1073,7 +1113,21 @@ const ChatRoom = ({
           : prev.filter((u) => u !== typingUser),
       );
     });
-    socket.on("message_deleted", (deletedId) => {
+    socket.on("message_deleted", async (deletedId) => {
+      // Run Thanos-snap disintegration on the message bubble
+      const wrapper = messageRefs.current?.[deletedId];
+      const bubble = wrapper?.querySelector('[data-bubble]') || wrapper;
+      if (bubble) {
+        setDeletingIds(prev => new Set([...prev, deletedId]));
+        await thanosSnap(bubble);
+        // Let height collapse finish
+        await new Promise((r) => setTimeout(r, 700));
+        setDeletingIds(prev => {
+          const next = new Set(prev);
+          next.delete(deletedId);
+          return next;
+        });
+      }
       setMessageList((list) =>
         list.map((msg) =>
           msg.id === deletedId
@@ -1151,7 +1205,7 @@ const ChatRoom = ({
 
   return (
     <div
-      className={`flex h-[100dvh] w-full bg-black text-white font-mono selection:bg-white selection:text-black overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
+      className={`flex h-[100dvh] w-full bg-[#09090b] text-white font-sans selection:bg-zinc-700 selection:text-white overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
     >
       <style>{`
         @media print { body { display: none !important; } }
@@ -1181,17 +1235,17 @@ const ChatRoom = ({
         @keyframes highlight-flash {
           0% {
             transform: scale(1);
-            box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+            box-shadow: 0 0 0 rgba(255, 255, 255, 0);
             filter: brightness(1);
           }
           25% {
             transform: scale(1.01);
-            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.9), 0 0 22px rgba(251, 191, 36, 0.25);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 22px rgba(255, 255, 255, 0.25);
             filter: brightness(1.08);
           }
           100% {
             transform: scale(1);
-            box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+            box-shadow: 0 0 0 rgba(255, 255, 255, 0);
             filter: brightness(1);
           }
         }
@@ -1199,8 +1253,8 @@ const ChatRoom = ({
         .scan-overlay {
           position: absolute;
           inset: 0;
-          background: radial-gradient(1200px 500px at 20% 10%, rgba(99, 102, 241, 0.16), transparent 50%),
-                      radial-gradient(900px 400px at 80% 30%, rgba(16, 185, 129, 0.10), transparent 45%),
+          background: radial-gradient(1200px 500px at 20% 10%, rgba(255, 255, 255, 0.06), transparent 50%),
+                      radial-gradient(900px 400px at 80% 30%, rgba(255, 255, 255, 0.04), transparent 45%),
                       linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.92));
           border: 1px solid rgba(255, 255, 255, 0.06);
           pointer-events: none;
@@ -1243,12 +1297,12 @@ const ChatRoom = ({
           background: linear-gradient(
             180deg,
             transparent,
-            rgba(99, 102, 241, 0.10) 25%,
+            rgba(255, 255, 255, 0.06) 25%,
             rgba(255,255,255,0.16) 50%,
-            rgba(16, 185, 129, 0.10) 75%,
+            rgba(255, 255, 255, 0.06) 75%,
             transparent
           );
-          box-shadow: 0 0 18px rgba(99, 102, 241, 0.22);
+          box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
           animation: scan-sweep 900ms linear infinite;
         }
 
@@ -1279,7 +1333,7 @@ const ChatRoom = ({
           display: block;
           height: 100%;
           width: 40%;
-          background: linear-gradient(90deg, rgba(99,102,241,0.65), rgba(16,185,129,0.55));
+          background: linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,0.3));
           animation: scan-progress 620ms ease-in-out infinite alternate;
         }
 
@@ -1312,11 +1366,14 @@ const ChatRoom = ({
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-[9999] flex items-center justify-center select-none"
           >
-            <div className="text-red-600 font-mono font-bold text-xl uppercase tracking-widest animate-pulse flex flex-col items-center gap-4 text-center p-6 border-2 border-red-900 bg-black">
-              <IoMdWarning size={64} />
-              <div>
-                <h1 className="text-2xl mb-2">Security Protocol Engaged</h1>
-                <p className="text-xs text-zinc-500">
+            <div className="text-red-500 font-mono font-bold text-xl uppercase tracking-widest animate-pulse flex flex-col items-center gap-5 text-center p-8 border border-red-500/30 bg-red-950/20 rounded-xl backdrop-blur-md shadow-[0_0_60px_rgba(239,68,68,0.15)]">
+              <div className="relative">
+                <LuShieldAlert size={56} strokeWidth={1.5} />
+                <div className="absolute inset-0 bg-red-500/10 rounded-full blur-xl" />
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-2xl mb-2 font-black tracking-[0.15em]">Security Protocol Engaged</h1>
+                <p className="text-xs text-zinc-500 tracking-wider">
                   Screenshot / Recording / Focus Loss Detected
                 </p>
                 <p className="text-[10px] text-zinc-700 mt-2">
@@ -1359,49 +1416,55 @@ const ChatRoom = ({
             animate={{ x: 0 }}
             exit={{ x: -300 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed md:relative z-50 w-[85%] sm:w-72 h-full bg-zinc-950 border-r border-zinc-800 flex flex-col"
+            className="fixed md:relative z-50 w-[85%] sm:w-72 h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col"
           >
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-xl font-black uppercase tracking-widest flex items-center gap-2 text-white">
-                <IoMdLock /> CLASSIFIED
+            <div className="p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
+              <h2 className="text-base font-black uppercase tracking-[0.2em] flex items-center gap-2.5 text-white relative z-10">
+                <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30 shadow-lg shadow-black/10">
+                  <LuShieldCheck size={16} strokeWidth={2.5} className="text-white" />
+                </div>
+                CLASSIFIED
               </h2>
               <button
                 onClick={() => setShowUsers(false)}
-                className="md:hidden p-2 text-zinc-500 hover:text-white transition"
+                className="md:hidden p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-all relative z-10"
               >
-                <IoMdClose size={24} />
+                <LuX size={20} />
               </button>
             </div>
 
-            <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">
-              <div className="border border-zinc-800 p-4 mb-6">
-                <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-[0.2em]">
-                  Operation ID
+            <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
+              <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 relative overflow-hidden">
+                <div className="absolute inset-0 animate-shimmer pointer-events-none" />
+                <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2.5 tracking-[0.2em] flex items-center gap-1.5 relative">
+                  <LuHash size={11} className="text-zinc-500" /> Operation ID
                 </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold tracking-widest text-white">
+                <div className="flex items-center justify-between gap-2 relative">
+                  <span className="text-[13px] font-bold tracking-[0.18em] text-zinc-200 truncate font-mono">
                     {roomId}
                   </span>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(roomId);
                     }}
-                    className="p-2 hover:bg-white hover:text-black transition text-zinc-400"
+                    className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-zinc-600 hover:text-white shrink-0 active:scale-90"
+                    title="Copy Room ID"
                   >
-                    <IoMdCopy />
+                    <LuCopy size={13} />
                   </button>
                 </div>
               </div>
 
               {isHost && (
-                <div className="border border-zinc-800 p-4 mb-6">
+                <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-2">
-                      <IoMdLink /> Magic Invite
+                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
+                      <LuKeyRound size={11} className="text-zinc-500" /> Magic Invite
                     </p>
                     <button
                       onClick={() => setShowMagicLink(!showMagicLink)}
-                      className="text-[8px] uppercase text-zinc-500 hover:text-white transition font-bold"
+                      className="text-[8px] uppercase text-zinc-600 hover:text-white transition-all font-bold px-2 py-1 rounded-md hover:bg-white/5 active:scale-95"
                     >
                       {showMagicLink ? "Hide" : "Show"}
                     </button>
@@ -1415,8 +1478,8 @@ const ChatRoom = ({
                       );
                       const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
                       return (
-                        <div className="space-y-4">
-                          <div className="bg-zinc-900 border border-zinc-700 p-3 rounded">
+                        <div className="space-y-3">
+                          <div className="bg-black/40 border border-zinc-800/50 p-3 rounded-lg">
                             <p className="text-[8px] uppercase text-zinc-500 mb-2 tracking-widest">
                               Invite Link
                             </p>
@@ -1425,29 +1488,28 @@ const ChatRoom = ({
                                 type="text"
                                 value={magicLink}
                                 readOnly
-                                className="flex-1 bg-transparent text-[9px] text-zinc-300 font-mono truncate outline-none"
+                                className="flex-1 bg-transparent text-[9px] text-zinc-400 font-mono truncate outline-none selection:bg-zinc-600/30"
                               />
                               <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(magicLink);
-                                  // Visual feedback could be added here
                                 }}
-                                className="p-1.5 hover:bg-white hover:text-black transition text-zinc-400 shrink-0"
+                                className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-zinc-600 hover:text-white shrink-0 active:scale-90"
                                 title="Copy link"
                               >
-                                <IoMdCopy size={14} />
+                                <LuCopy size={13} />
                               </button>
                             </div>
                           </div>
 
                           {QRCodeComponent && (
-                            <div className="flex justify-center bg-zinc-900 border border-zinc-700 p-4 rounded">
+                            <div className="flex justify-center bg-black/40 border border-zinc-800/50 p-4 rounded-lg">
                               <QRCodeComponent
                                 value={magicLink}
-                                size={160}
+                                size={148}
                                 level="M"
-                                bgColor="#18181b"
-                                fgColor="#ffffff"
+                                bgColor="#0a0a0c"
+                                fgColor="#e4e4e7"
                               />
                             </div>
                           )}
@@ -1463,8 +1525,10 @@ const ChatRoom = ({
               )}
 
               {isHost && joinRequests.length > 0 && (
-                <div className="border border-amber-500/60 bg-black/60 p-4 mb-6">
-                  <p className="text-[9px] uppercase font-black text-amber-400 tracking-[0.25em] mb-2">
+                <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/40 to-transparent" />
+                  <p className="text-[9px] uppercase font-black text-zinc-300 tracking-[0.25em] mb-3 flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span></span>
                     Join Requests
                   </p>
                   <div className="space-y-3">
@@ -1482,18 +1546,18 @@ const ChatRoom = ({
                             onClick={() =>
                               decideJoinRequest(req.socketId, true)
                             }
-                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-green-600 text-green-400 hover:bg-green-500 hover:text-black transition-colors"
+                            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-zinc-600/50 text-white hover:bg-white hover:text-black rounded transition-all"
                           >
-                            Accept
+                            <LuCheck size={12} className="inline mr-1" />Accept
                           </button>
                           <button
                             type="button"
                             onClick={() =>
                               decideJoinRequest(req.socketId, false)
                             }
-                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-red-700 text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+                            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-red-700/50 text-red-400 hover:bg-red-600 hover:text-white rounded transition-all"
                           >
-                            Reject
+                            <LuX size={12} className="inline mr-1" />Reject
                           </button>
                         </div>
                       </div>
@@ -1502,48 +1566,64 @@ const ChatRoom = ({
                 </div>
               )}
 
-              <h3 className="text-[10px] uppercase font-bold text-zinc-500 mb-4 tracking-widest">
-                Agents Active ({users.length})
-              </h3>
+              <div className="flex items-center justify-between mb-4 mt-1">
+                <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
+                  <LuUsers size={11} className="text-zinc-600" /> Agents Online
+                </h3>
+                <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30">
+                  {users.length}
+                </span>
+              </div>
 
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {users.length === 0 ? (
-                  <div className="flex items-center justify-between p-2 border border-zinc-800 bg-zinc-900 shadow-inner">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-800/40 bg-zinc-900/40">
                     <div className="flex items-center gap-3 truncate">
-                      <div className="w-8 h-8 bg-zinc-800 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-white">
+                      <div className="w-9 h-9 bg-gradient-to-br from-white to-zinc-300 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 shadow-lg shadow-white/10 ring-2 ring-white/20">
                         {username[0].toUpperCase()}
                       </div>
                       <span className="text-xs uppercase tracking-wide truncate">
                         {username}{" "}
                         <span className="text-zinc-600 ml-1">(YOU)</span>
                         {isHost && (
-                          <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">
-                            HOST
+                          <span className="ml-2 text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
+                            <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
                           </span>
                         )}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  users.map((user, i) => (
+                  users.map((user, i) => {
+                    const colors = [
+                      'from-zinc-300 to-zinc-500',
+                      'from-zinc-400 to-zinc-600',
+                      'from-zinc-200 to-zinc-400',
+                      'from-zinc-500 to-zinc-700',
+                      'from-zinc-300 to-zinc-600',
+                      'from-zinc-400 to-zinc-500',
+                    ];
+                    const colorClass = colors[i % colors.length];
+                    return (
                     <div
                       key={i}
-                      className="flex items-center justify-between p-2 border border-transparent hover:bg-zinc-900 group transition-colors"
+                      className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/[0.03] group transition-all"
                     >
                       <div className="flex items-center gap-3 truncate">
-                        <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-zinc-400">
+                        <div className={`w-9 h-9 bg-gradient-to-br ${user.username === username ? 'from-white to-zinc-300 shadow-lg shadow-white/10 ring-2 ring-white/20' : colorClass} rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 relative`}>
                           {user.username[0].toUpperCase()}
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-white rounded-full border-2 border-[#0a0a0c] shadow-sm shadow-white/20" />
                         </div>
-                        <span className="text-xs uppercase tracking-wide truncate flex items-center">
+                        <span className="text-xs uppercase tracking-wide truncate flex items-center gap-1.5">
                           {user.username}
                           {user.username === username && (
-                            <span className="text-zinc-600 ml-1 text-[10px] shrink-0">
+                            <span className="text-zinc-600 text-[10px] shrink-0">
                               (YOU)
                             </span>
                           )}
                           {user.isHost && (
-                            <span className="ml-2 text-[8px] px-1.5 py-0.5 border border-zinc-700 text-zinc-500 font-black tracking-widest leading-none shrink-0">
-                              HOST
+                            <span className="text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
+                              <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
                             </span>
                           )}
                         </span>
@@ -1551,57 +1631,64 @@ const ChatRoom = ({
                       {isHost && user.id !== socket.id && (
                         <button
                           onClick={() => kickAgent(user.id, user.username)}
-                          className="text-red-900 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                          className="text-red-900 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 rounded-lg"
+                          title={`Remove ${user.username}`}
                         >
-                          <IoMdRemoveCircle size={20} />
+                          <LuUserMinus size={16} />
                         </button>
                       )}
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </div>
 
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex-shrink-0">
-              {isHost ? (
-                <button
-                  onClick={handleTerminateClick}
-                  className="w-full border border-red-900/50 text-red-700 py-3 uppercase text-xs font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2"
-                >
-                  <IoMdExit size={16} /> TERMINATE
-                </button>
-              ) : (
-                <button
-                  onClick={handleLeaveClick}
-                  className="w-full border border-zinc-800 text-zinc-500 py-3 uppercase text-xs font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
-                >
-                  <IoMdExit size={16} /> LEAVE ROOM
-                </button>
-              )}
+            <div className="p-4 flex-shrink-0 relative">
+              <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
+              <div className="pt-1">
+                {isHost ? (
+                  <button
+                    onClick={handleTerminateClick}
+                    className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
+                  >
+                    <LuLogOut size={14} /> TERMINATE ROOM
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleLeaveClick}
+                    className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
+                  >
+                    <LuLogOut size={14} /> LEAVE ROOM
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex-1 flex flex-col min-w-0 bg-black relative">
-        <header className="h-20 sm:h-24 border-b border-zinc-800 flex items-center justify-between px-4 sm:px-6 z-30 bg-black flex-shrink-0 relative">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#09090b] relative">
+        <header className="h-16 sm:h-20 flex items-center justify-between px-4 sm:px-6 z-30 bg-[#09090b]/80 backdrop-blur-xl flex-shrink-0 relative border-b border-zinc-800/30">
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/30 to-transparent" />
           <div className="flex items-center gap-3 min-w-0 z-10">
             <Logo
               variant="shield"
-              className="w-8 h-8 sm:w-9 sm:h-9 text-white shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 text-white/80 shrink-0"
             />
             <button
               onClick={() => setShowUsers(true)}
-              className="md:hidden text-2xl text-zinc-500 hover:text-white transition p-2 -ml-2"
+              className="md:hidden text-zinc-500 hover:text-white hover:bg-white/5 rounded-xl transition-all p-2 -ml-1 active:scale-95"
             >
-              <IoMdPeople />
+              <LuUsers size={19} />
             </button>
-            <div className="hidden sm:block truncate">
-              <h1 className="font-bold uppercase tracking-[0.2em] text-[13px] text-zinc-400 truncate">
-                Secure Link Active
+            <div className="hidden sm:flex flex-col truncate">
+              <h1 className="font-bold uppercase tracking-[0.2em] text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
+                <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span></span>
+                Encrypted Session
               </h1>
-              <p className="text-[15px] text-zinc-700 uppercase tracking-widest flex items-center gap-1 mt-0.5 font-bold">
-                <IoMdTime className="text-zinc-600" size={12} />{" "}
+              <p className="text-[11px] text-zinc-600 uppercase tracking-[0.15em] flex items-center gap-1.5 mt-0.5 font-mono tabular-nums">
+                <LuClock className="text-zinc-700" size={10} />{" "}
                 {sessionDuration}
               </p>
             </div>
@@ -1609,16 +1696,16 @@ const ChatRoom = ({
 
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
             <div className="flex flex-col items-center">
-              <span className="text-[8px] sm:text-[10px] text-zinc-600 uppercase tracking-[0.4em] font-black mb-1">
-                Room Name
+              <span className="text-[7px] sm:text-[8px] text-zinc-700 uppercase tracking-[0.5em] font-bold mb-1">
+                Room
               </span>
-              <h1 className="text-lg sm:text-2xl font-black tracking-[0.15em] text-white leading-none uppercase">
+              <h1 className="text-base sm:text-xl font-black tracking-[0.12em] text-zinc-100 leading-none uppercase font-mono">
                 {roomName}
               </h1>
             </div>
           </div>
 
-          <div className="z-10 min-w-[80px] flex justify-end items-center gap-2">
+          <div className="z-10 min-w-[80px] flex justify-end items-center gap-1.5">
             {typeof Notification !== "undefined" && (
               <button
                 type="button"
@@ -1633,12 +1720,12 @@ const ChatRoom = ({
                     );
                   }
                 }}
-                className={`p-2 transition-all ${
+                className={`p-2 rounded-xl transition-all active:scale-90 ${
                   notificationPermission === "granted"
-                    ? "text-green-500 hover:text-green-400"
+                    ? "text-white hover:text-zinc-300 hover:bg-white/10"
                     : notificationPermission === "denied"
-                      ? "text-red-600 hover:text-red-500"
-                      : "text-zinc-500 hover:text-white animate-pulse"
+                      ? "text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                      : "text-zinc-500 hover:text-white hover:bg-white/5 animate-pulse"
                 }`}
                 title={
                   notificationPermission === "granted"
@@ -1648,14 +1735,11 @@ const ChatRoom = ({
                       : "Click to enable notifications"
                 }
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                </svg>
+                {notificationPermission === "denied" ? (
+                  <LuBellOff size={16} />
+                ) : (
+                  <LuBell size={16} />
+                )}
               </button>
             )}
 
@@ -1663,10 +1747,10 @@ const ChatRoom = ({
               <button
                 type="button"
                 onClick={() => setIsPanicMode(true)}
-                className={`p-2 transition-all opacity-20 hover:opacity-60 ${escPressCount > 0 ? "text-amber-500 opacity-80 animate-pulse" : "text-zinc-700 hover:text-zinc-500"}`}
+                className={`p-2 rounded-lg transition-all ${escPressCount > 0 ? "text-white opacity-80 animate-pulse bg-white/10" : "text-zinc-700 opacity-30 hover:opacity-60 hover:text-zinc-500 hover:bg-white/5"}`}
                 title="Panic Mode (or press ESC twice quickly)"
               >
-                <IoMdWarning size={16} />
+                <LuEyeOff size={15} />
               </button>
             )}
 
@@ -1676,7 +1760,7 @@ const ChatRoom = ({
                   initial={{ opacity: 0, scale: 0.8, x: 10 }}
                   animate={{ opacity: 1, scale: 1, x: 0 }}
                   exit={{ opacity: 0, scale: 0.8, x: 10 }}
-                  className="absolute top-full right-0 mt-2 bg-amber-600 text-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider border border-amber-500 shadow-lg"
+                  className="absolute top-full right-0 mt-2 bg-white text-black px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-lg shadow-white/20"
                 >
                   ESC again for panic mode
                 </motion.div>
@@ -1686,19 +1770,21 @@ const ChatRoom = ({
             <button
               type="button"
               onClick={toggleSelectMode}
-              className={`text-[8px] sm:text-[10px] border px-3 py-2 uppercase transition-all shrink-0 font-bold flex items-center gap-2 ${
+              className={`text-[8px] sm:text-[9px] border px-2.5 py-1.5 uppercase transition-all shrink-0 font-bold flex items-center gap-1.5 rounded-xl active:scale-95 ${
                 isSelectMode
-                  ? "bg-white text-black border-white"
-                  : "border-zinc-800 text-zinc-500 hover:bg-white hover:text-black hover:border-white"
+                  ? "bg-white text-black border-white shadow-lg shadow-white/10"
+                  : "border-zinc-800/50 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 hover:border-zinc-700"
               }`}
               title="Select multiple messages"
             >
+              <LuCheckCheck size={12} />
               Select
             </button>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 space-y-4 sm:space-y-6 scrollbar-hide">
+        <main className="flex-1 overflow-y-auto p-4 sm:px-6 space-y-3 sm:space-y-4 scrollbar-hide relative">
+          <div className="pointer-events-none fixed top-20 left-72 right-0 h-24 bg-gradient-to-b from-[#09090b] to-transparent z-10 hidden md:block" />
           {pinnedMessageId &&
             (() => {
               const pinnedMsg = messageList.find(
@@ -1715,20 +1801,23 @@ const ChatRoom = ({
                 : pinnedMsg.username || "UNKNOWN";
               return (
                 <div className="sticky top-0 z-20">
-                  <div className="mb-3 border border-zinc-800 bg-black/85 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.65)]">
-                    <div className="px-3 py-2 flex items-center justify-between gap-3">
+                  <div className="mb-3 bg-[#0a0a0c]/95 backdrop-blur-xl rounded-xl shadow-[0_8px_40px_rgba(0,0,0,0.6)] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/30 to-transparent" />
+                    <div className="px-3 py-2.5 flex items-center justify-between gap-3">
                       <button
                         type="button"
                         onClick={() => jumpToMessage(pinnedMessageId)}
-                        className="min-w-0 flex items-center gap-2 text-left hover:bg-white/5 transition px-2 py-1 -mx-2"
+                        className="min-w-0 flex items-center gap-2.5 text-left hover:bg-white/[0.03] rounded-lg transition px-2 py-1 -mx-2"
                         title="Jump to pinned message"
                       >
-                        <IoMdPin className="text-amber-400 shrink-0" />
+                        <div className="p-1.5 bg-white/5 rounded-lg border border-zinc-700/30">
+                          <LuPin className="text-white shrink-0" size={13} />
+                        </div>
                         <div className="min-w-0">
-                          <p className="text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500 truncate">
+                          <p className="text-[8px] uppercase tracking-[0.25em] font-black text-zinc-500 truncate">
                             Pinned • {who}
                           </p>
-                          <p className="text-[10px] text-zinc-300 truncate max-w-[80vw]">
+                          <p className="text-[10px] text-zinc-400 truncate max-w-[80vw]">
                             {preview}
                           </p>
                         </div>
@@ -1736,10 +1825,10 @@ const ChatRoom = ({
                       <button
                         type="button"
                         onClick={() => setPinnedMessageId(null)}
-                        className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 transition border border-zinc-800"
+                        className="p-1.5 text-zinc-600 hover:text-white hover:bg-white/5 transition-all rounded-lg active:scale-90"
                         title="Unpin"
                       >
-                        <IoMdClose size={16} />
+                        <LuX size={13} />
                       </button>
                     </div>
                   </div>
@@ -1747,21 +1836,56 @@ const ChatRoom = ({
               );
             })()}
 
-          {messageList.map((msg) => (
+          <AnimatePresence initial={false}>
+          {messageList.map((msg) => {
+            const isDeleting = deletingIds.has(msg.id);
+            return (
             <motion.div
               ref={(el) => {
                 if (!el || !msg?.id) return;
                 messageRefs.current[msg.id] = el;
               }}
               data-message-id={msg?.id}
-              layout
-              key={msg.id || Math.random()}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+              layout={!isDeleting ? "position" : false}
+              key={msg.id}
+              initial={
+                msg.system
+                  ? { opacity: 0, scale: 0.85 }
+                  : msg.own
+                    ? { opacity: 0, y: 20, scale: 0.96 }
+                    : { opacity: 0, x: -20, scale: 0.97 }
+              }
+              animate={{
+                opacity: isDeleting ? 0 : 1,
+                y: 0,
+                x: 0,
+                scale: 1,
+                height: isDeleting ? 0 : "auto",
+                paddingTop: isDeleting ? 0 : undefined,
+                paddingBottom: isDeleting ? 0 : undefined,
+                marginTop: isDeleting ? 0 : undefined,
+                marginBottom: isDeleting ? 0 : undefined,
+                transition: isDeleting
+                  ? { duration: 0.55, ease: [0.4, 0, 0.2, 1], delay: 1.8 }
+                  : {
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 26,
+                      mass: 0.75,
+                    },
+              }}
+              exit={{
+                opacity: 0,
+                height: 0,
+                marginTop: 0,
+                marginBottom: 0,
+                transition: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
+              }}
+              style={{ overflow: isDeleting ? "hidden" : undefined }}
               className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"}`}
             >
               {msg.system ? (
-                <span className="text-[8px] sm:text-[9px] border border-zinc-900 text-zinc-600 px-3 py-1 uppercase tracking-[0.2em]">
+                <span className="text-[8px] sm:text-[9px] text-zinc-600 px-4 py-1.5 uppercase tracking-[0.2em] rounded-full bg-zinc-900/30 border border-zinc-800/20 backdrop-blur-sm font-mono">
                   {msg.message}
                 </span>
               ) : (
@@ -1773,29 +1897,26 @@ const ChatRoom = ({
                         e.stopPropagation();
                         toggleSelectMessage(msg.id);
                       }}
-                      className={`absolute -top-2 ${msg.own ? "left-0" : "right-0"} z-40 w-7 h-7 border border-zinc-700 bg-black flex items-center justify-center hover:border-white transition`}
+                      className={`absolute -top-2.5 ${msg.own ? "left-0" : "right-0"} z-40 w-6 h-6 rounded-lg border bg-[#0a0a0c] flex items-center justify-center transition-all ${selectedMessageIds.has(msg.id) ? "border-white bg-white shadow-lg shadow-white/25" : "border-zinc-700/50 hover:border-zinc-500"}`}
                       title={
                         selectedMessageIds.has(msg.id) ? "Unselect" : "Select"
                       }
                     >
-                      <span
-                        className={`w-4 h-4 border ${selectedMessageIds.has(msg.id) ? "bg-indigo-600 border-indigo-600" : "border-zinc-600"} flex items-center justify-center`}
-                      >
-                        {selectedMessageIds.has(msg.id) && (
-                          <IoMdCheckmark className="text-white" />
-                        )}
-                      </span>
+                      {selectedMessageIds.has(msg.id) && (
+                        <LuCheck className="text-black" size={14} />
+                      )}
                     </button>
                   )}
                   <div
-                    className={`p-3 sm:p-4 relative border transition-all ${
+                    data-bubble
+                    className={`px-3.5 py-3 sm:px-4 sm:py-3.5 relative transition-all rounded-2xl ${
                       msg.deleted
-                        ? "bg-transparent border-zinc-900 text-zinc-700 italic"
+                        ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
                         : msg.poll
-                          ? "bg-zinc-950 text-zinc-200 border-zinc-800"
+                          ? "bg-zinc-900/60 text-zinc-200 border border-zinc-800/40 rounded-2xl"
                           : msg.own
-                            ? "bg-white text-black border-white shadow-[3px_3px_0px_rgba(255,255,255,0.05)]"
-                            : "bg-zinc-950 text-zinc-300 border-zinc-900"
+                            ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
+                            : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
                     } ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}
                   >
                     <div className="flex justify-between items-start gap-4 mb-2">
@@ -1806,18 +1927,18 @@ const ChatRoom = ({
                       )}
                       <div className="flex items-center gap-2 ml-auto shrink-0">
                         {pinnedMessageId === msg.id && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[8px] opacity-70 font-bold">
-                            <IoMdPin className="text-amber-400" /> PINNED
+                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white">
+                            <LuPin size={9} /> PINNED
                           </span>
                         )}
                         {starredMessageIds.has(msg.id) && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[8px] opacity-70 font-bold">
-                            <IoMdStar className="text-amber-400" /> STAR
+                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white">
+                            <LuStar size={9} /> STAR
                           </span>
                         )}
                         {msg.timer > 0 && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[8px] opacity-60 font-bold">
-                            <IoMdTimer /> {msg.timer / 1000}S
+                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">
+                            <LuTimer size={9} /> {msg.timer / 1000}S
                           </span>
                         )}
                       </div>
@@ -1838,19 +1959,19 @@ const ChatRoom = ({
                               jumpToMessage(msg.replyTo?.messageId);
                           }}
                           title="Jump to replied message"
-                          className={`border-l-2 px-2 py-1 text-[10px] opacity-70 w-full ${
+                          className={`border-l-2 px-3 py-1.5 text-[10px] w-full rounded-r-lg ${
                             msg.own
-                              ? "bg-black text-white border-white/60"
-                              : "bg-white text-black border-black/60"
-                          } ${msg.replyTo?.messageId ? "cursor-pointer hover:opacity-90" : ""}`}
+                              ? "bg-black/20 text-white/80 border-zinc-400"
+                              : "bg-white/10 text-zinc-300 border-zinc-500"
+                          } ${msg.replyTo?.messageId ? "cursor-pointer hover:bg-white/[0.06] transition-colors" : ""}`}
                         >
                           <p
-                            className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-white/70" : "text-black/70"}`}
+                            className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}
                           >
-                            <IoMdReturnLeft /> {msg.replyTo.username}
+                            <LuReply size={9} /> {msg.replyTo.username}
                           </p>
                           <p
-                            className={`italic truncate ${msg.own ? "text-white/70" : "text-black/70"}`}
+                            className={`italic truncate text-[10px] ${msg.own ? "text-zinc-400" : "text-zinc-400"}`}
                           >
                             {decrypt(msg.replyTo.message)}
                           </p>
@@ -1898,7 +2019,7 @@ const ChatRoom = ({
                                   type="button"
                                   disabled={ended}
                                   onClick={() => voteOnPoll(msg, opt.id)}
-                                  className={`w-full text-left border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition px-3 py-2 flex items-center justify-between gap-3 ${ended ? "opacity-60 cursor-not-allowed" : ""}`}
+                                  className={`w-full text-left border border-zinc-800/30 bg-zinc-900/30 hover:bg-zinc-800/40 transition-all px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 ${ended ? "opacity-60 cursor-not-allowed" : ""} ${iVoted ? "border-white/30 bg-white/5" : ""}`}
                                   title={ended ? "Poll ended" : "Vote"}
                                 >
                                   <div className="min-w-0 flex-1">
@@ -1915,15 +2036,15 @@ const ChatRoom = ({
                                           {pct}%
                                         </span>
                                         {iVoted && (
-                                          <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center">
-                                            <IoMdCheckmark />
+                                          <span className="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center shadow-lg shadow-white/20">
+                                            <LuCheck size={13} />
                                           </span>
                                         )}
                                       </div>
                                     </div>
-                                    <div className="mt-2 h-1.5 bg-black/50 border border-zinc-800">
+                                    <div className="mt-2 h-1 bg-black/40 rounded-full overflow-hidden">
                                       <div
-                                        className="h-full bg-indigo-600"
+                                        className="h-full bg-gradient-to-r from-white to-zinc-300 rounded-full transition-all duration-500"
                                         style={{ width: `${pct}%` }}
                                       />
                                     </div>
@@ -1954,7 +2075,7 @@ const ChatRoom = ({
                           <button
                             type="button"
                             onClick={() => clearMyPollVotes(msg)}
-                            className="text-zinc-400 hover:text-white transition border border-zinc-800 px-3 py-1.5"
+                            className="text-zinc-500 hover:text-white transition-all border border-zinc-800/40 px-3 py-1.5 rounded-lg hover:bg-white/5 text-[10px] uppercase tracking-wider font-bold active:scale-95"
                           >
                             Remove Vote
                           </button>
@@ -1962,7 +2083,7 @@ const ChatRoom = ({
                       </div>
                     ) : msg.type === "image" ? (
                       <div className="space-y-2">
-                        <div className="relative border-2 border-zinc-800 bg-zinc-900 overflow-hidden group">
+                        <div className="relative border border-zinc-800/40 bg-zinc-900/60 overflow-hidden group rounded-xl">
                           <img
                             src={msg.message}
                             alt="Classified attachment"
@@ -1976,49 +2097,54 @@ const ChatRoom = ({
                             style={{ display: "none" }}
                             className="p-4 text-center text-zinc-500 text-xs"
                           >
-                            <IoMdWarning className="inline mr-2" />
+                            <LuTriangleAlert className="inline mr-2" size={14} />
                             Failed to decrypt image
                           </div>
-                          <div className="absolute top-2 left-2 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest border border-zinc-700">
-                            <IoMdLock className="inline mr-1" /> Classified
-                            Attachment
+                          <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest rounded-lg border border-zinc-700/30 flex items-center gap-1">
+                            <LuLock size={10} /> Classified Attachment
                           </div>
                           <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => downloadImage(msg.message, msg.id)}
-                              className="bg-black/80 hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white font-bold transition-all flex items-center gap-1"
+                              className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg"
                               title="Download image"
                             >
-                              <IoMdDownload size={14} />
+                              <LuDownload size={13} />
                               Download
                             </button>
                           </div>
                         </div>
                       </div>
                     ) : msg.type === "high-clearance" ? (
-                      <div className="space-y-3">
-                        <div className="relative border-2 border-amber-600 bg-gradient-to-br from-amber-950/40 to-orange-950/40 p-6 text-center">
-                          <div className="absolute top-2 left-2 bg-amber-600/90 text-black px-2 py-1 text-[8px] uppercase tracking-widest font-black">
-                            <IoMdLock className="inline mr-1" /> High Clearance
-                          </div>
+                      <div className="space-y-2">
+                        <div className="relative border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 p-5 sm:p-6 text-center rounded-xl overflow-hidden">
+                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
+                          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/25 to-transparent" />
                           
-                          {msg.requiresBiometric && (
-                            <div className="absolute top-2 right-2 bg-blue-600/90 text-white px-2 py-1 text-[8px] uppercase tracking-widest font-black">
-                              <IoMdFingerPrint className="inline mr-1" /> Biometric
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between absolute top-2.5 left-2.5 right-2.5 z-10">
+                            <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
+                              <LuLock size={9} /> High Clearance
+                            </span>
+                            {msg.requiresBiometric && (
+                              <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
+                                <LuFingerprint size={9} /> Biometric
+                              </span>
+                            )}
+                          </div>
 
-                          <div className="flex flex-col items-center gap-4 mt-4">
+                          <div className="flex flex-col items-center gap-3.5 mt-6 relative z-10">
                             <div className="relative">
-                              <IoMdLock className="text-amber-400" size={64} />
-                              <div className="absolute inset-0 bg-amber-400/20 rounded-full animate-pulse" />
+                              <div className="p-3.5 bg-white/5 rounded-2xl border border-zinc-700/20">
+                                <LuLock className="text-white" size={32} strokeWidth={1.5} />
+                              </div>
+                              <div className="absolute inset-0 bg-white/[0.02] rounded-2xl animate-pulse" />
                             </div>
                             
                             <div>
-                              <p className="text-amber-200 text-lg uppercase tracking-widest font-black mb-2">
+                              <p className="text-white/90 text-sm uppercase tracking-[0.15em] font-black mb-1.5">
                                 Classified Content
                               </p>
-                              <p className="text-amber-400/80 text-xs uppercase tracking-wide">
+                              <p className="text-zinc-500 text-[10px] uppercase tracking-[0.15em]">
                                 {msg.requiresBiometric 
                                   ? 'Biometric authentication required'
                                   : 'High security encryption active'
@@ -2027,8 +2153,8 @@ const ChatRoom = ({
                             </div>
 
                             {msg.own ? (
-                              <div className="bg-green-950/50 border border-green-700 text-green-200 px-4 py-2 text-xs uppercase tracking-wide">
-                                <IoMdCheckmark className="inline mr-2" />
+                              <div className="bg-white/10 border border-zinc-700/20 text-white px-4 py-2 text-[10px] uppercase tracking-[0.15em] font-bold rounded-xl flex items-center gap-2">
+                                <LuCheck size={13} />
                                 Your high clearance message sent
                               </div>
                             ) : (
@@ -2057,9 +2183,9 @@ const ChatRoom = ({
                                     });
                                   }
                                 }}
-                                className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-black text-sm uppercase font-black tracking-widest transition-all flex items-center gap-2"
+                                className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-black text-[10px] uppercase font-bold tracking-[0.15em] transition-all flex items-center gap-2 rounded-xl shadow-lg shadow-white/10 hover:shadow-white/20 active:scale-95"
                               >
-                                <IoMdLock size={20} />
+                                <LuLock size={14} />
                                 Access Vault
                               </button>
                             )}
@@ -2067,18 +2193,18 @@ const ChatRoom = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.deleted && <IoMdTrash className="inline mr-1" />}{" "}
+                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-mono">
+                        {msg.deleted && <LuTrash2 className="inline mr-1 opacity-50" size={13} />}{" "}
                         {renderMessageText(msg.message, msg.id || "message")}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 justify-end mt-2 opacity-40">
+                    <div className="flex items-center gap-1.5 justify-end mt-2 opacity-35">
                       {msg.edited && !msg.deleted && (
-                        <span className="text-[7px] border border-current px-1 uppercase font-bold">
+                        <span className="text-[6px] px-1.5 py-0.5 uppercase font-bold rounded-full bg-current/10 border border-current/20 tracking-wider">
                           Edited
                         </span>
                       )}
-                      <span className="text-[8px] font-black">{msg.time}</span>
+                      <span className="text-[7px] font-bold tabular-nums font-mono">{msg.time}</span>
                     </div>
                   </div>
                   {!msg.deleted && !isSelectMode && (
@@ -2089,9 +2215,9 @@ const ChatRoom = ({
                           activeMenuId === msg.id ? null : msg.id,
                         );
                       }}
-                      className={`absolute -top-2 ${msg.own ? "left-0" : "right-0"} p-1 cursor-pointer text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity bg-black rounded border border-zinc-800 ${activeMenuId === msg.id ? "opacity-100" : ""}`}
+                      className={`absolute -top-2.5 ${msg.own ? "left-0" : "right-0"} p-1.5 cursor-pointer text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all bg-[#0a0a0c]/90 backdrop-blur-sm rounded-lg border border-zinc-800/40 hover:bg-zinc-800/80 ${activeMenuId === msg.id ? "opacity-100 bg-zinc-800/80" : ""}`}
                     >
-                      <IoMdMore size={16} />
+                      <LuEllipsisVertical size={14} />
                     </div>
                   )}
                   <AnimatePresence>
@@ -2100,50 +2226,44 @@ const ChatRoom = ({
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-black border border-white shadow-2xl min-w-[130px]`}
+                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[160px] rounded-xl overflow-hidden`}
                       >
                         <button
                           onClick={() => startReplying(msg)}
-                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900"
+                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
                         >
-                          <IoMdReturnLeft /> Reply
+                          <LuReply size={13} /> Reply
                         </button>
                         <button
                           onClick={() => toggleStarMessage(msg.id)}
-                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900"
+                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
                         >
-                          {starredMessageIds.has(msg.id) ? (
-                            <IoMdStar />
-                          ) : (
-                            <IoMdStarOutline />
-                          )}
+                          <LuStar size={13} className={starredMessageIds.has(msg.id) ? "text-white fill-white" : ""} />
                           {starredMessageIds.has(msg.id) ? "Unstar" : "Star"}
                         </button>
                         <button
                           onClick={() => togglePinMessage(msg.id)}
-                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold border-t border-zinc-900"
+                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
                         >
-                          <IoMdPin />
+                          <LuPin size={13} />
                           {pinnedMessageId === msg.id ? "Unpin" : "Pin"}
                         </button>
+                        <div className="border-t border-zinc-800/30 mx-3" />
                         <button
-                          onClick={() =>
-                            setMessageList((l) =>
-                              l.filter((m) => m.id !== msg.id),
-                            )
-                          }
-                          className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors"
+                          onClick={() => animateDelete(msg.id, 'local')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
                         >
-                          Local Hide
+                          <LuEyeOff size={13} /> Local Hide
                         </button>
                         {msg.own && !msg.poll && (
                           <>
                             <button
                               onClick={() => startEditing(msg)}
-                              className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-zinc-400 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
+                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
                             >
-                              Edit Signal
+                              <LuPencil size={13} /> Edit Signal
                             </button>
+                            <div className="border-t border-zinc-800/30 mx-3" />
                             <button
                               onClick={() => {
                                 socket.emit("delete_message", {
@@ -2152,25 +2272,28 @@ const ChatRoom = ({
                                 });
                                 setActiveMenuId(null);
                               }}
-                              className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
+                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
                             >
-                              Expunge Global
+                              <LuTrash2 size={13} /> Expunge Global
                             </button>
                           </>
                         )}
                         {msg.own && msg.poll && (
-                          <button
-                            onClick={() => {
-                              socket.emit("delete_message", {
-                                roomId,
-                                messageId: msg.id,
-                              });
-                              setActiveMenuId(null);
-                            }}
-                            className="w-full text-left px-4 py-3 text-[9px] hover:bg-white hover:text-black text-red-900 flex items-center gap-2 uppercase font-bold transition-colors border-t border-zinc-900"
-                          >
-                            Expunge Global
-                          </button>
+                          <>
+                            <div className="border-t border-zinc-800/30 mx-3" />
+                            <button
+                              onClick={() => {
+                                socket.emit("delete_message", {
+                                  roomId,
+                                  messageId: msg.id,
+                                });
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
+                            >
+                              <LuTrash2 size={13} /> Expunge Global
+                            </button>
+                          </>
                         )}
                       </motion.div>
                     )}
@@ -2178,7 +2301,8 @@ const ChatRoom = ({
                 </div>
               )}
             </motion.div>
-          ))}
+          ); })}
+          </AnimatePresence>
 
           <AnimatePresence>
             {typingUsers.length > 0 && (
@@ -2188,9 +2312,13 @@ const ChatRoom = ({
                 exit={{ opacity: 0 }}
                 className="flex justify-start"
               >
-                <div className="max-w-[90%] bg-zinc-950 border border-zinc-900 border-dashed p-3">
+                <div className="max-w-[90%] bg-zinc-900/40 border border-zinc-800/30 p-3 rounded-2xl rounded-bl-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3">
-                    <IoMdPulse className="text-zinc-500 animate-pulse text-lg" />
+                    <div className="flex gap-1 items-center px-1">
+                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '0ms'}} />
+                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '150ms'}} />
+                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '300ms'}} />
+                    </div>
                     <div className="min-w-0">
                       <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">
                         Signal Incoming...
@@ -2214,32 +2342,39 @@ const ChatRoom = ({
           <div ref={scrollRef} className="h-2" />
         </main>
 
-        <footer className="p-3 sm:p-4 border-t border-zinc-900 bg-black relative flex-shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <footer className="p-3 sm:p-4 bg-[#09090b]/80 backdrop-blur-xl relative flex-shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/30 to-transparent" />
           <div className="flex items-center justify-between mb-2">
             {editingMessageId ? (
-              <div className="flex items-center gap-2 text-[8px] text-white uppercase tracking-widest border-l border-white pl-2 font-bold">
-                <span>Modifying Transmission...</span>
-                <button
-                  onClick={() => {
-                    setEditingMessageId(null);
-                    setCurrentMessage("");
-                  }}
-                >
-                  <IoMdClose />
-                </button>
+              <div className="flex items-center gap-2 text-[9px] text-white uppercase tracking-widest font-bold">
+                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                  <LuPencil size={11} className="text-white" />
+                  <span>Modifying Transmission...</span>
+                  <button
+                    onClick={() => {
+                      setEditingMessageId(null);
+                      setCurrentMessage("");
+                    }}
+                    className="hover:text-red-400 transition-colors ml-1"
+                  >
+                    <LuX size={12} />
+                  </button>
+                </div>
               </div>
             ) : (
               <div />
             )}
             {selfDestructTime > 0 && !editingMessageId && (
-              <div className="flex items-center gap-2 text-[8px] text-red-600 font-bold uppercase tracking-widest animate-pulse">
-                <IoMdTimer /> Destruct Enabled: {selfDestructTime / 1000}s
+              <div className="flex items-center gap-2 text-[9px] text-red-500 font-bold uppercase tracking-widest">
+                <div className="flex items-center gap-1.5 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 animate-pulse">
+                  <LuTimer size={11} /> Destruct: {selfDestructTime / 1000}s
+                </div>
               </div>
             )}
           </div>
 
           {isSelectMode && (
-            <div className="mb-2 border border-zinc-800 bg-black/85 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-3">
+            <div className="mb-2 bg-zinc-900/40 backdrop-blur-sm px-3 py-2.5 flex items-center justify-between gap-3 rounded-xl border border-zinc-800/30">
               <div className="min-w-0">
                 <p className="text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500">
                   Select Mode
@@ -2256,28 +2391,28 @@ const ChatRoom = ({
                   type="button"
                   onClick={bulkLocalDelete}
                   disabled={selectedCount === 0}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-300 hover:bg-white hover:text-black transition-all rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                   title="Delete locally (hide from your screen)"
                 >
-                  Local Delete
+                  <LuEyeOff size={11} /> Local Delete
                 </button>
                 <button
                   type="button"
                   onClick={bulkGlobalDelete}
                   disabled={selectedCount === 0 || !selectionAllOwn}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest border border-red-900/60 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-red-900/30 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all rounded-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                   title={
                     selectionAllOwn
                       ? "Delete for everyone (your messages only)"
                       : "Global delete only works when all selected messages are yours"
                   }
                 >
-                  Global Delete
+                  <LuTrash2 size={11} /> Global Delete
                 </button>
                 <button
                   type="button"
                   onClick={exitSelectMode}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest border border-zinc-800 text-zinc-500 hover:text-white hover:bg-white/5 transition"
+                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-500 hover:text-white hover:bg-white/5 transition-all rounded-xl active:scale-95"
                   title="Exit select mode"
                 >
                   Cancel
@@ -2287,7 +2422,7 @@ const ChatRoom = ({
           )}
 
           <div
-            className={`flex ${imagePreview ? "flex-col" : "items-center"} border p-1 transition-colors ${editingMessageId ? "border-white" : "border-zinc-900 focus-within:border-zinc-700"}`}
+            className={`flex ${imagePreview ? "flex-col" : "items-center"} p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
             <div className="flex items-center w-full">
               <div className="flex items-center">
@@ -2297,9 +2432,9 @@ const ChatRoom = ({
                       e.stopPropagation();
                       setShowTimerMenu(!showTimerMenu);
                     }}
-                    className={`p-2 sm:p-3 transition-colors ${selfDestructTime > 0 ? "text-red-600" : "text-zinc-600 hover:text-white"}`}
+                    className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"}`}
                   >
-                    <IoMdTimer size={18} />
+                    <LuTimer size={16} />
                   </button>
                   <AnimatePresence>
                     {showTimerMenu && (
@@ -2307,7 +2442,7 @@ const ChatRoom = ({
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full left-0 mb-2 bg-black border border-zinc-800 shadow-2xl z-50 w-24 sm:w-32"
+                        className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-28 sm:w-36 rounded-xl overflow-hidden"
                       >
                         {timerOptions.map((opt) => (
                           <button
@@ -2316,8 +2451,9 @@ const ChatRoom = ({
                               setSelfDestructTime(opt.value);
                               setShowTimerMenu(false);
                             }}
-                            className={`w-full text-left px-3 py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors ${selfDestructTime === opt.value ? "bg-white text-black" : "text-zinc-500"}`}
+                            className={`w-full text-left px-3 py-2.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
                           >
+                            {opt.value > 0 && <LuTimer size={10} className="inline mr-1.5" />}
                             {opt.label}
                           </button>
                         ))}
@@ -2329,21 +2465,21 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={togglePollModal}
-                  className={`p-2 sm:p-3 transition-colors ${showPollModal ? "text-indigo-400" : "text-zinc-600 hover:text-white"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Create a poll"
                   disabled={!!editingMessageId}
                 >
-                  <IoMdStats size={18} />
+                  <LuChartBar size={16} />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-2 sm:p-3 transition-colors ${selectedImage ? "text-green-400" : "text-zinc-600 hover:text-white"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selectedImage ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Attach classified image"
                   disabled={!!editingMessageId}
                 >
-                  <IoMdLink size={18} />
+                  <LuImage size={16} />
                 </button>
                 <input
                   ref={fileInputRef}
@@ -2356,40 +2492,43 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={() => setShowHighClearanceComposer(true)}
-                  className={`p-2 sm:p-3 transition-colors relative ${showHighClearanceComposer ? "text-amber-400" : "text-zinc-600 hover:text-amber-300"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Send high clearance message (biometric protected)"
                   disabled={!!editingMessageId}
                 >
-                  <IoMdLock size={18} />
-                  {/* Add a small indicator if biometric setup might be needed */}
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full animate-pulse opacity-60"></div>
+                  <LuLock size={17} />
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
                 </button>
               </div>
 
+              <div className="w-px h-6 bg-zinc-800/40 mx-1 shrink-0 hidden sm:block" />
+
               {replyingTo && !editingMessageId && !imagePreview && (
-                <div className="flex items-center gap-2 text-[8px] text-zinc-400 uppercase tracking-widest border-l border-zinc-500 pl-2 font-bold">
-                  <span className="flex items-center gap-1">
-                    <IoMdReturnLeft /> Replying to: {replyingTo.username}
-                  </span>
-                  <button
-                    onClick={() => setReplyingTo(null)}
-                    className="hover:text-white"
-                  >
-                    <IoMdClose />
-                  </button>
+                <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
+                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                    <LuReply size={11} className="text-white" />
+                    <span>Replying to: {replyingTo.username}</span>
+                    <button
+                      onClick={() => setReplyingTo(null)}
+                      className="hover:text-red-400 transition-colors ml-1"
+                    >
+                      <LuX size={12} />
+                    </button>
+                  </div>
                 </div>
               )}
 
               {!imagePreview && (
                 <input
+                  ref={inputRef}
                   type="text"
                   value={currentMessage}
                   placeholder={
                     editingMessageId
-                      ? "EDITING..."
-                      : "ENTER ENCRYPTED SIGNAL..."
+                      ? "Editing message..."
+                      : "Type your encrypted signal..."
                   }
-                  className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-800 text-xs sm:text-sm font-mono min-w-0"
+                  className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-700 text-xs sm:text-sm font-mono tracking-wide min-w-0"
                   onChange={handleInputChange}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 />
@@ -2397,20 +2536,20 @@ const ChatRoom = ({
 
               <button
                 onClick={selectedImage ? sendImageMessage : sendMessage}
-                className={`p-2 sm:p-3 text-black transition-all ${editingMessageId ? "bg-white" : "bg-white hover:bg-zinc-200"}`}
+                className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 ${editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
                 disabled={!selectedImage && !currentMessage.trim()}
               >
                 {editingMessageId ? (
-                  <IoMdCreate size={18} />
+                  <LuCheck size={16} strokeWidth={2.5} />
                 ) : (
-                  <IoMdSend size={18} />
+                  <LuSend size={16} />
                 )}
               </button>
             </div>
 
             {imagePreview && !editingMessageId && (
-              <div className="w-full px-2 py-2 border-t border-zinc-800">
-                <div className="relative inline-block border-2 border-zinc-700 bg-zinc-900">
+              <div className="w-full px-2 py-2 border-t border-zinc-800/40">
+                <div className="relative inline-block border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
                   <img
                     src={imagePreview}
                     alt="Preview"
@@ -2418,13 +2557,13 @@ const ChatRoom = ({
                   />
                   <button
                     onClick={clearImageAttachment}
-                    className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition"
+                    className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
                     title="Remove image"
                   >
-                    <IoMdClose size={16} />
+                    <LuX size={14} />
                   </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] text-zinc-400 px-2 py-1 uppercase tracking-widest flex items-center gap-1">
-                    <IoMdLock size={10} /> Classified Attachment • Will be
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1.5 uppercase tracking-widest flex items-center gap-1">
+                    <LuLock size={9} /> Classified Attachment • Will be
                     encrypted
                   </div>
                 </div>
@@ -2449,28 +2588,32 @@ const ChatRoom = ({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
                 transition={{ type: "spring", damping: 22, stiffness: 240 }}
-                className="w-full max-w-xl bg-zinc-900 border border-zinc-800 shadow-2xl"
+                className="w-full max-w-xl bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-2xl overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="p-5 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-white">
-                    Create a Poll
+                <div className="p-5 flex items-center justify-between border-b border-zinc-800/30 relative">
+                  <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/20 to-transparent" />
+                  <h3 className="text-base font-black text-white flex items-center gap-2.5 uppercase tracking-[0.1em]">
+                    <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30">
+                      <LuChartBar size={16} className="text-white" />
+                    </div>
+                    Create Poll
                   </h3>
                   <button
                     type="button"
                     onClick={() => {
                       setShowPollModal(false);
                     }}
-                    className="p-2 text-zinc-400 hover:text-white transition"
+                    className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-xl transition-all active:scale-90"
                     title="Close"
                   >
-                    <IoMdClose size={22} />
+                    <LuX size={18} />
                   </button>
                 </div>
 
-                <div className="px-5 pb-5 space-y-5">
+                <div className="px-5 pb-5 space-y-5 pt-4">
                   <div>
-                    <p className="text-sm text-zinc-300 mb-2">Question</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Question</p>
                     <div className="relative">
                       <input
                         value={pollQuestion}
@@ -2478,22 +2621,22 @@ const ChatRoom = ({
                           setPollQuestion(e.target.value.slice(0, 300))
                         }
                         placeholder="What question do you want to ask?"
-                        className="w-full bg-zinc-950 border border-zinc-800 text-white px-4 py-3 outline-none focus:border-zinc-600"
+                        className="w-full bg-black/40 border border-zinc-800/50 text-white px-4 py-3 outline-none focus:border-zinc-600 rounded-xl placeholder:text-zinc-700 transition-colors"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 tabular-nums">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600 tabular-nums font-mono">
                         {pollQuestion.length}/300
                       </span>
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-300 mb-2">Answers</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Answers</p>
                     <div className="space-y-2">
                       {pollAnswers.map((ans, idx) => (
                         <div key={idx} className="flex items-center gap-2">
-                          <div className="flex-1 flex items-center bg-zinc-950 border border-zinc-800">
-                            <div className="w-10 h-10 flex items-center justify-center text-zinc-500 border-r border-zinc-800">
-                              <IoMdPeople size={18} />
+                          <div className="flex-1 flex items-center bg-black/40 border border-zinc-800/50 rounded-xl overflow-hidden">
+                            <div className="w-10 h-10 flex items-center justify-center text-zinc-600 border-r border-zinc-800/40">
+                              <LuCircleDot size={14} />
                             </div>
                             <input
                               value={ans}
@@ -2505,7 +2648,7 @@ const ChatRoom = ({
                                 )
                               }
                               placeholder="Type your answer"
-                              className="flex-1 bg-transparent text-white px-3 py-2 outline-none"
+                              className="flex-1 bg-transparent text-white px-3 py-2.5 outline-none placeholder:text-zinc-700"
                             />
                           </div>
                           <button
@@ -2515,11 +2658,11 @@ const ChatRoom = ({
                                 prev.filter((_, i) => i !== idx),
                               )
                             }
-                            className="p-2 text-zinc-500 hover:text-white transition border border-zinc-800"
+                            className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all rounded-lg border border-zinc-800/60 disabled:opacity-30"
                             title="Remove answer"
                             disabled={pollAnswers.length <= 2}
                           >
-                            <IoMdTrash />
+                            <LuTrash2 size={15} />
                           </button>
                         </div>
                       ))}
@@ -2528,7 +2671,7 @@ const ChatRoom = ({
                       <button
                         type="button"
                         onClick={() => setPollAnswers((prev) => [...prev, ""])}
-                        className="px-4 py-2 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black transition font-bold"
+                        className="px-4 py-2 border border-zinc-800/40 text-zinc-400 hover:bg-white/5 hover:text-white transition-all font-bold rounded-xl text-xs active:scale-95"
                       >
                         + Add another answer
                       </button>
@@ -2536,13 +2679,13 @@ const ChatRoom = ({
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-300 mb-2">Duration</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Duration</p>
                     <select
                       value={pollDurationMs}
                       onChange={(e) =>
                         setPollDurationMs(Number(e.target.value))
                       }
-                      className="w-full bg-zinc-950 border border-zinc-800 text-white px-4 py-3 outline-none focus:border-zinc-600"
+                      className="w-full bg-black/40 border border-zinc-800/50 text-white px-4 py-3 outline-none focus:border-zinc-600 rounded-xl transition-colors"
                     >
                       <option value={60 * 60 * 1000}>1 hour</option>
                       <option value={6 * 60 * 60 * 1000}>6 hours</option>
@@ -2556,7 +2699,7 @@ const ChatRoom = ({
                       type="checkbox"
                       checked={pollAllowMultiple}
                       onChange={(e) => setPollAllowMultiple(e.target.checked)}
-                      className="w-4 h-4 accent-indigo-600"
+                      className="w-4 h-4 accent-zinc-600"
                     />
                     Allow Multiple Answers
                   </label>
@@ -2566,14 +2709,14 @@ const ChatRoom = ({
                     <button
                       type="button"
                       onClick={postPoll}
-                      className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-6 py-2.5 bg-white hover:bg-zinc-100 text-black font-bold transition-all rounded-xl shadow-lg shadow-white/10 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                       disabled={
                         pollQuestion.trim().length === 0 ||
                         pollAnswers.map((a) => a.trim()).filter(Boolean)
                           .length < 2
                       }
                     >
-                      Post
+                      <LuSend size={13} className="inline mr-1.5" /> Post Poll
                     </button>
                   </div>
                 </div>
@@ -2588,22 +2731,25 @@ const ChatRoom = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
               onClick={closeSlideConfirm}
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-zinc-950 border-2 border-zinc-800 p-8 max-w-md w-full"
+                className="bg-[#0f0f11] border border-zinc-800/40 p-8 max-w-md w-full rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="text-center mb-6">
-                  <IoMdWarning
-                    className="text-red-600 mx-auto mb-4"
-                    size={48}
-                  />
-                  <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
+                  <div className="inline-flex p-3.5 bg-red-500/10 rounded-2xl mb-4 border border-red-500/10">
+                    <LuTriangleAlert
+                      className="text-red-500"
+                      size={36}
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <h2 className="text-xl font-black uppercase tracking-[0.12em] text-white mb-2">
                     {confirmAction === "terminate"
                       ? "TERMINATE ROOM"
                       : "LEAVE ROOM"}
@@ -2617,7 +2763,7 @@ const ChatRoom = ({
 
                 <div
                   ref={slideTrackRef}
-                  className="relative w-full h-16 bg-zinc-900 border-2 border-zinc-700 mb-4 select-none"
+                  className="relative w-full h-14 bg-zinc-900/80 border border-zinc-800/40 mb-4 select-none rounded-2xl overflow-hidden"
                   onMouseDown={handleSlideStart}
                   onTouchStart={handleSlideStart}
                 >
@@ -2630,7 +2776,7 @@ const ChatRoom = ({
 
                   <motion.div
                     ref={slideButtonRef}
-                    className="absolute top-0 left-0 h-full bg-red-600 border-2 border-red-500 flex items-center justify-center cursor-grab active:cursor-grabbing z-10"
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 rounded-l-2xl shadow-lg shadow-red-500/20"
                     style={{
                       width: "60px",
                       x: slidePosition,
@@ -2648,7 +2794,7 @@ const ChatRoom = ({
                           }
                     }
                   >
-                    <IoMdExit className="text-white" size={24} />
+                    <LuChevronRight className="text-white" size={22} />
                   </motion.div>
 
                   {slideTrackRef.current &&
@@ -2656,16 +2802,16 @@ const ChatRoom = ({
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="absolute inset-0 flex items-center justify-center bg-green-600/20 pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center bg-white/10 pointer-events-none"
                       >
-                        <IoMdCheckmark className="text-green-500" size={32} />
+                        <LuCheck className="text-white" size={28} />
                       </motion.div>
                     )}
                 </div>
 
                 <button
                   onClick={closeSlideConfirm}
-                  className="w-full border border-zinc-700 text-zinc-400 py-2 uppercase text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all"
+                  className="w-full border border-zinc-800/40 text-zinc-500 py-3 uppercase text-[10px] font-bold tracking-[0.15em] hover:bg-white/5 hover:text-white transition-all rounded-xl active:scale-[0.98]"
                 >
                   Cancel
                 </button>

@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  IoMdLock,
-  IoMdFingerPrint,
-  IoMdCheckmark,
-  IoMdWarning,
-  IoMdEye,
-} from 'react-icons/io';
+  LuLock,
+  LuFingerprint,
+  LuCheck,
+  LuTriangleAlert,
+  LuEye,
+  LuArrowLeft,
+  LuShieldCheck,
+  LuKeyRound,
+} from 'react-icons/lu';
 import {
   getBiometricCapabilities,
   registerBiometric,
@@ -76,10 +79,10 @@ const BiometricDemo = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono p-8">
+    <div className="min-h-screen bg-[#09090b] text-white font-sans p-6 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-8">
             <button
               onClick={() => {
                 // Clean URL and trigger route change without reload
@@ -87,75 +90,77 @@ const BiometricDemo = () => {
                 // Trigger hashchange event to update route
                 window.dispatchEvent(new HashChangeEvent('hashchange'));
               }}
-              className="px-4 py-2 border border-zinc-700 text-zinc-400 hover:text-white hover:border-white transition text-sm uppercase tracking-wide"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-800/50 bg-zinc-900/50 backdrop-blur-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all text-sm"
             >
-              ← Back to Chat
+              <LuArrowLeft size={16} /> Back to Chat
             </button>
             <div></div>
           </div>
           
-          <IoMdLock className="text-amber-400 mx-auto mb-4" size={80} />
-          <h1 className="text-4xl font-black uppercase tracking-wider text-white mb-4">
+          <div className="w-20 h-20 rounded-2xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-5">
+            <LuLock className="text-white" size={40} />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-3">
             Biometric Intel Demo
           </h1>
-          <p className="text-zinc-400 text-lg uppercase tracking-wide">
+          <p className="text-zinc-500 text-base">
             WebAuthn Hardware-Level Security for High-Clearance Messages
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Capabilities Panel */}
-          <div className="border border-zinc-800 bg-zinc-950 p-6">
-            <h2 className="text-xl font-bold text-white mb-4 uppercase tracking-wide flex items-center gap-2">
-              <IoMdFingerPrint /> System Capabilities
+          <div className="rounded-2xl border border-zinc-800/40 bg-[#0f0f11]/80 backdrop-blur-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2.5">
+              <LuFingerprint className="text-white" size={20} /> System Capabilities
             </h2>
             
             {capabilities ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-700">
-                  <span className="text-sm text-zinc-300">WebAuthn Support</span>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/30">
+                  <span className="text-sm text-zinc-400">WebAuthn Support</span>
                   <div className="flex items-center gap-2">
                     {capabilities.supported ? (
-                      <IoMdCheckmark className="text-green-400" />
+                      <LuCheck className="text-white" size={16} />
                     ) : (
-                      <IoMdWarning className="text-red-400" />
+                      <LuTriangleAlert className="text-red-400" size={16} />
                     )}
-                    <span className={capabilities.supported ? 'text-green-400' : 'text-red-400'}>
+                    <span className={`text-sm font-medium ${capabilities.supported ? 'text-white' : 'text-red-400'}`}>
                       {capabilities.supported ? 'Supported' : 'Not Supported'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-700">
-                  <span className="text-sm text-zinc-300">Platform Authenticator</span>
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/30">
+                  <span className="text-sm text-zinc-400">Platform Authenticator</span>
                   <div className="flex items-center gap-2">
                     {capabilities.available ? (
-                      <IoMdCheckmark className="text-green-400" />
+                      <LuCheck className="text-white" size={16} />
                     ) : (
-                      <IoMdWarning className="text-amber-400" />
+                      <LuTriangleAlert className="text-zinc-500" size={16} />
                     )}
-                    <span className={capabilities.available ? 'text-green-400' : 'text-amber-400'}>
+                    <span className={`text-sm font-medium ${capabilities.available ? 'text-white' : 'text-zinc-500'}`}>
                       {capabilities.available ? 'Available' : 'Not Available'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-700">
-                  <span className="text-sm text-zinc-300">Biometric Type</span>
-                  <span className="text-blue-400 font-bold">
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/30">
+                  <span className="text-sm text-zinc-400">Biometric Type</span>
+                  <span className="text-white font-semibold text-sm">
                     {capabilities.type}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-700">
-                  <span className="text-sm text-zinc-300">Credential Status</span>
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/30">
+                  <span className="text-sm text-zinc-400">Credential Status</span>
                   <div className="flex items-center gap-2">
                     {hasCredential ? (
-                      <IoMdCheckmark className="text-green-400" />
+                      <LuCheck className="text-white" size={16} />
                     ) : (
-                      <IoMdLock className="text-zinc-500" />
+                      <LuLock className="text-zinc-500" size={16} />
                     )}
-                    <span className={hasCredential ? 'text-green-400' : 'text-zinc-500'}>
+                    <span className={`text-sm font-medium ${hasCredential ? 'text-white' : 'text-zinc-500'}`}>
                       {hasCredential ? 'Registered' : 'Not Registered'}
                     </span>
                   </div>
@@ -163,20 +168,21 @@ const BiometricDemo = () => {
               </div>
             ) : (
               <div className="text-center text-zinc-500 py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-white mx-auto mb-3" />
                 Loading capabilities...
               </div>
             )}
           </div>
 
           {/* Demo Panel */}
-          <div className="border border-zinc-800 bg-zinc-950 p-6">
-            <h2 className="text-xl font-bold text-white mb-4 uppercase tracking-wide flex items-center gap-2">
-              <IoMdLock /> Security Demo
+          <div className="rounded-2xl border border-zinc-800/40 bg-[#0f0f11]/80 backdrop-blur-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2.5">
+              <LuShieldCheck className="text-white" size={20} /> Security Demo
             </h2>
 
             {error && (
-              <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 text-sm mb-4">
-                <IoMdWarning className="inline mr-2" />
+              <div className="rounded-xl bg-red-950/40 border border-red-800/30 text-red-300 px-4 py-3 text-sm mb-4 flex items-center gap-2">
+                <LuTriangleAlert className="shrink-0" size={16} />
                 {error}
               </div>
             )}
@@ -184,15 +190,19 @@ const BiometricDemo = () => {
             <div className="space-y-4">
               {!capabilities?.supported ? (
                 <div className="text-center py-8">
-                  <IoMdWarning className="text-amber-400 mx-auto mb-4" size={48} />
-                  <p className="text-amber-400 text-sm uppercase tracking-wide">
+                  <div className="w-14 h-14 rounded-xl bg-zinc-800/40 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                    <LuTriangleAlert className="text-zinc-400" size={28} />
+                  </div>
+                  <p className="text-zinc-400 text-sm font-medium">
                     WebAuthn not supported on this device
                   </p>
                 </div>
               ) : !capabilities?.available ? (
                 <div className="text-center py-8">
-                  <IoMdWarning className="text-amber-400 mx-auto mb-4" size={48} />
-                  <p className="text-amber-400 text-sm uppercase tracking-wide">
+                  <div className="w-14 h-14 rounded-xl bg-zinc-800/40 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                    <LuTriangleAlert className="text-zinc-400" size={28} />
+                  </div>
+                  <p className="text-zinc-400 text-sm font-medium">
                     Platform authenticator not available
                   </p>
                   <p className="text-zinc-500 text-xs mt-2">
@@ -201,14 +211,16 @@ const BiometricDemo = () => {
                 </div>
               ) : !hasCredential ? (
                 <div className="text-center">
-                  <IoMdFingerPrint className="text-blue-400 mx-auto mb-4" size={64} />
-                  <p className="text-zinc-300 text-sm mb-4 uppercase tracking-wide">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                    <LuFingerprint className="text-white" size={32} />
+                  </div>
+                  <p className="text-zinc-400 text-sm mb-5">
                     Set up biometric authentication to secure high-clearance messages
                   </p>
                   <button
                     onClick={handleRegister}
                     disabled={isRegistering}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 uppercase text-sm font-bold tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-white hover:bg-zinc-100 text-black py-3.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-white/10"
                   >
                     {isRegistering ? (
                       <>
@@ -217,7 +229,7 @@ const BiometricDemo = () => {
                       </>
                     ) : (
                       <>
-                        <IoMdFingerPrint size={20} />
+                        <LuFingerprint size={18} />
                         Set up {capabilities.type}
                       </>
                     )}
@@ -227,12 +239,14 @@ const BiometricDemo = () => {
                 <div className="space-y-4">
                   {!isAuthenticated ? (
                     <div className="text-center">
-                      <div className="border-2 border-amber-600 bg-amber-950/20 p-6 mb-4">
-                        <IoMdLock className="text-amber-400 mx-auto mb-2" size={48} />
-                        <p className="text-amber-200 text-sm uppercase tracking-wide font-bold">
+                      <div className="rounded-xl border border-zinc-700/20 bg-zinc-900/40 p-6 mb-4">
+                        <div className="w-12 h-12 rounded-xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-3">
+                          <LuLock className="text-white" size={24} />
+                        </div>
+                        <p className="text-white text-sm font-semibold">
                           High Clearance Message
                         </p>
-                        <p className="text-amber-400/80 text-xs mt-1">
+                        <p className="text-zinc-500 text-xs mt-1">
                           Biometric authentication required
                         </p>
                       </div>
@@ -240,7 +254,7 @@ const BiometricDemo = () => {
                       <button
                         onClick={handleAuthenticate}
                         disabled={isAuthenticating}
-                        className="w-full bg-amber-600 hover:bg-amber-500 text-black py-4 uppercase text-sm font-bold tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full bg-white hover:bg-zinc-100 text-black py-3.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-white/10"
                       >
                         {isAuthenticating ? (
                           <>
@@ -249,7 +263,7 @@ const BiometricDemo = () => {
                           </>
                         ) : (
                           <>
-                            <IoMdEye size={20} />
+                            <LuEye size={18} />
                             Unlock with {capabilities.type}
                           </>
                         )}
@@ -259,22 +273,24 @@ const BiometricDemo = () => {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="border-2 border-green-600 bg-green-950/20 p-6"
+                      className="rounded-xl border border-zinc-700/20 bg-white/5 p-6"
                     >
-                      <div className="flex items-center gap-2 mb-4">
-                        <IoMdCheckmark className="text-green-400" size={24} />
-                        <span className="text-green-200 font-bold uppercase tracking-wide">
+                      <div className="flex items-center gap-2.5 mb-4">
+                        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                          <LuCheck className="text-white" size={18} />
+                        </div>
+                        <span className="text-white font-semibold">
                           Identity Verified
                         </span>
                       </div>
                       
-                      <div className="bg-zinc-900 border border-zinc-700 p-4 mb-4">
-                        <p className="text-white text-sm leading-relaxed">
+                      <div className="rounded-xl bg-zinc-900/60 border border-zinc-800/30 p-4 mb-4">
+                        <p className="text-white text-sm leading-relaxed font-mono">
                           {demoMessage}
                         </p>
                       </div>
                       
-                      <p className="text-green-400/80 text-xs text-center">
+                      <p className="text-zinc-500 text-xs text-center">
                         Message will auto-lock in a few seconds...
                       </p>
                     </motion.div>
@@ -286,44 +302,44 @@ const BiometricDemo = () => {
         </div>
 
         {/* Feature Explanation */}
-        <div className="mt-12 border border-zinc-800 bg-zinc-950 p-8">
-          <h2 className="text-2xl font-bold text-white mb-6 uppercase tracking-wide text-center">
+        <div className="mt-12 rounded-2xl border border-zinc-800/40 bg-[#0f0f11]/80 backdrop-blur-xl p-8">
+          <h2 className="text-xl font-semibold text-white mb-8 text-center">
             How It Works
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <IoMdFingerPrint className="text-white" size={32} />
+            <div className="text-center p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/20">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                <LuFingerprint className="text-white" size={26} />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 uppercase">
+              <h3 className="text-base font-semibold text-white mb-2">
                 Hardware Security
               </h3>
-              <p className="text-zinc-400 text-sm">
+              <p className="text-zinc-500 text-sm leading-relaxed">
                 Uses your device's secure enclave (Face ID, Touch ID, Windows Hello) for authentication
               </p>
             </div>
             
-            <div className="text-center">
-              <div className="bg-amber-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <IoMdLock className="text-black" size={32} />
+            <div className="text-center p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/20">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                <LuKeyRound className="text-white" size={26} />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 uppercase">
+              <h3 className="text-base font-semibold text-white mb-2">
                 AES-256 Encryption
               </h3>
-              <p className="text-zinc-400 text-sm">
+              <p className="text-zinc-500 text-sm leading-relaxed">
                 High-clearance messages are encrypted with military-grade AES-256 encryption
               </p>
             </div>
             
-            <div className="text-center">
-              <div className="bg-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <IoMdLock className="text-white" size={32} />
+            <div className="text-center p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/20">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-zinc-700/20 flex items-center justify-center mx-auto mb-4">
+                <LuShieldCheck className="text-white" size={26} />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 uppercase">
+              <h3 className="text-base font-semibold text-white mb-2">
                 Zero Trust
               </h3>
-              <p className="text-zinc-400 text-sm">
+              <p className="text-zinc-500 text-sm leading-relaxed">
                 Even if your device is unlocked, biometric verification is required for sensitive content
               </p>
             </div>

@@ -1,15 +1,17 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  IoMdLock,
-  IoMdClose,
-  IoMdSend,
-  IoMdImage,
-  IoMdMic,
-  IoMdWarning,
-  IoMdFingerPrint,
-  IoMdKey,
-} from 'react-icons/io';
+  LuLock,
+  LuX,
+  LuSend,
+  LuImage,
+  LuMic,
+  LuTriangleAlert,
+  LuFingerprint,
+  LuKeyRound,
+  LuShieldCheck,
+  LuShieldAlert,
+} from 'react-icons/lu';
 import { getBiometricCapabilities, hasBiometricCredential, registerBiometric } from '../utils/webauthn';
 
 const HighClearanceComposer = ({
@@ -174,26 +176,28 @@ const HighClearanceComposer = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[9998] flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] flex items-center justify-center p-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-zinc-950 border-2 border-amber-600 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          className="bg-[#0f0f11] border border-zinc-700/30 max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)] scrollbar-micro"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <IoMdLock className="text-amber-400" size={32} />
+                <div className="p-2.5 bg-white/5 rounded-xl border border-zinc-700/20">
+                  <LuLock className="text-white" size={22} />
+                </div>
                 <div>
-                  <h2 className="text-xl font-black uppercase tracking-wider text-white">
+                  <h2 className="text-base font-black uppercase tracking-[0.12em] text-white">
                     High Clearance Message
                   </h2>
-                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-bold">
+                  <p className="text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold">
                     Biometric Protected • AES-256 Encrypted
                   </p>
                 </div>
@@ -201,33 +205,37 @@ const HighClearanceComposer = ({
               
               <button
                 onClick={onClose}
-                className="p-2 text-zinc-400 hover:text-white transition border border-zinc-700 hover:border-white"
+                className="p-2 text-zinc-500 hover:text-white transition-all hover:bg-white/5 rounded-xl active:scale-90"
               >
-                <IoMdClose size={24} />
+                <LuX size={20} />
               </button>
             </div>
 
             {/* Security Status */}
-            <div className={`mb-6 p-4 border ${biometricCapabilities?.supported && !hasCredential ? 'border-red-600/70 bg-red-950/30' : 'border-amber-600/50 bg-amber-950/20'}`}>
-              <div className="flex items-center gap-3 mb-2">
-                <IoMdLock className={biometricCapabilities?.supported && !hasCredential ? 'text-red-400' : 'text-amber-400'} size={20} />
-                <span className={`text-sm font-bold uppercase tracking-wide ${biometricCapabilities?.supported && !hasCredential ? 'text-red-200' : 'text-amber-200'}`}>
-                  Security Status {biometricCapabilities?.supported && !hasCredential && '- SETUP REQUIRED'}
+            <div className={`mb-6 p-4 rounded-xl border ${biometricCapabilities?.supported && !hasCredential ? 'border-red-500/20 bg-red-950/20' : 'border-zinc-700/20 bg-zinc-900/30'}`}>
+              <div className="flex items-center gap-2.5 mb-3">
+                {biometricCapabilities?.supported && !hasCredential ? (
+                  <LuShieldAlert className="text-red-400" size={16} />
+                ) : (
+                  <LuShieldCheck className="text-white" size={16} />
+                )}
+                <span className={`text-xs font-bold uppercase tracking-[0.15em] ${biometricCapabilities?.supported && !hasCredential ? 'text-red-300' : 'text-zinc-300'}`}>
+                  Security Status {biometricCapabilities?.supported && !hasCredential && '— Setup Required'}
                 </span>
               </div>
               
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2.5 text-xs">
                 {biometricCapabilities?.supported ? (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <IoMdFingerPrint className={hasCredential ? 'text-green-400' : 'text-red-400'} size={16} />
-                      <span className={hasCredential ? 'text-green-300' : 'text-red-300'}>
+                      <LuFingerprint className={hasCredential ? 'text-white' : 'text-red-400'} size={14} />
+                      <span className={hasCredential ? 'text-zinc-300' : 'text-red-300'}>
                         {biometricCapabilities.type} Available
                       </span>
                       {hasCredential ? (
-                        <span className="text-green-400 font-bold">• Configured</span>
+                        <span className="text-white font-bold text-[10px]">• Configured</span>
                       ) : (
-                        <span className="text-red-400 font-bold">• REQUIRED</span>
+                        <span className="text-red-400 font-bold text-[10px]">• REQUIRED</span>
                       )}
                     </div>
                     {!hasCredential && (
@@ -241,7 +249,7 @@ const HighClearanceComposer = ({
                             setError(err.message);
                           }
                         }}
-                        className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs uppercase font-bold transition animate-pulse"
+                        className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black text-[10px] uppercase font-bold transition-all rounded-lg animate-pulse active:scale-95"
                       >
                         Set Up Now
                       </button>
@@ -249,28 +257,28 @@ const HighClearanceComposer = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <IoMdWarning className="text-amber-400" size={16} />
-                    <span className="text-amber-300">
-                      Biometric authentication not available - password fallback will be used
+                    <LuTriangleAlert className="text-zinc-400" size={14} />
+                    <span className="text-zinc-400 text-[11px]">
+                      Biometric authentication not available — password fallback will be used
                     </span>
                   </div>
                 )}
                 
                 <div className="flex items-center gap-2">
-                  <IoMdKey className="text-blue-400" size={16} />
-                  <span className="text-blue-300">AES-256 Encryption Active</span>
+                  <LuKeyRound className="text-zinc-400" size={14} />
+                  <span className="text-zinc-400 text-[11px]">AES-256 Encryption Active</span>
                 </div>
 
                 {biometricCapabilities?.supported && !hasCredential && (
-                  <div className="mt-2 p-3 bg-red-950/70 border border-red-700 text-red-200 text-xs">
-                    <IoMdWarning className="inline mr-1" />
-                    <strong>SECURITY NOTICE:</strong> Biometric authentication must be configured before sending high-clearance messages. This ensures only authorized personnel can access classified content.
+                  <div className="mt-2 p-3 bg-red-950/40 border border-red-500/15 text-red-200/80 text-[10px] rounded-lg">
+                    <LuTriangleAlert className="inline mr-1.5" size={11} />
+                    <strong>SECURITY NOTICE:</strong> Biometric authentication must be configured before sending high-clearance messages.
                   </div>
                 )}
 
                 {!hasCredential && !biometricCapabilities?.supported && (
-                  <div className="mt-2 p-2 bg-amber-950/50 border border-amber-700 text-amber-200 text-xs">
-                    <IoMdWarning className="inline mr-1" />
+                  <div className="mt-2 p-2.5 bg-zinc-900/40 border border-zinc-700/20 text-zinc-400 text-[10px] rounded-lg">
+                    <LuTriangleAlert className="inline mr-1.5" size={11} />
                     Without biometric setup, recipients can access this message with room password only.
                   </div>
                 )}
@@ -281,9 +289,9 @@ const HighClearanceComposer = ({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 text-sm uppercase tracking-wide text-center mb-4"
+                className="bg-red-950/40 border border-red-500/20 text-red-300 px-4 py-3 text-xs uppercase tracking-wider text-center mb-4 rounded-xl"
               >
-                <IoMdWarning className="inline mr-2" />
+                <LuTriangleAlert className="inline mr-2" size={13} />
                 {error}
               </motion.div>
             )}
@@ -291,34 +299,34 @@ const HighClearanceComposer = ({
             {/* Message Input */}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-zinc-300 mb-2 uppercase tracking-wide">
+                <label className="block text-xs font-bold text-zinc-400 mb-2 uppercase tracking-[0.15em]">
                   Classified Message
                 </label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Enter your high clearance message..."
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white px-4 py-3 outline-none focus:border-amber-500 resize-none h-32"
+                  className="w-full bg-black/40 border border-zinc-800/40 text-white px-4 py-3 outline-none focus:border-zinc-600 resize-none h-32 rounded-xl font-mono text-sm placeholder:text-zinc-700 transition-colors"
                   maxLength={1000}
                 />
-                <div className="text-right text-xs text-zinc-500 mt-1">
+                <div className="text-right text-[10px] text-zinc-600 mt-1.5 font-mono tabular-nums">
                   {message.length}/1000
                 </div>
               </div>
 
               {/* Attachments */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {/* Image Attachment */}
-                <div className="border border-zinc-700 p-4">
+                <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-bold text-zinc-300 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
                       Image Attachment
                     </span>
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-2 text-zinc-400 hover:text-white transition border border-zinc-700 hover:border-white"
+                      className="p-2 text-zinc-500 hover:text-white transition-all hover:bg-white/5 rounded-lg active:scale-90"
                     >
-                      <IoMdImage size={20} />
+                      <LuImage size={16} />
                     </button>
                   </div>
                   
@@ -327,20 +335,20 @@ const HighClearanceComposer = ({
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-full max-h-32 object-cover border border-zinc-600"
+                        className="w-full max-h-32 object-cover border border-zinc-800/40 rounded-lg"
                       />
                       <button
                         onClick={() => {
                           setSelectedImage(null);
                           setImagePreview(null);
                         }}
-                        className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition"
+                        className="absolute -top-2 -right-2 bg-red-600 text-white p-1 hover:bg-red-500 transition-all rounded-lg active:scale-90"
                       >
-                        <IoMdClose size={16} />
+                        <LuX size={14} />
                       </button>
                     </div>
                   ) : (
-                    <div className="text-center text-zinc-500 text-xs py-4">
+                    <div className="text-center text-zinc-600 text-[10px] py-4 uppercase tracking-wider">
                       No image selected
                     </div>
                   )}
@@ -355,20 +363,20 @@ const HighClearanceComposer = ({
                 </div>
 
                 {/* Voice Memo */}
-                <div className="border border-zinc-700 p-4">
+                <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-bold text-zinc-300 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
                       Voice Memo
                     </span>
                     <button
                       onClick={isRecording ? stopRecording : startRecording}
-                      className={`p-2 transition border ${
+                      className={`p-2 transition-all rounded-lg active:scale-90 ${
                         isRecording 
-                          ? 'text-red-400 border-red-600 animate-pulse' 
-                          : 'text-zinc-400 hover:text-white border-zinc-700 hover:border-white'
+                          ? 'text-red-400 bg-red-500/10 animate-pulse' 
+                          : 'text-zinc-500 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      <IoMdMic size={20} />
+                      <LuMic size={16} />
                     </button>
                   </div>
                   
@@ -381,13 +389,13 @@ const HighClearanceComposer = ({
                       />
                       <button
                         onClick={() => setAudioBlob(null)}
-                        className="text-xs text-red-400 hover:text-red-300 underline"
+                        className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase tracking-wider font-bold"
                       >
                         Remove recording
                       </button>
                     </div>
                   ) : (
-                    <div className="text-center text-zinc-500 text-xs py-4">
+                    <div className="text-center text-zinc-600 text-[10px] py-4 uppercase tracking-wider">
                       {isRecording ? 'Recording...' : 'No voice memo recorded'}
                     </div>
                   )}
@@ -398,7 +406,7 @@ const HighClearanceComposer = ({
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={onClose}
-                  className="flex-1 border border-zinc-700 text-zinc-400 py-3 uppercase text-sm font-bold hover:bg-zinc-800 hover:text-white transition-all"
+                  className="flex-1 border border-zinc-800/40 text-zinc-500 py-3 uppercase text-[10px] font-bold tracking-[0.15em] hover:bg-white/5 hover:text-white transition-all rounded-xl active:scale-[0.98]"
                 >
                   Cancel
                 </button>
@@ -409,14 +417,14 @@ const HighClearanceComposer = ({
                     (!message.trim() && !selectedImage && !audioBlob) ||
                     (biometricCapabilities?.supported && !hasCredential)
                   }
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-black py-3 uppercase text-sm font-bold tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 bg-white hover:bg-zinc-100 text-black py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-white/10 active:scale-[0.98]"
                   title={
                     biometricCapabilities?.supported && !hasCredential
                       ? 'Biometric setup required for high-clearance messages'
                       : 'Send high-clearance message'
                   }
                 >
-                  <IoMdSend size={20} />
+                  <LuSend size={14} />
                   {biometricCapabilities?.supported && !hasCredential
                     ? 'Setup Required'
                     : hasCredential
