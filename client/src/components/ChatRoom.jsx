@@ -37,6 +37,9 @@ import {
   LuCrown,
   LuCircleDot,
   LuCheckCheck,
+  LuChevronLeft,
+  LuMaximize2,
+  LuZoomIn,
 } from "react-icons/lu";
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
@@ -214,6 +217,10 @@ const ChatRoom = ({
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState(() => new Set());
 
@@ -251,6 +258,20 @@ const ChatRoom = ({
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Lightbox keyboard navigation
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
+    const total = imageMessages.length;
+    const handleKey = (e) => {
+      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "ArrowLeft" && total > 1) setLightboxIndex((i) => (i - 1 + total) % total);
+      if (e.key === "ArrowRight" && total > 1) setLightboxIndex((i) => (i + 1) % total);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [lightboxOpen, messageList]);
 
   useEffect(() => {
     if (isMobile) return;
@@ -1882,31 +1903,28 @@ const ChatRoom = ({
                 transition: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
               }}
               style={{ overflow: isDeleting ? "hidden" : undefined }}
-              className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"}`}
+              className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"} ${isSelectMode && !msg.system ? "cursor-pointer" : ""} transition-colors duration-200 ${isSelectMode && !msg.system && selectedMessageIds.has(msg.id) ? "bg-white/[0.06] -mx-4 px-4 py-1 rounded-xl" : ""}`}
+              onClick={isSelectMode && !msg.system ? () => toggleSelectMessage(msg.id) : undefined}
             >
               {msg.system ? (
                 <span className="text-[8px] sm:text-[9px] text-zinc-600 px-4 py-1.5 uppercase tracking-[0.2em] rounded-full bg-zinc-900/30 border border-zinc-800/20 backdrop-blur-sm font-mono">
                   {msg.message}
                 </span>
               ) : (
-                <div className="flex flex-col max-w-[90%] sm:max-w-[75%] md:max-w-[60%] relative">
+                <div className={`flex items-start gap-2.5 max-w-full w-full ${msg.own ? "justify-end" : "justify-start"}`}>
+                  {/* WhatsApp-style left checkmark */}
                   {isSelectMode && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSelectMessage(msg.id);
-                      }}
-                      className={`absolute -top-2.5 ${msg.own ? "left-0" : "right-0"} z-40 w-6 h-6 rounded-lg border bg-[#0a0a0c] flex items-center justify-center transition-all ${selectedMessageIds.has(msg.id) ? "border-white bg-white shadow-lg shadow-white/25" : "border-zinc-700/50 hover:border-zinc-500"}`}
-                      title={
-                        selectedMessageIds.has(msg.id) ? "Unselect" : "Select"
-                      }
-                    >
-                      {selectedMessageIds.has(msg.id) && (
-                        <LuCheck className="text-black" size={14} />
-                      )}
-                    </button>
+                    <div className="flex items-center self-center shrink-0">
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${selectedMessageIds.has(msg.id) ? "border-white bg-white shadow-lg shadow-white/20 scale-110" : "border-zinc-600 bg-transparent hover:border-zinc-400"}`}
+                      >
+                        {selectedMessageIds.has(msg.id) && (
+                          <LuCheck className="text-black" size={12} strokeWidth={3} />
+                        )}
+                      </div>
+                    </div>
                   )}
+                  <div className={`flex flex-col max-w-[90%] sm:max-w-[75%] md:max-w-[60%] relative ${isSelectMode ? "pointer-events-none" : ""}`}>
                   <div
                     data-bubble
                     className={`px-3.5 py-3 sm:px-4 sm:py-3.5 relative transition-all rounded-2xl ${
@@ -2082,39 +2100,57 @@ const ChatRoom = ({
                         </div>
                       </div>
                     ) : msg.type === "image" ? (
-                      <div className="space-y-2">
-                        <div className="relative border border-zinc-800/40 bg-zinc-900/60 overflow-hidden group rounded-xl">
-                          <img
-                            src={msg.message}
-                            alt="Classified attachment"
-                            className="max-w-full max-h-96 object-contain w-full"
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              e.target.nextSibling.style.display = "block";
-                            }}
-                          />
-                          <div
-                            style={{ display: "none" }}
-                            className="p-4 text-center text-zinc-500 text-xs"
-                          >
-                            <LuTriangleAlert className="inline mr-2" size={14} />
-                            Failed to decrypt image
-                          </div>
-                          <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest rounded-lg border border-zinc-700/30 flex items-center gap-1">
-                            <LuLock size={10} /> Classified Attachment
-                          </div>
-                          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => downloadImage(msg.message, msg.id)}
-                              className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg"
-                              title="Download image"
+                      (() => {
+                        const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
+                        const imgIdx = imageMessages.findIndex((m) => m.id === msg.id);
+                        return (
+                        <div className="space-y-2">
+                          <div className="relative border border-zinc-800/40 bg-zinc-900/60 overflow-hidden group rounded-xl">
+                            <img
+                              src={msg.message}
+                              alt="Classified attachment"
+                              className="max-w-full max-h-96 object-contain w-full cursor-zoom-in"
+                              onClick={() => {
+                                setLightboxIndex(imgIdx >= 0 ? imgIdx : 0);
+                                setLightboxOpen(true);
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                                e.target.nextSibling.style.display = "block";
+                              }}
+                            />
+                            <div
+                              style={{ display: "none" }}
+                              className="p-4 text-center text-zinc-500 text-xs"
                             >
-                              <LuDownload size={13} />
-                              Download
-                            </button>
+                              <LuTriangleAlert className="inline mr-2" size={14} />
+                              Failed to decrypt image
+                            </div>
+                            <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest rounded-lg border border-zinc-700/30 flex items-center gap-1">
+                              <LuLock size={10} /> Classified Attachment
+                            </div>
+                            {/* Zoom hint overlay */}
+                            <div
+                              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                            >
+                              <div className="bg-black/60 backdrop-blur-sm rounded-full p-2.5 border border-zinc-700/40">
+                                <LuMaximize2 size={18} className="text-white" />
+                              </div>
+                            </div>
+                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => downloadImage(msg.message, msg.id)}
+                                className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg"
+                                title="Download image"
+                              >
+                                <LuDownload size={13} />
+                                Download
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                        );
+                      })()
                     ) : msg.type === "high-clearance" ? (
                       <div className="space-y-2">
                         <div className="relative border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 p-5 sm:p-6 text-center rounded-xl overflow-hidden">
@@ -2298,6 +2334,7 @@ const ChatRoom = ({
                       </motion.div>
                     )}
                   </AnimatePresence>
+                </div>
                 </div>
               )}
             </motion.div>
@@ -2818,6 +2855,122 @@ const ChatRoom = ({
               </motion.div>
             </motion.div>
           )}
+        </AnimatePresence>
+
+        {/* Image Lightbox */}
+        <AnimatePresence>
+          {lightboxOpen && (() => {
+            const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
+            const total = imageMessages.length;
+            const current = imageMessages[lightboxIndex];
+            const handlePrev = () => setLightboxIndex((i) => (i - 1 + total) % total);
+            const handleNext = () => setLightboxIndex((i) => (i + 1) % total);
+            return (
+              <motion.div
+                key="lightbox"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-xl"
+                onClick={() => setLightboxOpen(false)}
+              >
+                {/* Close button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+                  className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 transition-all hover:scale-105 active:scale-95"
+                >
+                  <LuX size={20} />
+                </button>
+
+                {/* Counter */}
+                {total > 1 && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/70 backdrop-blur-sm border border-zinc-700/40 text-zinc-300 text-[11px] uppercase tracking-widest px-4 py-2 rounded-xl font-bold">
+                    {lightboxIndex + 1} / {total}
+                  </div>
+                )}
+
+                {/* Prev button */}
+                {total > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                    className="absolute left-3 sm:left-6 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-3 transition-all hover:scale-105 active:scale-95"
+                  >
+                    <LuChevronLeft size={22} />
+                  </button>
+                )}
+
+                {/* Next button */}
+                {total > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                    className="absolute right-3 sm:right-6 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-3 transition-all hover:scale-105 active:scale-95"
+                  >
+                    <LuChevronRight size={22} />
+                  </button>
+                )}
+
+                {/* Image */}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={lightboxIndex}
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.94 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-col items-center gap-3 px-14 sm:px-20 max-w-[95vw] max-h-[90vh]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <img
+                      src={current?.message}
+                      alt="Full preview"
+                      className="max-w-full max-h-[80vh] object-contain rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
+                    />
+                    {/* Sender info + download */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                        <LuLock size={10} className="inline mr-1" />
+                        {current?.username}
+                      </span>
+                      <button
+                        onClick={() => downloadImage(current?.message, current?.id)}
+                        className="bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 hover:border-white text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
+                      >
+                        <LuDownload size={12} />
+                        Download
+                      </button>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Thumbnail strip (shown when total > 1) */}
+                {total > 1 && (
+                  <div
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-sm border border-zinc-700/30 rounded-2xl max-w-[90vw] overflow-x-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {imageMessages.map((im, i) => (
+                      <button
+                        key={im.id}
+                        onClick={() => setLightboxIndex(i)}
+                        className={`relative flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
+                          i === lightboxIndex
+                            ? "border-white scale-110 shadow-lg shadow-white/10"
+                            : "border-zinc-700/40 hover:border-zinc-500 opacity-60 hover:opacity-100"
+                        }`}
+                      >
+                        <img
+                          src={im.message}
+                          alt={`thumb-${i}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })()}
         </AnimatePresence>
 
         {/* Biometric Vault Modal */}
