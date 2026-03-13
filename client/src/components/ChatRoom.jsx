@@ -54,7 +54,7 @@ import { v4 as uuidv4 } from "uuid";
 import { encryptMagicLinkPayload } from "../utils/magicLink";
 import BiometricVault from "./BiometricVault";
 import HighClearanceComposer from "./HighClearanceComposer";
-import { thanosSnap } from "../utils/thanosSnap";
+
 
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
@@ -1037,22 +1037,16 @@ const ChatRoom = ({
   const selectionHasOthers =
     selectedCount > 0 && selectedMessages.some((m) => !m.own);
 
-  // Telegram "Thanos Snap" animated deletion helper
+  // Simple fade + scale animated deletion helper
   const animateDelete = async (ids, mode = 'local') => {
     const idArr = Array.isArray(ids) ? ids : [ids];
     const idSet = new Set(idArr);
+
+    // Mark as deleting — framer-motion will animate opacity/height to 0
     setDeletingIds(prev => new Set([...prev, ...idSet]));
 
-    // Run particle disintegration on each message bubble concurrently
-    const snaps = idArr.map((id) => {
-      const wrapper = messageRefs.current?.[id];
-      const bubble = wrapper?.querySelector('[data-bubble]') || wrapper;
-      return bubble ? thanosSnap(bubble) : Promise.resolve();
-    });
-    await Promise.all(snaps);
-
-    // Give framer-motion time to finish the height collapse
-    await new Promise((r) => setTimeout(r, 700));
+    // Wait for framer-motion fade + height collapse to finish
+    await new Promise((r) => setTimeout(r, 450));
 
     // Clean up
     setDeletingIds(prev => {
@@ -1398,20 +1392,14 @@ const ChatRoom = ({
       );
     });
     socket.on("message_deleted", async (deletedId) => {
-      // Run Thanos-snap disintegration on the message bubble
-      const wrapper = messageRefs.current?.[deletedId];
-      const bubble = wrapper?.querySelector('[data-bubble]') || wrapper;
-      if (bubble) {
-        setDeletingIds(prev => new Set([...prev, deletedId]));
-        await thanosSnap(bubble);
-        // Let height collapse finish
-        await new Promise((r) => setTimeout(r, 700));
-        setDeletingIds(prev => {
-          const next = new Set(prev);
-          next.delete(deletedId);
-          return next;
-        });
-      }
+      // Simple fade + height collapse animation
+      setDeletingIds(prev => new Set([...prev, deletedId]));
+      await new Promise((r) => setTimeout(r, 450));
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(deletedId);
+        return next;
+      });
       setMessageList((list) =>
         list.map((msg) =>
           msg.id === deletedId
@@ -2174,7 +2162,7 @@ const ChatRoom = ({
                 marginTop: isDeleting ? 0 : undefined,
                 marginBottom: isDeleting ? 0 : undefined,
                 transition: isDeleting
-                  ? { duration: 0.55, ease: [0.4, 0, 0.2, 1], delay: 1.8 }
+                  ? { duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: 0 }
                   : {
                       type: "spring",
                       stiffness: 300,
