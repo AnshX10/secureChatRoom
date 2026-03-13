@@ -226,28 +226,28 @@ const HighClearanceComposer = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] flex items-end sm:items-center justify-center p-0 sm:p-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-[#0f0f11] border border-zinc-700/30 max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)] scrollbar-micro"
+          className="bg-[#0f0f11] border border-zinc-700/30 max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)] scrollbar-micro"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-white/5 rounded-xl border border-zinc-700/20">
                   <LuLock className="text-white" size={22} />
                 </div>
                 <div>
-                  <h2 className="text-base font-black uppercase tracking-[0.12em] text-white">
+                  <h2 className="text-sm sm:text-base font-black uppercase tracking-[0.1em] sm:tracking-[0.12em] text-white">
                     High Clearance Message
                   </h2>
-                  <p className="text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold">
+                  <p className="text-[8px] sm:text-[9px] text-zinc-500 uppercase tracking-[0.15em] sm:tracking-[0.2em] font-bold">
                     Biometric Protected • AES-256 Encrypted
                   </p>
                 </div>
@@ -262,7 +262,7 @@ const HighClearanceComposer = ({
             </div>
 
             {/* Security Status */}
-            <div className={`mb-6 p-4 rounded-xl border ${biometricCapabilities?.supported && !hasCredential ? 'border-red-500/20 bg-red-950/20' : 'border-zinc-700/20 bg-zinc-900/30'}`}>
+            <div className={`mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl border ${biometricCapabilities?.supported && !hasCredential ? 'border-red-500/20 bg-red-950/20' : 'border-zinc-700/20 bg-zinc-900/30'}`}>
               <div className="flex items-center gap-2.5 mb-3">
                 {biometricCapabilities?.supported && !hasCredential ? (
                   <LuShieldAlert className="text-red-400" size={16} />
@@ -365,7 +365,7 @@ const HighClearanceComposer = ({
               </div>
 
               {/* Attachments */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {/* Image Attachment */}
                 <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
                   <div className="flex items-center justify-between mb-3">
@@ -505,7 +505,7 @@ const HighClearanceComposer = ({
               </div>
 
               {/* Send Button */}
-              <div className="flex gap-3 pt-4">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
                 <button
                   onClick={onClose}
                   className="flex-1 border border-zinc-800/40 text-zinc-500 py-3 uppercase text-[10px] font-bold tracking-[0.15em] hover:bg-white/5 hover:text-white transition-all rounded-xl active:scale-[0.98]"

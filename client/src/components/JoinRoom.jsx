@@ -67,7 +67,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-6 font-sans selection:bg-zinc-700 selection:text-white">
+    <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
       
       {/* Background Grid Noise */}
       <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
@@ -77,19 +77,19 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
       <div className="w-full max-w-md relative z-10">
         
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-white/5 rounded-2xl border border-zinc-700/20">
-              <Logo variant="shield" className="w-12 h-12 text-white" />
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="flex justify-center mb-3 sm:mb-4">
+            <div className="p-2.5 sm:p-3 bg-white/5 rounded-2xl border border-zinc-700/20">
+              <Logo variant="shield" className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
             </div>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight mb-2">
             <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">CHATROOM</span>
           </h1>
-          <p className="text-zinc-600 text-[10px] uppercase tracking-[0.35em] font-medium">End-to-End Encrypted Signal</p>
+          <p className="text-zinc-600 text-[9px] sm:text-[10px] uppercase tracking-[0.3em] sm:tracking-[0.35em] font-medium">End-to-End Encrypted Signal</p>
         </div>
 
-        <div className="bg-[#0f0f11] border border-zinc-800/40 p-7 sm:p-8 rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.6)] relative overflow-hidden">
+        <div className="bg-[#0f0f11] border border-zinc-800/40 p-5 sm:p-7 md:p-8 rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.6)] relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.01] via-transparent to-white/[0.01]" />
           {/* Error banner – show at top for menu/create; join view shows error inline above Connect */}
           {errorMessage && view !== "join" && (
@@ -119,7 +119,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
               >
                 <button
                   onClick={() => { clearError?.(); setView("create"); }}
-                  className="w-full group bg-gradient-to-r from-white to-zinc-100 text-zinc-900 p-5 sm:p-6 rounded-xl hover:shadow-lg hover:shadow-white/10 transition-all flex items-center justify-between active:scale-[0.98]"
+                  className="w-full group bg-gradient-to-r from-white to-zinc-100 text-zinc-900 p-4 sm:p-5 md:p-6 rounded-xl hover:shadow-lg hover:shadow-white/10 transition-all flex items-center justify-between active:scale-[0.98]"
                 >
                   <div className="text-left">
                     <span className="block font-bold text-base sm:text-lg tracking-wide">CREATE FREQUENCY</span>
@@ -136,7 +136,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                     setIsMagicLink(false);
                     setView("join");
                   }}
-                  className="w-full group bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-5 sm:p-6 rounded-xl transition-all flex items-center justify-between active:scale-[0.98]"
+                  className="w-full group bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-4 sm:p-5 md:p-6 rounded-xl transition-all flex items-center justify-between active:scale-[0.98]"
                 >
                   <div className="text-left">
                     <span className="block font-bold text-base sm:text-lg tracking-wide">JOIN FREQUENCY</span>
@@ -151,7 +151,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   onClick={() => {
                     window.location.hash = '#demo';
                   }}
-                  className="w-full group bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-5 sm:p-6 rounded-xl transition-all flex items-center justify-between active:scale-[0.98]"
+                  className="w-full group bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-4 sm:p-5 md:p-6 rounded-xl transition-all flex items-center justify-between active:scale-[0.98]"
                 >
                   <div className="text-left">
                     <span className="block font-bold text-base sm:text-lg tracking-wide">BIOMETRIC DEMO</span>
@@ -167,9 +167,9 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
             {/* === CREATE === */}
             {view === "create" && (
               <motion.div key="create" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10">
-                <div className="flex items-center gap-3.5 mb-8">
+                <div className="flex items-center gap-3 sm:gap-3.5 mb-6 sm:mb-8">
                   <button onClick={() => { clearError?.(); setView("menu"); }} className="p-2 hover:bg-white/5 rounded-xl transition-all active:scale-90"><LuArrowLeft size={20} /></button>
-                  <h2 className="text-lg font-bold uppercase tracking-[0.15em]">Init Host</h2>
+                  <h2 className="text-base sm:text-lg font-bold uppercase tracking-[0.15em]">Init Host</h2>
                 </div>
 
                 <div className="space-y-5">
@@ -188,7 +188,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                     <input type="text" placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} />
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 pt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <div className="flex items-center justify-between gap-3 pt-2 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] text-zinc-400">
                     <div className="flex flex-col gap-1">
                       <span className="text-[10px] font-medium">Require Host Approval</span>
                       <span className="text-[8px] text-zinc-600 normal-case tracking-normal">New agents must be accepted by you</span>

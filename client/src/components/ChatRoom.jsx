@@ -46,6 +46,7 @@ import {
   LuSquare,
   LuPlay,
   LuPause,
+  LuPlus,
 } from "react-icons/lu";
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
@@ -223,12 +224,8 @@ const ChatRoom = ({
   const [pollDurationMs, setPollDurationMs] = useState(60 * 60 * 1000);
   const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
 
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [selectedAttachments, setSelectedAttachments] = useState([]);
   const fileInputRef = useRef(null);
-
-  // File attachment state (non-image files)
-  const [selectedFile, setSelectedFile] = useState(null); // { name, size, type, data }
 
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -264,6 +261,11 @@ const ChatRoom = ({
   const [showBiometricVault, setShowBiometricVault] = useState(false);
   const [vaultMessage, setVaultMessage] = useState(null);
   const [showHighClearanceComposer, setShowHighClearanceComposer] = useState(false);
+
+  // Mobile toolbar toggle
+  const [showMobileToolbar, setShowMobileToolbar] = useState(false);
+  const mobileToolbarRef = useRef(null);
+  const hasSelectedAttachments = selectedAttachments.length > 0;
 
   const timerOptions = [
     { label: "OFF", value: 0 },
@@ -635,42 +637,62 @@ const ChatRoom = ({
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
     const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("File too large. Maximum size is 5MB.");
+    const validFiles = files.filter((file) => file.size <= maxSize);
+    const skippedCount = files.length - validFiles.length;
+
+    if (!validFiles.length) {
+      alert("All selected files are too large. Maximum size is 5MB per file.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target.result;
-      if (file.type.startsWith("image/")) {
-        setSelectedImage(base64);
-        setImagePreview(base64);
-        setSelectedFile(null);
-      } else {
-        setSelectedFile({
-          name: file.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-          data: base64,
-        });
-        setSelectedImage(null);
-        setImagePreview(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    if (skippedCount > 0) {
+      alert(`${skippedCount} file(s) skipped. Maximum size is 5MB per file.`);
+    }
+
+    const readAsDataUrl = (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+        reader.readAsDataURL(file);
+      });
+
+    try {
+      const newAttachments = await Promise.all(
+        validFiles.map(async (file) => {
+          const base64 = await readAsDataUrl(file);
+          return {
+            id: uuidv4(),
+            name: file.name,
+            size: file.size,
+            mimeType: file.type || "application/octet-stream",
+            type: file.type.startsWith("image/") ? "image" : "file",
+            data: base64,
+          };
+        }),
+      );
+      setSelectedAttachments((prev) => [...prev, ...newAttachments]);
+    } catch (error) {
+      console.error("Failed to process selected files:", error);
+      alert("Some files could not be processed. Please try again.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const clearAttachment = () => {
-    setSelectedImage(null);
-    setImagePreview(null);
-    setSelectedFile(null);
+    setSelectedAttachments([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (attachmentId) => {
+    setSelectedAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
   };
 
   const downloadImage = (imageData, messageId) => {
@@ -686,80 +708,62 @@ const ChatRoom = ({
     }
   };
 
-  const sendImageMessage = async () => {
-    if (!selectedImage) return;
+  const sendSelectedAttachments = async () => {
+    if (!selectedAttachments.length) return;
 
-    const messageId = uuidv4();
-    const time = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const attachmentsToSend = [...selectedAttachments];
+    const replyPayload = replyingTo ? {
+      messageId: replyingTo.id,
+      username: replyingTo.username,
+      message: encrypt(getReplyPreviewText(replyingTo)),
+    } : null;
 
-    const encryptedImage = encrypt(selectedImage);
+    for (const attachment of attachmentsToSend) {
+      const messageId = uuidv4();
+      const time = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
-    const messageData = {
-      id: messageId,
-      roomId,
-      username,
-      message: encryptedImage,
-      time,
-      edited: false,
-      deleted: false,
-      timer: selfDestructTime,
-      replyTo: replyingTo ? {
-        messageId: replyingTo.id,
-        username: replyingTo.username,
-        message: encrypt(getReplyPreviewText(replyingTo)),
-      } : null,
-      type: "image",
-    };
+      if (attachment.type === "image") {
+        const encryptedImage = encrypt(attachment.data);
+        const messageData = {
+          id: messageId,
+          roomId,
+          username,
+          message: encryptedImage,
+          time,
+          edited: false,
+          deleted: false,
+          timer: selfDestructTime,
+          replyTo: replyPayload,
+          type: "image",
+        };
+        await socket.emit("send_message", messageData);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, own: true }]);
+      } else {
+        const encryptedData = encrypt(attachment.data);
+        const encryptedName = encrypt(attachment.name);
+        const messageData = {
+          id: messageId,
+          roomId,
+          username,
+          message: encryptedData,
+          fileName: encryptedName,
+          fileSize: attachment.size,
+          fileType: attachment.mimeType,
+          time,
+          edited: false,
+          deleted: false,
+          timer: selfDestructTime,
+          replyTo: replyPayload,
+          type: "file",
+        };
+        await socket.emit("send_message", messageData);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, own: true }]);
+      }
+    }
 
-    await socket.emit("send_message", messageData);
-    setMessageList((list) => [
-      ...list,
-      { ...messageData, message: selectedImage, own: true },
-    ]);
-    clearAttachment();
-    setReplyingTo(null);
-  };
-
-  const sendFileMessage = async () => {
-    if (!selectedFile) return;
-
-    const messageId = uuidv4();
-    const time = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const encryptedData = encrypt(selectedFile.data);
-    const encryptedName = encrypt(selectedFile.name);
-
-    const messageData = {
-      id: messageId,
-      roomId,
-      username,
-      message: encryptedData,
-      fileName: encryptedName,
-      fileSize: selectedFile.size,
-      fileType: selectedFile.type,
-      time,
-      edited: false,
-      deleted: false,
-      timer: selfDestructTime,
-      replyTo: replyingTo ? {
-        messageId: replyingTo.id,
-        username: replyingTo.username,
-        message: encrypt(getReplyPreviewText(replyingTo)),
-      } : null,
-      type: "file",
-    };
-
-    await socket.emit("send_message", messageData);
-    setMessageList((list) => [
-      ...list,
-      { ...messageData, message: selectedFile.data, fileName: selectedFile.name, own: true },
-    ]);
     clearAttachment();
     setReplyingTo(null);
   };
@@ -1483,6 +1487,23 @@ const ChatRoom = ({
     return () => document.removeEventListener("click", fn);
   }, []);
 
+  // Close mobile toolbar on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (mobileToolbarRef.current && !mobileToolbarRef.current.contains(e.target)) {
+        setShowMobileToolbar(false);
+      }
+    };
+    if (showMobileToolbar) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showMobileToolbar]);
+
   return (
     <div
       className={`flex h-[100dvh] w-full bg-[#09090b] text-white font-sans selection:bg-zinc-700 selection:text-white overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
@@ -1637,6 +1658,13 @@ const ChatRoom = ({
           0% { transform: translateX(-30%); opacity: 0.65; }
           100% { transform: translateX(160%); opacity: 1; }
         }
+
+        /* Mobile-specific sidebar scrolling fix */
+        @supports (padding: env(safe-area-inset-bottom)) {
+          .chat-footer-safe {
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+          }
+        }
       `}</style>
 
       <AnimatePresence>
@@ -1696,9 +1724,9 @@ const ChatRoom = ({
             animate={{ x: 0 }}
             exit={{ x: -300 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed md:relative z-50 w-[85%] sm:w-72 h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col"
+            className="fixed md:relative z-50 w-[88%] max-w-[320px] sm:w-72 h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col"
           >
-            <div className="p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden pt-safe">
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
               <h2 className="text-base font-black uppercase tracking-[0.2em] flex items-center gap-2.5 text-white relative z-10">
                 <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30 shadow-lg shadow-black/10">
@@ -1949,7 +1977,7 @@ const ChatRoom = ({
       </AnimatePresence>
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#09090b] relative">
-        <header className="h-16 sm:h-20 flex items-center justify-between px-4 sm:px-6 z-30 bg-[#09090b]/80 backdrop-blur-xl flex-shrink-0 relative border-b border-zinc-800/30">
+        <header className="h-14 sm:h-16 md:h-20 flex items-center justify-between px-3 sm:px-4 md:px-6 z-30 bg-[#09090b]/80 backdrop-blur-xl flex-shrink-0 relative border-b border-zinc-800/30 pt-safe">
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/30 to-transparent" />
           <div className="flex items-center gap-3 min-w-0 z-10">
             <Logo
@@ -1962,8 +1990,8 @@ const ChatRoom = ({
             >
               <LuUsers size={19} />
             </button>
-            <div className="hidden sm:flex flex-col truncate">
-              <h1 className="font-bold uppercase tracking-[0.2em] text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
+            <div className="hidden xs:flex flex-col truncate">
+              <h1 className="font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
                 <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span></span>
                 Encrypted Session
               </h1>
@@ -1974,18 +2002,18 @@ const ChatRoom = ({
             </div>
           </div>
 
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none max-w-[45%] sm:max-w-[50%]">
             <div className="flex flex-col items-center">
-              <span className="text-[7px] sm:text-[8px] text-zinc-700 uppercase tracking-[0.5em] font-bold mb-1">
+              <span className="text-[6px] sm:text-[7px] md:text-[8px] text-zinc-700 uppercase tracking-[0.4em] sm:tracking-[0.5em] font-bold mb-0.5 sm:mb-1">
                 Room
               </span>
-              <h1 className="text-base sm:text-xl font-black tracking-[0.12em] text-zinc-100 leading-none uppercase font-mono">
+              <h1 className="text-sm sm:text-base md:text-xl font-black tracking-[0.1em] sm:tracking-[0.12em] text-zinc-100 leading-none uppercase font-mono truncate">
                 {roomName}
               </h1>
             </div>
           </div>
 
-          <div className="z-10 min-w-[80px] flex justify-end items-center gap-1.5">
+          <div className="z-10 min-w-[60px] sm:min-w-[80px] flex justify-end items-center gap-1 sm:gap-1.5">
             {typeof Notification !== "undefined" && (
               <button
                 type="button"
@@ -2063,8 +2091,8 @@ const ChatRoom = ({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:px-6 space-y-3 sm:space-y-4 scrollbar-hide relative">
-          <div className="pointer-events-none fixed top-20 left-72 right-0 h-24 bg-gradient-to-b from-[#09090b] to-transparent z-10 hidden md:block" />
+        <main className="flex-1 overflow-y-auto p-2.5 sm:p-4 md:px-6 space-y-2 sm:space-y-3 md:space-y-4 scrollbar-hide relative">
+          <div className="pointer-events-none fixed top-20 left-72 right-0 h-24 bg-gradient-to-b from-[#09090b] to-transparent z-10 hidden lg:block" />
           {pinnedMessageId &&
             (() => {
               const pinnedMsg = messageList.find(
@@ -2183,10 +2211,10 @@ const ChatRoom = ({
                       </div>
                     </div>
                   )}
-                  <div className={`flex flex-col max-w-[90%] sm:max-w-[75%] md:max-w-[60%] relative ${isSelectMode ? "pointer-events-none" : ""}`}>
+                  <div className={`flex flex-col max-w-[92%] sm:max-w-[80%] md:max-w-[70%] lg:max-w-[60%] relative ${isSelectMode ? "pointer-events-none" : ""}`}>
                   <div
                     data-bubble
-                    className={`px-3.5 py-3 sm:px-4 sm:py-3.5 relative transition-all rounded-2xl ${
+                    className={`px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5 relative transition-all rounded-2xl ${
                       msg.deleted
                         ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
                         : msg.poll
@@ -2414,7 +2442,7 @@ const ChatRoom = ({
                             const audioId = `audio-${msg.id}`;
                             return (
                               <div className="p-3 space-y-2">
-                                <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-2">
                                   <button
                                     onClick={() => {
                                       const el = document.getElementById(audioId);
@@ -2427,7 +2455,7 @@ const ChatRoom = ({
                                         el.pause();
                                       }
                                     }}
-                                    className={`p-2 rounded-full transition-all active:scale-90 shrink-0 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800" : "bg-white/10 hover:bg-white/20"}`}
+                                    className={`h-11 w-11 sm:h-10 sm:w-10 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800" : "bg-white/10 hover:bg-white/20"}`}
                                   >
                                     <LuPlay size={14} className={msg.own ? "text-white" : "text-white"} id={`${audioId}-play-icon`} />
                                   </button>
@@ -2468,7 +2496,7 @@ const ChatRoom = ({
                                       el.playbackRate = next;
                                       btn.textContent = next + 'x';
                                     }}
-                                    className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-bold transition-all active:scale-90 shrink-0 ${msg.own ? "text-zinc-600 hover:text-zinc-900 bg-zinc-300/50 hover:bg-zinc-300 border border-zinc-400/30" : "text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/30"}`}
+                                    className={`h-9 sm:h-8 inline-flex items-center justify-center text-[10px] px-2.5 rounded-md font-mono font-bold transition-all active:scale-90 shrink-0 ${msg.own ? "text-zinc-600 hover:text-zinc-900 bg-zinc-300/50 hover:bg-zinc-300 border border-zinc-400/30" : "text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/30"}`}
                                   >
                                     1x
                                   </button>
@@ -2510,8 +2538,8 @@ const ChatRoom = ({
                     ) : msg.type === "file" ? (
                       <div className="space-y-2">
                         <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
-                          <div className="flex items-center gap-3 p-3.5">
-                            <div className={`p-2.5 rounded-xl shrink-0 ${msg.own ? "bg-zinc-900/10 border border-zinc-300/40" : "bg-white/5 border border-zinc-700/30"}`}>
+                          <div className="flex items-center gap-2.5 p-3">
+                            <div className={`h-11 w-11 sm:h-12 sm:w-12 rounded-xl shrink-0 flex items-center justify-center ${msg.own ? "bg-zinc-900/10 border border-zinc-300/40" : "bg-white/5 border border-zinc-700/30"}`}>
                               {React.createElement(getFileIcon(msg.fileType), { size: 22, className: msg.own ? "text-zinc-700" : "text-zinc-300" })}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -2524,7 +2552,7 @@ const ChatRoom = ({
                             </div>
                             <button
                               onClick={() => downloadFile(msg.message, msg.fileName)}
-                              className={`px-3 py-2 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg shrink-0 active:scale-95 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700" : "bg-white/5 hover:bg-white hover:text-black text-zinc-400 border border-zinc-700/30 hover:border-white"}`}
+                              className={`h-11 w-11 sm:h-10 sm:w-auto sm:px-3 sm:py-2 text-[10px] uppercase tracking-widest font-bold transition-all inline-flex items-center justify-center gap-1.5 rounded-lg shrink-0 self-center active:scale-95 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700" : "bg-white/5 hover:bg-white hover:text-black text-zinc-400 border border-zinc-700/30 hover:border-white"}`}
                               title="Download file"
                             >
                               <LuDownload size={13} />
@@ -2535,7 +2563,7 @@ const ChatRoom = ({
                       </div>
                     ) : msg.type === "high-clearance" ? (
                       <div className="space-y-2">
-                        <div className={`relative p-5 sm:p-6 text-center rounded-xl overflow-hidden ${msg.own ? "border border-zinc-400/30 bg-gradient-to-br from-zinc-800 to-zinc-900" : "border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20"}`}>
+                        <div className={`relative p-4 sm:p-5 md:p-6 text-center rounded-xl overflow-hidden ${msg.own ? "border border-zinc-400/30 bg-gradient-to-br from-zinc-800 to-zinc-900" : "border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20"}`}>
                           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
                           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/25 to-transparent" />
                           
@@ -2550,10 +2578,10 @@ const ChatRoom = ({
                             )}
                           </div>
 
-                          <div className="flex flex-col items-center gap-3.5 mt-6 relative z-10">
+                          <div className="flex flex-col items-center gap-2.5 sm:gap-3.5 mt-5 sm:mt-6 relative z-10">
                             <div className="relative">
-                              <div className="p-3.5 bg-white/5 rounded-2xl border border-zinc-700/20">
-                                <LuLock className="text-white" size={32} strokeWidth={1.5} />
+                              <div className="p-2.5 sm:p-3.5 bg-white/5 rounded-2xl border border-zinc-700/20">
+                                <LuLock className="text-white" size={24} strokeWidth={1.5} />
                               </div>
                               <div className="absolute inset-0 bg-white/[0.02] rounded-2xl animate-pulse" />
                             </div>
@@ -2645,7 +2673,7 @@ const ChatRoom = ({
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[160px] rounded-xl overflow-hidden`}
+                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[150px] sm:min-w-[160px] rounded-xl overflow-hidden`}
                       >
                         <button
                           onClick={() => startReplying(msg)}
@@ -2766,7 +2794,7 @@ const ChatRoom = ({
           <div ref={scrollRef} className="h-2" />
         </main>
 
-        <footer className="p-3 sm:p-4 bg-[#09090b]/80 backdrop-blur-xl relative flex-shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <footer className="p-2 sm:p-3 md:p-4 bg-[#09090b]/80 backdrop-blur-xl relative flex-shrink-0 chat-footer-safe">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/30 to-transparent" />
           <div className="flex items-center justify-between mb-2">
             {editingMessageId ? (
@@ -2798,24 +2826,24 @@ const ChatRoom = ({
           </div>
 
           {isSelectMode && (
-            <div className="mb-2 bg-zinc-900/40 backdrop-blur-sm px-3 py-2.5 flex items-center justify-between gap-3 rounded-xl border border-zinc-800/30">
+            <div className="mb-2 bg-zinc-900/40 backdrop-blur-sm px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 rounded-xl border border-zinc-800/30">
               <div className="min-w-0">
-                <p className="text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500">
+                <p className="text-[8px] sm:text-[9px] uppercase tracking-[0.25em] font-black text-zinc-500">
                   Select Mode
                 </p>
-                <p className="text-[10px] text-zinc-300 font-bold truncate">
+                <p className="text-[9px] sm:text-[10px] text-zinc-300 font-bold truncate">
                   {selectedCount} selected
                   {selectionHasOthers
                     ? " • global delete disabled (includes others)"
                     : ""}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={bulkLocalDelete}
                   disabled={selectedCount === 0}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-300 hover:bg-white hover:text-black transition-all rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-300 hover:bg-white hover:text-black transition-all rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                   title="Delete locally (hide from your screen)"
                 >
                   <LuEyeOff size={11} /> Local Delete
@@ -2824,7 +2852,7 @@ const ChatRoom = ({
                   type="button"
                   onClick={bulkGlobalDelete}
                   disabled={selectedCount === 0 || !selectionAllOwn}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-red-900/30 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all rounded-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border border-red-900/30 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all rounded-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                   title={
                     selectionAllOwn
                       ? "Delete for everyone (your messages only)"
@@ -2836,7 +2864,7 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={exitSelectMode}
-                  className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-500 hover:text-white hover:bg-white/5 transition-all rounded-xl active:scale-95"
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border border-zinc-800/40 text-zinc-500 hover:text-white hover:bg-white/5 transition-all rounded-xl active:scale-95"
                   title="Exit select mode"
                 >
                   Cancel
@@ -2846,17 +2874,162 @@ const ChatRoom = ({
           )}
 
           <div
-            className={`flex ${imagePreview || selectedFile ? "flex-col" : "items-center"} p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
+            className={`flex ${hasSelectedAttachments ? "flex-col" : "items-center"} p-1 sm:p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
             <div className="flex items-center w-full">
-              <div className="flex items-center">
+              {/* ── Mobile: single + button with popup (hidden during recording/audio preview) ── */}
+              {!isRecording && !audioBlob && (
+              <div className="relative sm:hidden" ref={mobileToolbarRef}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMobileToolbar(!showMobileToolbar);
+                  }}
+                  className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
+                >
+                  <LuPlus size={20} strokeWidth={2.5} className={`transition-transform duration-200 ${showMobileToolbar ? "rotate-45" : ""}`} />
+                  {/* Active indicator dot */}
+                  {(selfDestructTime > 0 || isRecording || hasSelectedAttachments || audioBlob) && !showMobileToolbar && (
+                    <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  )}
+                </button>
+                <AnimatePresence>
+                  {showMobileToolbar && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="absolute bottom-full left-0 mb-2 bg-[#111113]/98 backdrop-blur-2xl border border-zinc-800/50 shadow-[0_16px_60px_rgba(0,0,0,0.9)] z-50 rounded-2xl overflow-hidden min-w-[200px]"
+                    >
+                      <div className="p-1.5 space-y-0.5">
+                        {/* Self-destruct timer - inline expandable */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowTimerMenu(!showTimerMenu);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"}`}
+                          >
+                            <LuTimer size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider flex-1 text-left">
+                              Self-Destruct {selfDestructTime > 0 ? `(${selfDestructTime / 1000}s)` : ""}
+                            </span>
+                            <LuChevronRight size={14} className={`transition-transform duration-200 ${showTimerMenu ? "rotate-90" : ""}`} />
+                          </button>
+                          <AnimatePresence>
+                            {showTimerMenu && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: "easeOut" }}
+                                className="overflow-hidden"
+                              >
+                                <div className="grid grid-cols-3 gap-1 px-2 pb-2 pt-1">
+                                  {timerOptions.map((opt) => (
+                                    <button
+                                      key={opt.label}
+                                      onClick={() => {
+                                        setSelfDestructTime(opt.value);
+                                        setShowTimerMenu(false);
+                                        setShowMobileToolbar(false);
+                                      }}
+                                      className={`px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95 ${selfDestructTime === opt.value ? "bg-white/10 text-white ring-1 ring-white/20" : "text-zinc-500 hover:text-zinc-300 bg-white/[0.03] hover:bg-white/[0.06]"}`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Poll */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            togglePollModal();
+                            setShowMobileToolbar(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId}
+                        >
+                          <LuChartBar size={18} />
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Create Poll</span>
+                        </button>
+
+                        {/* Attach file */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fileInputRef.current?.click();
+                            setShowMobileToolbar(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId}
+                        >
+                          <LuPaperclip size={18} />
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Attach File</span>
+                        </button>
+
+                        {/* High clearance */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowHighClearanceComposer(true);
+                            setShowMobileToolbar(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId}
+                        >
+                          <div className="relative">
+                            <LuLock size={18} />
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
+                          </div>
+                          <span className="text-[11px] font-bold uppercase tracking-wider">High Clearance</span>
+                        </button>
+
+                        {/* Voice record */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isRecording) {
+                              stopRecording();
+                            } else {
+                              startRecording();
+                            }
+                            setShowMobileToolbar(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${isRecording ? "text-red-400 bg-red-500/15" : audioBlob ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId}
+                        >
+                          {isRecording ? <LuSquare size={16} /> : <LuMic size={18} />}
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            {isRecording ? "Stop Recording" : "Voice Message"}
+                          </span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              )}
+
+              {/* ── Desktop: inline toolbar buttons (hidden during recording/audio preview) ── */}
+              {!isRecording && !audioBlob && (
+              <div className="hidden sm:flex items-center">
                 <div className="relative">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowTimerMenu(!showTimerMenu);
                     }}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"}`}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"}`}
                   >
                     <LuTimer size={16} />
                   </button>
@@ -2866,7 +3039,7 @@ const ChatRoom = ({
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-28 sm:w-36 rounded-xl overflow-hidden"
+                        className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-36 rounded-xl overflow-hidden"
                       >
                         {timerOptions.map((opt) => (
                           <button
@@ -2875,7 +3048,7 @@ const ChatRoom = ({
                               setSelfDestructTime(opt.value);
                               setShowTimerMenu(false);
                             }}
-                            className={`w-full text-left px-3 py-2.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                            className={`w-full text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
                           >
                             {opt.value > 0 && <LuTimer size={10} className="inline mr-1.5" />}
                             {opt.label}
@@ -2889,7 +3062,7 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={togglePollModal}
-                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Create a poll"
                   disabled={!!editingMessageId}
                 >
@@ -2899,24 +3072,17 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${selectedImage || selectedFile ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Attach file or image"
                   disabled={!!editingMessageId}
                 >
                   <LuPaperclip size={16} />
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="*/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
 
                 <button
                   type="button"
                   onClick={() => setShowHighClearanceComposer(true)}
-                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Send high clearance message (biometric protected)"
                   disabled={!!editingMessageId}
                 >
@@ -2927,20 +3093,32 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={isRecording ? stopRecording : startRecording}
-                  className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 ${isRecording ? "text-red-400 bg-red-500/15 animate-pulse" : audioBlob ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${isRecording ? "text-red-400 bg-red-500/15 animate-pulse" : audioBlob ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
                   title={isRecording ? "Stop recording" : "Record voice message"}
                   disabled={!!editingMessageId}
                 >
                   {isRecording ? <LuSquare size={14} /> : <LuMic size={16} />}
                 </button>
               </div>
+              )}
 
-              <div className="w-px h-6 bg-zinc-800/40 mx-1 shrink-0 hidden sm:block" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="*/*"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {!isRecording && !audioBlob && (
+                <div className="w-px h-6 bg-zinc-800/40 mx-1 shrink-0 hidden sm:block" />
+              )}
 
               {/* Recording state - animated waveform UI */}
               {isRecording ? (
-                <div className="flex-1 flex items-center gap-3 px-2 sm:px-3">
-                  <div className="relative flex items-center gap-0.5 h-8 flex-1">
+                <div className="flex-1 flex items-center gap-1.5 sm:gap-3 px-1 sm:px-2 md:px-3">
+                  <div className="relative flex items-center gap-0.5 h-6 sm:h-8 flex-1">
                     {audioLevels.map((level, i) => (
                       <motion.div
                         key={i}
@@ -2954,9 +3132,9 @@ const ChatRoom = ({
                       />
                     ))}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-red-400 text-[11px] font-mono font-bold tabular-nums tracking-wider">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-red-400 text-[10px] sm:text-[11px] font-mono font-bold tabular-nums tracking-wider">
                       {formatDuration(recordingDuration)}
                     </span>
                   </div>
@@ -2971,7 +3149,7 @@ const ChatRoom = ({
 
               ) : audioBlob && audioPreviewUrl ? (
                 /* Audio preview before sending */
-                <div className="flex-1 flex items-center gap-2 px-2 sm:px-3">
+                <div className="flex-1 flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 md:px-3 min-w-0">
                   <button
                     onClick={() => {
                       if (!audioPreviewRef.current) return;
@@ -2983,9 +3161,9 @@ const ChatRoom = ({
                         setIsPlayingPreview(true);
                       }
                     }}
-                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
+                    className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
                   >
-                    {isPlayingPreview ? <LuPause size={14} /> : <LuPlay size={14} />}
+                    {isPlayingPreview ? <LuPause size={12} /> : <LuPlay size={12} />}
                   </button>
                   <audio
                     ref={audioPreviewRef}
@@ -2993,7 +3171,7 @@ const ChatRoom = ({
                     onEnded={() => setIsPlayingPreview(false)}
                     className="hidden"
                   />
-                  <div className="flex-1 flex items-center gap-1.5 h-8">
+                  <div className="flex-1 flex items-center gap-0.5 sm:gap-1 h-6 sm:h-7 min-w-0 overflow-hidden">
                     {/* Static waveform bars for preview */}
                     {Array.from({ length: 32 }).map((_, i) => {
                       const h = Math.sin(i * 0.5) * 0.5 + Math.random() * 0.5;
@@ -3006,22 +3184,22 @@ const ChatRoom = ({
                       );
                     })}
                   </div>
-                  <span className="text-zinc-400 text-[10px] font-mono font-bold tabular-nums tracking-wider shrink-0">
+                  <span className="text-zinc-400 text-[9px] sm:text-[10px] font-mono font-bold tabular-nums tracking-wider shrink-0">
                     {formatDuration(recordingDuration)}
                   </span>
                   <button
                     onClick={cancelRecording}
-                    className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90"
+                    className="h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
                     title="Discard"
                   >
-                    <LuTrash2 size={14} />
+                    <LuTrash2 size={13} />
                   </button>
                 </div>
 
               ) : (
                 /* Normal text input */
                 <>
-                  {replyingTo && !editingMessageId && !imagePreview && !selectedFile && (
+                  {replyingTo && !editingMessageId && !hasSelectedAttachments && (
                     <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
                       <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                         <LuReply size={11} className="text-white" />
@@ -3036,7 +3214,7 @@ const ChatRoom = ({
                     </div>
                   )}
 
-                  {!imagePreview && !selectedFile && (
+                  {!hasSelectedAttachments && (
                     <input
                       ref={inputRef}
                       type="text"
@@ -3054,63 +3232,90 @@ const ChatRoom = ({
                 </>
               )}
 
+              {hasSelectedAttachments && !editingMessageId && !isRecording && !audioBlob && (
+                <button
+                  type="button"
+                  onClick={clearAttachment}
+                  className="h-8 w-8 sm:h-9 sm:w-9 mr-1 sm:mr-1.5 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
+                  title="Remove attachment"
+                >
+                  <LuX size={13} />
+                </button>
+              )}
+
               <button
-                onClick={audioBlob ? sendAudioMessage : selectedImage ? sendImageMessage : selectedFile ? sendFileMessage : sendMessage}
-                className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 ${editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
-                disabled={!audioBlob && !selectedImage && !selectedFile && !currentMessage.trim()}
+                onClick={isRecording ? stopRecording : audioBlob ? sendAudioMessage : hasSelectedAttachments ? sendSelectedAttachments : sendMessage}
+                className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 flex items-center justify-center gap-1.5 ${isRecording ? "bg-red-500 text-white hover:bg-red-400" : editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
+                disabled={isRecording ? false : !audioBlob && !hasSelectedAttachments && !currentMessage.trim()}
+                title={isRecording ? "Stop recording" : audioBlob ? "Send audio message" : "Send message"}
               >
-                {editingMessageId ? (
+                {isRecording ? (
+                  <>
+                    <LuSquare size={14} />
+                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">Stop</span>
+                  </>
+                ) : editingMessageId ? (
                   <LuCheck size={16} strokeWidth={2.5} />
+                ) : audioBlob ? (
+                  <>
+                    <LuSend size={16} />
+                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">Send</span>
+                  </>
                 ) : (
                   <LuSend size={16} />
                 )}
               </button>
             </div>
 
-            {(imagePreview || selectedFile) && !editingMessageId && !isRecording && !audioBlob && (
+            {hasSelectedAttachments && !editingMessageId && !isRecording && !audioBlob && (
               <div className="w-full px-2 py-2 border-t border-zinc-800/40">
-                {imagePreview ? (
-                  <div className="relative inline-block border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="max-h-32 max-w-full object-contain"
-                    />
-                    <button
-                      onClick={clearAttachment}
-                      className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
-                      title="Remove image"
-                    >
-                      <LuX size={14} />
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1.5 uppercase tracking-widest flex items-center gap-1">
-                      <LuLock size={9} /> Classified Attachment • Will be
-                      encrypted
-                    </div>
-                  </div>
-                ) : selectedFile ? (
-                  <div className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3.5 py-3 pr-10">
-                    <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
-                      {React.createElement(getFileIcon(selectedFile.type), { size: 18, className: "text-zinc-300" })}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">{selectedFile.name}</p>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                        {formatFileSize(selectedFile.size)} • {(selectedFile.type || 'unknown').split('/').pop()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={clearAttachment}
-                      className="absolute -top-1 -right-1 bg-red-600 text-white p-1 hover:bg-red-500 transition rounded-full shadow-lg"
-                      title="Remove file"
-                    >
-                      <LuX size={14} />
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-400 px-2.5 py-1 uppercase tracking-widest flex items-center gap-1 rounded-b-lg">
-                      <LuLock size={9} /> Encrypted File Attachment
-                    </div>
-                  </div>
-                ) : null}
+                <div className="mb-2 text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
+                  {selectedAttachments.length} attachment{selectedAttachments.length > 1 ? "s" : ""} ready
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {selectedAttachments.map((attachment) => (
+                    attachment.type === "image" ? (
+                      <div key={attachment.id} className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
+                        <img
+                          src={attachment.data}
+                          alt={attachment.name}
+                          className="max-h-28 w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(attachment.id)}
+                          className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-black/70 text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                          title="Remove attachment"
+                        >
+                          <LuX size={11} />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-[8px] text-zinc-300 px-2 py-1 uppercase tracking-widest flex items-center gap-1">
+                          <LuLock size={9} /> Encrypted Image
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={attachment.id} className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9">
+                        <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
+                          {React.createElement(getFileIcon(attachment.mimeType), { size: 18, className: "text-zinc-300" })}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">{attachment.name}</p>
+                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
+                            {formatFileSize(attachment.size)} • {(attachment.mimeType || "unknown").split("/").pop()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(attachment.id)}
+                          className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                          title="Remove attachment"
+                        >
+                          <LuX size={11} />
+                        </button>
+                      </div>
+                    )
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -3122,7 +3327,7 @@ const ChatRoom = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+              className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
               onClick={() => {
                 setShowPollModal(false);
               }}
@@ -3132,10 +3337,10 @@ const ChatRoom = ({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
                 transition={{ type: "spring", damping: 22, stiffness: 240 }}
-                className="w-full max-w-xl bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-2xl overflow-hidden"
+                className="w-full max-w-xl bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[90dvh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="p-5 flex items-center justify-between border-b border-zinc-800/30 relative">
+                <div className="p-4 sm:p-5 flex items-center justify-between border-b border-zinc-800/30 relative sticky top-0 bg-[#0f0f11] z-10">
                   <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/20 to-transparent" />
                   <h3 className="text-base font-black text-white flex items-center gap-2.5 uppercase tracking-[0.1em]">
                     <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30">
@@ -3155,7 +3360,7 @@ const ChatRoom = ({
                   </button>
                 </div>
 
-                <div className="px-5 pb-5 space-y-5 pt-4">
+                <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-4 sm:space-y-5 pt-3 sm:pt-4">
                   <div>
                     <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Question</p>
                     <div className="relative">
@@ -3275,14 +3480,14 @@ const ChatRoom = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
               onClick={closeSlideConfirm}
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-[#0f0f11] border border-zinc-800/40 p-8 max-w-md w-full rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)]"
+                className="bg-[#0f0f11] border border-zinc-800/40 p-5 sm:p-8 max-w-md w-full rounded-t-2xl sm:rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="text-center mb-6">
@@ -3293,12 +3498,12 @@ const ChatRoom = ({
                       strokeWidth={1.5}
                     />
                   </div>
-                  <h2 className="text-xl font-black uppercase tracking-[0.12em] text-white mb-2">
+                  <h2 className="text-lg sm:text-xl font-black uppercase tracking-[0.12em] text-white mb-2">
                     {confirmAction === "terminate"
                       ? "TERMINATE ROOM"
                       : "LEAVE ROOM"}
                   </h2>
-                  <p className="text-zinc-400 text-sm uppercase tracking-wide">
+                  <p className="text-zinc-400 text-xs sm:text-sm uppercase tracking-wide">
                     {confirmAction === "terminate"
                       ? "This will close the room for all users. Slide to confirm."
                       : "Are you sure you want to leave? Slide to confirm."}
@@ -3401,9 +3606,9 @@ const ChatRoom = ({
                 {total > 1 && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-                    className="absolute left-3 sm:left-6 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-3 transition-all hover:scale-105 active:scale-95"
+                    className="absolute left-2 sm:left-3 md:left-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
                   >
-                    <LuChevronLeft size={22} />
+                    <LuChevronLeft size={20} className="sm:w-[22px] sm:h-[22px]" />
                   </button>
                 )}
 
@@ -3411,9 +3616,9 @@ const ChatRoom = ({
                 {total > 1 && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleNext(); }}
-                    className="absolute right-3 sm:right-6 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-3 transition-all hover:scale-105 active:scale-95"
+                    className="absolute right-2 sm:right-3 md:right-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
                   >
-                    <LuChevronRight size={22} />
+                    <LuChevronRight size={20} className="sm:w-[22px] sm:h-[22px]" />
                   </button>
                 )}
 
@@ -3425,13 +3630,13 @@ const ChatRoom = ({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.94 }}
                     transition={{ duration: 0.18 }}
-                    className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100vh-5rem)] max-w-[calc(100vw-2rem)] p-4 sm:p-6"
+                    className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] p-2 sm:p-4 md:p-6"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <img
                       src={current?.message}
                       alt="Full preview"
-                      className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
+                      className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60 max-h-[70dvh] sm:max-h-[80dvh] w-auto object-contain"
                     />
                     {/* Sender info + download */}
                     <div className="flex items-center gap-3">

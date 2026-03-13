@@ -152,14 +152,14 @@ const BiometricVault = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-[#0f0f11] border border-zinc-800/40 max-w-md w-full relative overflow-hidden rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)]"
+          className="bg-[#0f0f11] border border-zinc-800/40 max-w-md w-full relative overflow-hidden rounded-t-2xl sm:rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.8)] max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Scanning Animation Overlay */}
@@ -184,11 +184,11 @@ const BiometricVault = ({
             </div>
           )}
 
-          <div className="p-6">
-            <div className="text-center mb-6">
+          <div className="p-4 sm:p-6">
+            <div className="text-center mb-4 sm:mb-6">
               <div className="relative inline-block">
-                <div className="p-4 bg-white/5 rounded-2xl border border-zinc-700/20 mx-auto mb-4 inline-flex">
-                  <LuLock className="text-white" size={36} strokeWidth={1.5} />
+                <div className="p-3 sm:p-4 bg-white/5 rounded-2xl border border-zinc-700/20 mx-auto mb-3 sm:mb-4 inline-flex">
+                  <LuLock className="text-white" size={28} strokeWidth={1.5} />
                 </div>
                 {isDecrypted && (
                   <motion.div
@@ -201,11 +201,11 @@ const BiometricVault = ({
                 )}
               </div>
               
-              <h2 className="text-lg font-black uppercase tracking-[0.12em] text-white mb-2">
+              <h2 className="text-base sm:text-lg font-black uppercase tracking-[0.1em] sm:tracking-[0.12em] text-white mb-1.5 sm:mb-2">
                 {isDecrypted ? 'Vault Unlocked' : 'Biometric Vault'}
               </h2>
               
-              <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em]">
+              <p className="text-zinc-500 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em]">
                 {isDecrypted 
                   ? `High clearance message decrypted • Auto-lock in ${countdown}s`
                   : (() => {
@@ -319,7 +319,7 @@ const BiometricVault = ({
                   </span>
                 </div>
 
-                <div className="bg-zinc-900/40 border border-zinc-800/30 p-4 rounded-xl">
+                <div className="bg-zinc-900/40 border border-zinc-800/30 p-3 sm:p-4 rounded-xl">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[8px] text-zinc-500 uppercase tracking-[0.2em] font-bold">
                       Classified Content
@@ -355,7 +355,7 @@ const BiometricVault = ({
                           <img 
                             src={message.image} 
                             alt="Classified" 
-                            className="max-w-full max-h-64 object-contain w-full cursor-zoom-in"
+                            className="max-w-full max-h-48 sm:max-h-64 object-contain w-full cursor-zoom-in"
                             onClick={() => setImagePreviewOpen(true)}
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -535,7 +535,7 @@ const BiometricVault = ({
               {/* Close button */}
               <button
                 onClick={(e) => { e.stopPropagation(); setImagePreviewOpen(false); }}
-                className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 transition-all hover:scale-105 active:scale-95"
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2 sm:p-2.5 transition-all hover:scale-105 active:scale-95"
               >
                 <LuX size={20} />
               </button>
@@ -546,7 +546,7 @@ const BiometricVault = ({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.94 }}
                 transition={{ duration: 0.18 }}
-                className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100vh-5rem)] max-w-[calc(100vw-2rem)] p-4 sm:p-6"
+                className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] p-2 sm:p-4 md:p-6"
                 onClick={(e) => e.stopPropagation()}
               >
                 <img
