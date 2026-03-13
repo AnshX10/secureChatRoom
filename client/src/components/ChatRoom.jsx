@@ -121,6 +121,8 @@ const ChatRoom = ({
   const mobileEdgeTouchStartXRef = useRef(null);
   const mobileOpenDragStartXRef = useRef(null);
   const mobileCloseDragStartXRef = useRef(null);
+  const [mobileSidebarDragX, setMobileSidebarDragX] = useState(null);
+  const [mobileDragMode, setMobileDragMode] = useState(null);
 
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
@@ -374,37 +376,83 @@ const ChatRoom = ({
 
   const handleMobileOpenHandleTouchStart = (e) => {
     if (!isMobile || showUsers || !showMobileChevronHandle) return;
-    mobileOpenDragStartXRef.current = e.touches?.[0]?.clientX ?? null;
+    const startX = e.touches?.[0]?.clientX ?? null;
+    if (startX == null) return;
+    mobileOpenDragStartXRef.current = startX;
+    const sidebarWidth = Math.min(window.innerWidth * 0.92, 380);
+    setShowUsers(true);
+    setMobileDragMode("opening");
+    setMobileSidebarDragX(-sidebarWidth);
+  };
+
+  const handleMobileOpenHandleTouchMove = (e) => {
+    if (!isMobile || mobileDragMode !== "opening") return;
+    const startX = mobileOpenDragStartXRef.current;
+    const currentX = e.touches?.[0]?.clientX ?? null;
+    if (startX == null || currentX == null) return;
+    const sidebarWidth = Math.min(window.innerWidth * 0.92, 380);
+    const deltaX = currentX - startX;
+    const offsetX = Math.max(-sidebarWidth, Math.min(0, -sidebarWidth + deltaX));
+    setMobileSidebarDragX(offsetX);
   };
 
   const handleMobileOpenHandleTouchEnd = (e) => {
-    if (!isMobile || showUsers || !showMobileChevronHandle) return;
+    if (!isMobile || mobileDragMode !== "opening") return;
     const startX = mobileOpenDragStartXRef.current;
     const endX = e.changedTouches?.[0]?.clientX ?? null;
     mobileOpenDragStartXRef.current = null;
-    if (startX == null || endX == null) return;
-    const deltaX = endX - startX;
-    if (deltaX > 20) {
+    const sidebarWidth = Math.min(window.innerWidth * 0.92, 380);
+    const finalOffset = mobileSidebarDragX ?? -sidebarWidth;
+    if (startX != null && endX != null && endX - startX > 12) {
+      setMobileSidebarDragX(null);
       setShowUsers(true);
-      setShowMobileChevronHandle(false);
+    } else if (finalOffset > -sidebarWidth * 0.45) {
+      setMobileSidebarDragX(null);
+      setShowUsers(true);
+    } else {
+      setMobileSidebarDragX(null);
+      setShowUsers(false);
     }
+    setMobileDragMode(null);
+    setShowMobileChevronHandle(false);
   };
 
   const handleMobileCloseHandleTouchStart = (e) => {
     if (!isMobile || !showUsers) return;
     mobileCloseDragStartXRef.current = e.touches?.[0]?.clientX ?? null;
+    setMobileDragMode("closing");
+    setMobileSidebarDragX(0);
+  };
+
+  const handleMobileCloseHandleTouchMove = (e) => {
+    if (!isMobile || mobileDragMode !== "closing") return;
+    const startX = mobileCloseDragStartXRef.current;
+    const currentX = e.touches?.[0]?.clientX ?? null;
+    if (startX == null || currentX == null) return;
+    const sidebarWidth = Math.min(window.innerWidth * 0.92, 380);
+    const deltaX = currentX - startX;
+    const offsetX = Math.max(-sidebarWidth, Math.min(0, deltaX));
+    setMobileSidebarDragX(offsetX);
   };
 
   const handleMobileCloseHandleTouchEnd = (e) => {
-    if (!isMobile || !showUsers) return;
+    if (!isMobile || mobileDragMode !== "closing") return;
     const startX = mobileCloseDragStartXRef.current;
     const endX = e.changedTouches?.[0]?.clientX ?? null;
     mobileCloseDragStartXRef.current = null;
-    if (startX == null || endX == null) return;
-    const deltaX = endX - startX;
-    if (deltaX < -20) {
+    const sidebarWidth = Math.min(window.innerWidth * 0.92, 380);
+    const finalOffset = mobileSidebarDragX ?? 0;
+    if (startX != null && endX != null && endX - startX < -12) {
+      setMobileSidebarDragX(null);
       setShowUsers(false);
+    } else if (finalOffset < -sidebarWidth * 0.35) {
+      setMobileSidebarDragX(null);
+      setShowUsers(false);
+    } else {
+      setMobileSidebarDragX(null);
+      setShowUsers(true);
     }
+    setMobileDragMode(null);
   };
 
   // Lightbox keyboard navigation
@@ -1829,12 +1877,12 @@ const ChatRoom = ({
           <motion.div
             initial={
               isMobile
-                ? { x: -320, opacity: 0 }
+                ? { x: mobileSidebarDragX ?? -320, opacity: mobileSidebarDragX !== null ? 1 : 0 }
                 : { width: 0, opacity: 0, x: -24 }
             }
             animate={
               isMobile
-                ? { x: 0, opacity: 1 }
+                ? { x: mobileSidebarDragX ?? 0, opacity: 1 }
                 : { width: "22rem", opacity: 1, x: 0 }
             }
             exit={
@@ -1844,7 +1892,9 @@ const ChatRoom = ({
             }
             transition={
               isMobile
-                ? { type: "spring", damping: 28, stiffness: 240 }
+                ? mobileSidebarDragX !== null
+                  ? { duration: 0 }
+                  : { type: "spring", damping: 28, stiffness: 240 }
                 : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
             }
             className="fixed md:relative z-50 w-[92%] max-w-[380px] sm:w-80 md:w-auto h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col overflow-visible will-change-transform"
@@ -2096,6 +2146,7 @@ const ChatRoom = ({
                 if (!isMobile) setShowUsers(false);
               }}
               onTouchStart={handleMobileCloseHandleTouchStart}
+              onTouchMove={handleMobileCloseHandleTouchMove}
               onTouchEnd={handleMobileCloseHandleTouchEnd}
               className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full z-[60] w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
               title="Collapse sidebar"
@@ -2113,18 +2164,21 @@ const ChatRoom = ({
       {/* Open handle — edge line logic restored, fixed chevron shape preserved */}
       {!showUsers && (
         isMobile ? (
-          <div className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] h-[88px] w-[22px]">
+          <div className="fixed top-1/2 -translate-y-1/2 left-2 z-[60] h-[88px] w-[30px]">
             <div
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px]"
               onTouchStart={handleMobileEdgeTouchStart}
               onTouchEnd={handleMobileEdgeTouchEnd}
-              className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80"
             />
+
+            <div className="absolute left-1 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80" />
 
             {showMobileChevronHandle && (
               <button
                 onTouchStart={handleMobileOpenHandleTouchStart}
+                onTouchMove={handleMobileOpenHandleTouchMove}
                 onTouchEnd={handleMobileOpenHandleTouchEnd}
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
+                className="absolute left-1 top-1/2 -translate-y-1/2 w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
                 title="Expand sidebar"
                 aria-label="Expand sidebar"
               >
