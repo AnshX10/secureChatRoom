@@ -36,22 +36,5 @@ export default defineConfig({
         ]
       }
     })
-  ],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // Separate vendor chunks for large libraries
-          'socket-io': ['socket.io-client'],
-          'framer-motion': ['framer-motion'],
-          'react-vendor': ['react', 'react-dom'],
-          'crypto-utils': ['crypto-js', 'uuid'],
-          'ui-components': ['react-icons', 'react-toastify', 'qrcode.react'],
-          'date-utils': ['date-fns']
-        }
-      }
-    },
-    // Increase chunk size warning limit to 600kb since we're splitting chunks
-    chunkSizeWarningLimit: 600
-  }
+  ]
 });
