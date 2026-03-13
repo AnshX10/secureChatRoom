@@ -111,8 +111,16 @@ const ChatRoom = ({
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscIndicator, setShowEscIndicator] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showSidebarHintLine, setShowSidebarHintLine] = useState(false);
+  const [showMobileChevronHandle, setShowMobileChevronHandle] = useState(false);
   const escTimeoutRef = useRef(null);
   const escIndicatorTimeoutRef = useRef(null);
+  const sidebarHintTimeoutRef = useRef(null);
+  const mobileChevronTimeoutRef = useRef(null);
+  const prevShowUsersRef = useRef(showUsers);
+  const mobileEdgeTouchStartXRef = useRef(null);
+  const mobileOpenDragStartXRef = useRef(null);
+  const mobileCloseDragStartXRef = useRef(null);
 
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
@@ -294,6 +302,110 @@ const ChatRoom = ({
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setShowSidebarHintLine(false);
+      prevShowUsersRef.current = showUsers;
+      return;
+    }
+
+    const justClosed = prevShowUsersRef.current && !showUsers;
+    if (justClosed) {
+      setShowSidebarHintLine(true);
+      if (sidebarHintTimeoutRef.current) {
+        clearTimeout(sidebarHintTimeoutRef.current);
+      }
+      sidebarHintTimeoutRef.current = setTimeout(() => {
+        setShowSidebarHintLine(false);
+      }, 1800);
+    }
+
+    prevShowUsersRef.current = showUsers;
+  }, [showUsers, isMobile]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarHintTimeoutRef.current) {
+        clearTimeout(sidebarHintTimeoutRef.current);
+      }
+      if (mobileChevronTimeoutRef.current) {
+        clearTimeout(mobileChevronTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || showUsers) {
+      setShowMobileChevronHandle(false);
+      if (mobileChevronTimeoutRef.current) {
+        clearTimeout(mobileChevronTimeoutRef.current);
+      }
+    }
+  }, [isMobile, showUsers]);
+
+  const revealMobileChevronHandle = (duration = 2200) => {
+    if (!isMobile) return;
+    setShowMobileChevronHandle(true);
+    if (mobileChevronTimeoutRef.current) {
+      clearTimeout(mobileChevronTimeoutRef.current);
+    }
+    mobileChevronTimeoutRef.current = setTimeout(() => {
+      setShowMobileChevronHandle(false);
+    }, duration);
+  };
+
+  const handleMobileEdgeTouchStart = (e) => {
+    if (!isMobile || showUsers) return;
+    mobileEdgeTouchStartXRef.current = e.touches?.[0]?.clientX ?? null;
+  };
+
+  const handleMobileEdgeTouchEnd = (e) => {
+    if (!isMobile || showUsers) return;
+    const startX = mobileEdgeTouchStartXRef.current;
+    const endX = e.changedTouches?.[0]?.clientX ?? null;
+    mobileEdgeTouchStartXRef.current = null;
+    if (startX == null || endX == null) return;
+    const deltaX = endX - startX;
+    if (deltaX > 14) {
+      revealMobileChevronHandle();
+    }
+  };
+
+  const handleMobileOpenHandleTouchStart = (e) => {
+    if (!isMobile || showUsers || !showMobileChevronHandle) return;
+    mobileOpenDragStartXRef.current = e.touches?.[0]?.clientX ?? null;
+  };
+
+  const handleMobileOpenHandleTouchEnd = (e) => {
+    if (!isMobile || showUsers || !showMobileChevronHandle) return;
+    const startX = mobileOpenDragStartXRef.current;
+    const endX = e.changedTouches?.[0]?.clientX ?? null;
+    mobileOpenDragStartXRef.current = null;
+    if (startX == null || endX == null) return;
+    const deltaX = endX - startX;
+    if (deltaX > 20) {
+      setShowUsers(true);
+      setShowMobileChevronHandle(false);
+    }
+  };
+
+  const handleMobileCloseHandleTouchStart = (e) => {
+    if (!isMobile || !showUsers) return;
+    mobileCloseDragStartXRef.current = e.touches?.[0]?.clientX ?? null;
+  };
+
+  const handleMobileCloseHandleTouchEnd = (e) => {
+    if (!isMobile || !showUsers) return;
+    const startX = mobileCloseDragStartXRef.current;
+    const endX = e.changedTouches?.[0]?.clientX ?? null;
+    mobileCloseDragStartXRef.current = null;
+    if (startX == null || endX == null) return;
+    const deltaX = endX - startX;
+    if (deltaX < -20) {
+      setShowUsers(false);
+    }
+  };
 
   // Lightbox keyboard navigation
   useEffect(() => {
@@ -1980,7 +2092,11 @@ const ChatRoom = ({
 
             {/* Chevron handle — half-pill flush to right edge of sidebar */}
             <button
-              onClick={() => setShowUsers(false)}
+              onClick={() => {
+                if (!isMobile) setShowUsers(false);
+              }}
+              onTouchStart={handleMobileCloseHandleTouchStart}
+              onTouchEnd={handleMobileCloseHandleTouchEnd}
               className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full z-[60] w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
@@ -1994,18 +2110,47 @@ const ChatRoom = ({
         )}
       </AnimatePresence>
 
-      {/* Open handle — half-pill flush to left screen edge */}
+      {/* Open handle — edge line logic restored, fixed chevron shape preserved */}
       {!showUsers && (
-        <button
-          onClick={() => setShowUsers(true)}
-          className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
-          title="Expand sidebar"
-          aria-label="Expand sidebar"
-        >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-            <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        isMobile ? (
+          <div className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] h-[88px] w-[22px]">
+            <div
+              onTouchStart={handleMobileEdgeTouchStart}
+              onTouchEnd={handleMobileEdgeTouchEnd}
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80"
+            />
+
+            {showMobileChevronHandle && (
+              <button
+                onTouchStart={handleMobileOpenHandleTouchStart}
+                onTouchEnd={handleMobileOpenHandleTouchEnd}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
+                title="Expand sidebar"
+                aria-label="Expand sidebar"
+              >
+                <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                  <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] h-[88px] w-[22px] group">
+            <div
+              className={`absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80 transition-opacity duration-300 ${showSidebarHintLine ? "opacity-100" : "opacity-45 group-hover:opacity-100"}`}
+            />
+            <button
+              onClick={() => setShowUsers(true)}
+              className={`absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all duration-200 shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95 ${showSidebarHintLine ? "opacity-0 pointer-events-none" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"}`}
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )
       )}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#09090b] relative">
