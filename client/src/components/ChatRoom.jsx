@@ -94,7 +94,9 @@ const ChatRoom = ({
   const [messageList, setMessageList] = useState([]);
   const [deletingIds, setDeletingIds] = useState(new Set());
   const [users, setUsers] = useState(initialUsers || []);
-  const [showUsers, setShowUsers] = useState(false);
+  const [showUsers, setShowUsers] = useState(
+    typeof window !== "undefined" ? window.innerWidth > 768 : false,
+  );
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [typingUsers, setTypingUsers] = useState([]);
@@ -279,7 +281,12 @@ const ChatRoom = ({
     const checkMobile = () => {
       const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
                            window.innerWidth <= 768;
-      setIsMobile(isMobileDevice);
+      setIsMobile((prevIsMobile) => {
+        if (prevIsMobile !== isMobileDevice) {
+          setShowUsers(!isMobileDevice);
+        }
+        return isMobileDevice;
+      });
     };
     
     checkMobile();
@@ -1706,13 +1713,29 @@ const ChatRoom = ({
       </AnimatePresence>
 
       <AnimatePresence>
-        {(showUsers || window.innerWidth > 768) && (
+        {showUsers && (
           <motion.div
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed md:relative z-50 w-[88%] max-w-[320px] sm:w-72 h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col"
+            initial={
+              isMobile
+                ? { x: -320, opacity: 0 }
+                : { width: 0, opacity: 0, x: -24 }
+            }
+            animate={
+              isMobile
+                ? { x: 0, opacity: 1 }
+                : { width: "22rem", opacity: 1, x: 0 }
+            }
+            exit={
+              isMobile
+                ? { x: -320, opacity: 0 }
+                : { width: 0, opacity: 0, x: -24 }
+            }
+            transition={
+              isMobile
+                ? { type: "spring", damping: 28, stiffness: 240 }
+                : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
+            }
+            className="fixed md:relative z-50 w-[92%] max-w-[380px] sm:w-80 md:w-auto h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col overflow-visible will-change-transform"
           >
             <div className="p-4 sm:p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden pt-safe">
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
@@ -1722,12 +1745,6 @@ const ChatRoom = ({
                 </div>
                 CLASSIFIED
               </h2>
-              <button
-                onClick={() => setShowUsers(false)}
-                className="md:hidden p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-all relative z-10"
-              >
-                <LuX size={20} />
-              </button>
             </div>
 
             <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
@@ -1831,9 +1848,9 @@ const ChatRoom = ({
                     {joinRequests.map((req) => (
                       <div
                         key={req.socketId}
-                        className="flex items-center justify-between gap-3"
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <span className="text-xs uppercase tracking-wide text-white truncate">
+                        <span className="text-xs uppercase tracking-wide text-white break-all">
                           {req.username}
                         </span>
                         <div className="flex items-center gap-2 shrink-0">
@@ -1960,9 +1977,36 @@ const ChatRoom = ({
                 )}
               </div>
             </div>
+
+            {/* Chevron handle — half-pill flush to right edge of sidebar */}
+            <button
+              onClick={() => setShowUsers(false)}
+              className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full z-[60] w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                <path d="M15 5 L9 12 L15 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Open handle — half-pill flush to left screen edge */}
+      {!showUsers && (
+        <button
+          onClick={() => setShowUsers(true)}
+          className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] w-[22px] min-w-[22px] max-w-[22px] h-[88px] min-h-[88px] max-h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95"
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+            <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#09090b] relative">
         <header className="h-14 sm:h-16 md:h-20 flex items-center justify-between px-3 sm:px-4 md:px-6 z-30 bg-[#09090b]/80 backdrop-blur-xl flex-shrink-0 relative border-b border-zinc-800/30 pt-safe">
@@ -1972,12 +2016,6 @@ const ChatRoom = ({
               variant="shield"
               className="w-7 h-7 sm:w-8 sm:h-8 text-white/80 shrink-0"
             />
-            <button
-              onClick={() => setShowUsers(true)}
-              className="md:hidden text-zinc-500 hover:text-white hover:bg-white/5 rounded-xl transition-all p-2 -ml-1 active:scale-95"
-            >
-              <LuUsers size={19} />
-            </button>
             <div className="hidden xs:flex flex-col truncate">
               <h1 className="font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
                 <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span></span>
