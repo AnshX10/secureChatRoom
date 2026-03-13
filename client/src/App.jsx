@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
-import BiometricDemo from './components/BiometricDemo';
+
+// Lazy load BiometricDemo since it's only used on demo route
+const BiometricDemo = lazy(() => import('./components/BiometricDemo'));
 
 // Connect to backend
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
@@ -131,7 +133,11 @@ function App() {
 
   // Show demo if on demo route
   if (isDemoRoute) {
-    return <BiometricDemo />;
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-black text-green-400">Loading demo...</div>}>
+        <BiometricDemo />
+      </Suspense>
+    );
   }
 
   return (
