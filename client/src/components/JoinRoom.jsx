@@ -67,7 +67,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
+    <div className="flex-1 min-h-0 bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white relative">
       
       {/* Background Grid Noise */}
       <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 

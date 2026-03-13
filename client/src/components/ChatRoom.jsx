@@ -1506,7 +1506,8 @@ const ChatRoom = ({
 
   return (
     <div
-      className={`flex h-[100dvh] w-full bg-[#09090b] text-white font-sans selection:bg-zinc-700 selection:text-white overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
+      className={`flex w-full bg-[#09090b] text-white font-sans selection:bg-zinc-700 selection:text-white overflow-hidden relative ${isPanicMode ? "panic-blur" : ""}`}
+      style={{ flex: 1, minHeight: 0, height: '100%' }}
     >
       <style>{`
         @media print { body { display: none !important; } }

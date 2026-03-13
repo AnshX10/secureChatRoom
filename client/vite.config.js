@@ -15,7 +15,8 @@ export default defineConfig({
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone', // <--- This removes browser bars
-        orientation: 'portrait',
+        display_override: ['standalone', 'minimal-ui'],
+        // Do NOT lock orientation – let the OS handle it for proper responsive layout
         icons: [
           {
             src: 'icon-192.png',

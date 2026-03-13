@@ -135,7 +135,7 @@ function App() {
   }
 
   return (
-    <div>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {!isInChat ? (
         <JoinRoom 
           createRoom={createRoom} 
