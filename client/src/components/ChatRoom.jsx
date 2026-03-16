@@ -112,12 +112,15 @@ const ChatRoom = ({
   const [showEscIndicator, setShowEscIndicator] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showSidebarHintLine, setShowSidebarHintLine] = useState(false);
+  const [startSidebarHintMorph, setStartSidebarHintMorph] = useState(false);
   const [showMobileChevronHandle, setShowMobileChevronHandle] = useState(false);
+  const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const escTimeoutRef = useRef(null);
   const escIndicatorTimeoutRef = useRef(null);
   const sidebarHintTimeoutRef = useRef(null);
+  const sidebarHintMorphStartTimeoutRef = useRef(null);
   const mobileChevronTimeoutRef = useRef(null);
-  const prevShowUsersRef = useRef(showUsers);
+  const pendingSidebarHintRef = useRef(false);
   const mobileEdgeTouchStartXRef = useRef(null);
   const mobileOpenDragStartXRef = useRef(null);
   const mobileCloseDragStartXRef = useRef(null);
@@ -304,30 +307,53 @@ const ChatRoom = ({
   }, []);
 
   useEffect(() => {
-    if (isMobile) {
+    if (isMobile || showUsers || isSidebarClosing) {
       setShowSidebarHintLine(false);
-      prevShowUsersRef.current = showUsers;
-      return;
-    }
+      setStartSidebarHintMorph(false);
 
-    const justClosed = prevShowUsersRef.current && !showUsers;
-    if (justClosed) {
-      setShowSidebarHintLine(true);
+      if (isMobile || showUsers) {
+        pendingSidebarHintRef.current = false;
+      }
+
+      if (sidebarHintMorphStartTimeoutRef.current) {
+        clearTimeout(sidebarHintMorphStartTimeoutRef.current);
+      }
       if (sidebarHintTimeoutRef.current) {
         clearTimeout(sidebarHintTimeoutRef.current);
       }
-      sidebarHintTimeoutRef.current = setTimeout(() => {
-        setShowSidebarHintLine(false);
-      }, 1800);
+      return;
     }
 
-    prevShowUsersRef.current = showUsers;
-  }, [showUsers, isMobile]);
+    if (pendingSidebarHintRef.current) {
+      pendingSidebarHintRef.current = false;
+      setShowSidebarHintLine(true);
+      setStartSidebarHintMorph(false);
+
+      if (sidebarHintMorphStartTimeoutRef.current) {
+        clearTimeout(sidebarHintMorphStartTimeoutRef.current);
+      }
+      if (sidebarHintTimeoutRef.current) {
+        clearTimeout(sidebarHintTimeoutRef.current);
+      }
+
+      sidebarHintMorphStartTimeoutRef.current = setTimeout(() => {
+        setStartSidebarHintMorph(true);
+      }, 2600);
+
+      sidebarHintTimeoutRef.current = setTimeout(() => {
+        setShowSidebarHintLine(false);
+        setStartSidebarHintMorph(false);
+      }, 4100);
+    }
+  }, [showUsers, isMobile, isSidebarClosing]);
 
   useEffect(() => {
     return () => {
       if (sidebarHintTimeoutRef.current) {
         clearTimeout(sidebarHintTimeoutRef.current);
+      }
+      if (sidebarHintMorphStartTimeoutRef.current) {
+        clearTimeout(sidebarHintMorphStartTimeoutRef.current);
       }
       if (mobileChevronTimeoutRef.current) {
         clearTimeout(mobileChevronTimeoutRef.current);
@@ -354,6 +380,25 @@ const ChatRoom = ({
       setShowMobileChevronHandle(false);
     }, duration);
   };
+
+  const openSidebar = () => {
+    pendingSidebarHintRef.current = false;
+    setIsSidebarClosing(false);
+    setShowSidebarHintLine(false);
+    setStartSidebarHintMorph(false);
+    setShowUsers(true);
+  };
+
+  const closeSidebar = () => {
+    if (!isMobile) {
+      pendingSidebarHintRef.current = true;
+    }
+    setIsSidebarClosing(true);
+    setShowUsers(false);
+  };
+
+  const isDesktopSidebarClosing = !isMobile && isSidebarClosing;
+  const showSidebarPanelContent = !isDesktopSidebarClosing;
 
   const handleMobileEdgeTouchStart = (e) => {
     if (!isMobile || showUsers) return;
@@ -385,7 +430,7 @@ const ChatRoom = ({
     if (startX == null || endX == null) return;
     const deltaX = endX - startX;
     if (deltaX > 20) {
-      setShowUsers(true);
+      openSidebar();
       setShowMobileChevronHandle(false);
     }
   };
@@ -403,7 +448,7 @@ const ChatRoom = ({
     if (startX == null || endX == null) return;
     const deltaX = endX - startX;
     if (deltaX < -20) {
-      setShowUsers(false);
+      closeSidebar();
     }
   };
 
@@ -1818,48 +1863,58 @@ const ChatRoom = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setShowUsers(false)}
+            onClick={closeSidebar}
             className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
           />
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={() => setIsSidebarClosing(false)}>
         {showUsers && (
           <motion.div
             initial={
               isMobile
-                ? { x: -320, opacity: 0 }
+                ? { x: "-100%" }
                 : { width: 0, opacity: 0, x: -24 }
             }
             animate={
               isMobile
-                ? { x: 0, opacity: 1 }
+                ? { x: 0 }
                 : { width: "22rem", opacity: 1, x: 0 }
             }
             exit={
               isMobile
-                ? { x: -320, opacity: 0 }
-                : { width: 0, opacity: 0, x: -24 }
+                ? {
+                    x: "-100%",
+                    transition: { duration: 0.95, ease: [0.65, 0, 0.35, 1] },
+                  }
+                : {
+                    width: 0,
+                    opacity: 1,
+                    x: 0,
+                    transition: { duration: 1.05, ease: [0.65, 0, 0.35, 1] },
+                  }
             }
             transition={
               isMobile
-                ? { type: "spring", damping: 28, stiffness: 240 }
-                : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
+                ? { duration: 0.72, ease: [0.22, 1, 0.36, 1] }
+                : { duration: 0.78, ease: [0.22, 1, 0.36, 1] }
             }
-            className="fixed md:relative z-50 w-[92%] max-w-[380px] sm:w-80 md:w-auto h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col overflow-visible will-change-transform"
+            className={`fixed md:relative z-50 w-[92%] max-w-[380px] sm:w-80 md:w-auto h-full bg-[#0a0a0c] border-r border-zinc-800/40 flex flex-col ${!isMobile && isSidebarClosing ? "overflow-hidden" : "overflow-visible"} will-change-transform`}
           >
-            <div className="p-4 sm:p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden pt-safe">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
-              <h2 className="text-base font-black uppercase tracking-[0.2em] flex items-center gap-2.5 text-white relative z-10">
-                <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30 shadow-lg shadow-black/10">
-                  <LuShieldCheck size={16} strokeWidth={2.5} className="text-white" />
+            {showSidebarPanelContent && (
+              <>
+                <div className="p-4 sm:p-5 border-b border-zinc-800/50 flex items-center justify-between flex-shrink-0 relative overflow-hidden pt-safe">
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
+                  <h2 className="text-base font-black uppercase tracking-[0.2em] flex items-center gap-2.5 text-white relative z-10">
+                    <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30 shadow-lg shadow-black/10">
+                      <LuShieldCheck size={16} strokeWidth={2.5} className="text-white" />
+                    </div>
+                    CLASSIFIED
+                  </h2>
                 </div>
-                CLASSIFIED
-              </h2>
-            </div>
 
-            <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
+                <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
               <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 relative overflow-hidden">
                 <div className="absolute inset-0 animate-shimmer pointer-events-none" />
                 <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2.5 tracking-[0.2em] flex items-center gap-1.5 relative">
@@ -2067,9 +2122,9 @@ const ChatRoom = ({
                   })
                 )}
               </div>
-            </div>
+                </div>
 
-            <div className="p-4 flex-shrink-0 relative">
+                <div className="p-4 flex-shrink-0 relative">
               <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
               <div className="pt-1">
                 {isHost ? (
@@ -2088,12 +2143,14 @@ const ChatRoom = ({
                   </button>
                 )}
               </div>
-            </div>
+                </div>
+              </>
+            )}
 
             {/* Chevron handle — half-pill flush to right edge of sidebar */}
             <button
               onClick={() => {
-                if (!isMobile) setShowUsers(false);
+                if (!isMobile) closeSidebar();
               }}
               onTouchStart={handleMobileCloseHandleTouchStart}
               onTouchEnd={handleMobileCloseHandleTouchEnd}
@@ -2111,7 +2168,7 @@ const ChatRoom = ({
       </AnimatePresence>
 
       {/* Open handle — edge line logic restored, fixed chevron shape preserved */}
-      {!showUsers && (
+      {!showUsers && !isSidebarClosing && (
         isMobile ? (
           <div className="fixed top-1/2 -translate-y-1/2 left-3 z-[60] h-[88px] w-8">
             <div
@@ -2139,19 +2196,36 @@ const ChatRoom = ({
           </div>
         ) : (
           <div className="fixed top-1/2 -translate-y-1/2 left-0 z-[60] h-[88px] w-[22px] group">
-            <div
-              className={`absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80 transition-opacity duration-300 ${showSidebarHintLine ? "opacity-100" : "opacity-45 group-hover:opacity-100"}`}
-            />
-            <button
-              onClick={() => setShowUsers(true)}
-              className={`absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all duration-200 shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95 ${showSidebarHintLine ? "opacity-0 pointer-events-none" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"}`}
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            {showSidebarHintLine ? (
+              startSidebarHintMorph ? (
+                <motion.div
+                  initial={{ width: 22, height: 88, borderRadius: 999, opacity: 1, backgroundColor: "#27272a" }}
+                  animate={{ width: 2, height: 64, borderRadius: 999, opacity: 0.8, backgroundColor: "rgba(82,82,91,0.8)" }}
+                  transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute left-0 top-1/2 -translate-y-1/2"
+                />
+              ) : (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 border-y border-r border-zinc-700/50 shadow-[4px_0_16px_rgba(0,0,0,0.4)] pointer-events-none">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                    <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )
+            ) : (
+              <>
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[64px] rounded-full bg-zinc-600/80 opacity-45 group-hover:opacity-100 transition-opacity duration-300" />
+                <button
+                  onClick={openSidebar}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 hover:bg-zinc-700 border-y border-r border-zinc-700/50 transition-all duration-200 shadow-[4px_0_16px_rgba(0,0,0,0.4)] active:scale-95 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+                  title="Expand sidebar"
+                  aria-label="Expand sidebar"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                    <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
         )
       )}
