@@ -130,6 +130,10 @@ const ChatRoom = ({
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
   const [isRoomLocked, setIsRoomLocked] = useState(!!roomLocked);
+  const [showIntrusionHud, setShowIntrusionHud] = useState(false);
+  const [intrusionCount, setIntrusionCount] = useState(0);
+  const [latestIntrusionCodename, setLatestIntrusionCodename] = useState("");
+  const intrusionHudTimeoutRef = useRef(null);
 
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "denied",
@@ -1635,6 +1639,26 @@ const ChatRoom = ({
     socket.on("kicked", () => {
       leaveRoom();
     });
+    socket.on(
+      "intrusion_detected",
+      ({ roomId: incomingRoomId, attemptedCodename }) => {
+        if (incomingRoomId !== roomId || !isCurrentHost) return;
+        setIntrusionCount((prev) => prev + 1);
+        setShowIntrusionHud(true);
+        setLatestIntrusionCodename(attemptedCodename || "UNKNOWN");
+
+        if (intrusionHudTimeoutRef.current) {
+          clearTimeout(intrusionHudTimeoutRef.current);
+        }
+        intrusionHudTimeoutRef.current = setTimeout(() => {
+          setShowIntrusionHud(false);
+        }, 4600);
+
+        if (attemptedCodename) {
+          console.warn("Unauthorized decryption attempt detected:", attemptedCodename);
+        }
+      },
+    );
     socket.on("room_lock_state", ({ roomId: incomingRoomId, isLocked }) => {
       if (incomingRoomId !== roomId) return;
       setIsRoomLocked(!!isLocked);
@@ -1661,7 +1685,11 @@ const ChatRoom = ({
       socket.off("poll_vote_update");
       socket.off("join_request");
       socket.off("host_transferred");
+      socket.off("intrusion_detected");
       socket.off("room_lock_state");
+      if (intrusionHudTimeoutRef.current) {
+        clearTimeout(intrusionHudTimeoutRef.current);
+      }
     };
   }, [
     socket,
@@ -1669,6 +1697,7 @@ const ChatRoom = ({
     username,
     roomName,
     roomId,
+    isCurrentHost,
     notificationPermission,
   ]);
 
@@ -2125,6 +2154,27 @@ const ChatRoom = ({
                   {users.length}/{roomCapacity || 50}
                 </span>
               </div>
+
+              <AnimatePresence>
+                {isCurrentHost && showIntrusionHud && (
+                  <motion.div
+                    key={`intrusion-${intrusionCount}`}
+                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                    className="mb-3"
+                  >
+                    <div className="border border-red-500/40 bg-red-950/45 text-red-300 px-3.5 py-3 rounded-xl">
+                      <p className="text-[9px] uppercase tracking-[0.18em] font-black">
+                        Wrong Encryption Key Attempt
+                      </p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-red-200 break-all font-mono">
+                        {latestIntrusionCodename || "Unknown Agent"} tried to join.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <div className="space-y-1">
                 {users.length === 0 ? (

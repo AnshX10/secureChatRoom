@@ -134,6 +134,12 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (room) {
       if (room.password !== hash(password)) {
+        io.to(room.hostId).emit("intrusion_detected", {
+          roomId,
+          attemptedCodename: username || "UNKNOWN",
+          sourceSocketId: socket.id,
+          detectedAt: Date.now(),
+        });
         return socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
       }
       if (room.isLocked) {
