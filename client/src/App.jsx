@@ -22,6 +22,7 @@ function App() {
   const [roomName, setRoomName] = useState("");
   const [roomCapacity, setRoomCapacity] = useState(50);
   const [roomLocked, setRoomLocked] = useState(false);
+  const [roomSilencedUserIds, setRoomSilencedUserIds] = useState([]);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
 
   // Check if we're on the demo route
@@ -49,26 +50,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked }) => {
+    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
       setRoomCapacity(capacity || 50);
       setRoomLocked(!!isLocked);
+      setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsHost(true);
       setIsInChat(true);
       setIsCreatingRoom(false);
     });
 
     // Handle Join Success (direct or after host approval)
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity, isLocked }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
       setRoomCapacity(capacity || 50);
       setRoomLocked(!!isLocked);
+      setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsHost(isHost);
       setIsInChat(true);
       setIsWaitingApproval(false);
@@ -94,6 +97,7 @@ function App() {
       setRoomId("");
       setIsHost(false);
       setRoomLocked(false);
+      setRoomSilencedUserIds([]);
     });
 
     // Handle Errors (show in UI)
@@ -173,6 +177,7 @@ function App() {
           roomName={roomName}
           roomCapacity={roomCapacity}
           roomLocked={roomLocked}
+          roomSilencedUserIds={roomSilencedUserIds}
         />
       )}
     </div>

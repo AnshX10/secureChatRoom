@@ -106,6 +106,7 @@ io.on("connection", (socket) => {
       roomName: roomName || "",
       capacity: roomCapacity,
       isLocked: false,
+      silencedUserIds: [],
       requireApproval: !!requireApproval,
       pendingRequests: []
     };
@@ -120,6 +121,7 @@ io.on("connection", (socket) => {
       roomName: rooms[roomId].roomName,
       capacity: rooms[roomId].capacity,
       isLocked: rooms[roomId].isLocked,
+      silencedUserIds: rooms[roomId].silencedUserIds,
     });
     
     // Broadcast list to the room (redundant but safe)
@@ -183,6 +185,7 @@ io.on("connection", (socket) => {
         roomName: room.roomName || "",
         capacity: room.capacity,
         isLocked: room.isLocked,
+        silencedUserIds: room.silencedUserIds,
       });
   
       io.to(roomId).emit("receive_message", {
@@ -250,6 +253,7 @@ io.on("connection", (socket) => {
       roomName: room.roomName || "",
       capacity: room.capacity,
       isLocked: room.isLocked,
+      silencedUserIds: room.silencedUserIds,
     });
 
     io.to(roomId).emit("receive_message", {
@@ -275,8 +279,39 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("receive_message", {
       system: true,
       message: room.isLocked
-        ? "[ LOCKDOWN PROTOCOL ENGAGED ] Frequency sealed by commander."
-        : "[ LOCKDOWN PROTOCOL DISENGAGED ] Frequency open for approved joins.",
+        ? "Frequency sealed by HOST."
+        : "Frequency open for approved joins.",
+    });
+  });
+
+  socket.on("toggle_agent_radio_silence", ({ roomId, userId, silenced }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id || !userId || userId === socket.id) return;
+
+    const targetUser = room.users.find((user) => user.id === userId && !user.isHost);
+    if (!targetUser) return;
+
+    const nextSilencedUserIds = new Set(room.silencedUserIds || []);
+    const shouldSilence = typeof silenced === "boolean" ? silenced : !nextSilencedUserIds.has(userId);
+
+    if (shouldSilence) nextSilencedUserIds.add(userId);
+    else nextSilencedUserIds.delete(userId);
+
+    room.silencedUserIds = Array.from(nextSilencedUserIds);
+
+    io.to(roomId).emit("room_silence_state", {
+      roomId,
+      silencedUserIds: room.silencedUserIds,
+      targetUserId: userId,
+      silenced: shouldSilence,
+      updatedBy: socket.id,
+    });
+
+    io.to(roomId).emit("receive_message", {
+      system: true,
+      message: shouldSilence
+        ? `${targetUser.username} is muted by HOST.`
+        : `${targetUser.username} is unmuted by HOST.`,
     });
   });
 
@@ -291,6 +326,7 @@ io.on("connection", (socket) => {
 
         // Remove from room data
         room.users = room.users.filter(u => u.id !== userId);
+        room.silencedUserIds = (room.silencedUserIds || []).filter((id) => id !== userId);
 
         // Notify room
         io.to(roomId).emit("receive_message", { system: true, message: `${targetUser.username} was removed from the session.` });
@@ -334,6 +370,7 @@ io.on("connection", (socket) => {
 
     const senderInRoom = room.users.some((user) => user.id === socket.id);
     if (!senderInRoom) return;
+    if ((room.silencedUserIds || []).includes(socket.id) && room.hostId !== socket.id) return;
 
     const payload = {
       ...data,
@@ -363,6 +400,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("edit_message", ({ roomId, messageId, newEncryptedMessage }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if ((room.silencedUserIds || []).includes(socket.id) && room.hostId !== socket.id) return;
     io.to(roomId).emit("message_updated", {
       messageId,
       newEncryptedMessage,
@@ -372,6 +412,9 @@ io.on("connection", (socket) => {
 
   // --- TYPING INDICATOR ---
   socket.on("typing_status", ({ roomId, username, isTyping }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if ((room.silencedUserIds || []).includes(socket.id) && room.hostId !== socket.id) return;
     socket.to(roomId).emit("user_typing", { username, isTyping });
   });
 
@@ -396,6 +439,7 @@ io.on("connection", (socket) => {
       if (userIndex !== -1) {
         const username = room.users[userIndex].username;
         room.users.splice(userIndex, 1);
+        room.silencedUserIds = (room.silencedUserIds || []).filter((id) => id !== socket.id);
 
         io.to(roomId).emit("receive_message", {
           system: true,

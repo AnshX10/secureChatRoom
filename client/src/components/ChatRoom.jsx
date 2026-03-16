@@ -16,7 +16,6 @@ import {
   LuClock,
   LuTriangleAlert,
   LuReply,
-  LuStar,
   LuPin,
   LuChartBar,
   LuCheck,
@@ -43,6 +42,7 @@ import {
   LuFile,
   LuFileText,
   LuMic,
+  LuMicOff,
   LuSquare,
   LuPlay,
   LuPause,
@@ -91,6 +91,7 @@ const ChatRoom = ({
   roomName,
   roomCapacity,
   roomLocked,
+  roomSilencedUserIds,
 }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
@@ -130,6 +131,9 @@ const ChatRoom = ({
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
   const [isRoomLocked, setIsRoomLocked] = useState(!!roomLocked);
+  const [silencedUserIds, setSilencedUserIds] = useState(
+    new Set(roomSilencedUserIds || []),
+  );
   const [showIntrusionHud, setShowIntrusionHud] = useState(false);
   const [intrusionCount, setIntrusionCount] = useState(0);
   const [latestIntrusionCodename, setLatestIntrusionCodename] = useState("");
@@ -210,10 +214,14 @@ const ChatRoom = ({
   const inputRef = useRef(null);
 
   const [joinRequests, setJoinRequests] = useState([]);
+  const [agentSearchQuery, setAgentSearchQuery] = useState("");
   const [hostTransferSearch, setHostTransferSearch] = useState("");
   const currentUser = users.find((user) => user.id === socket.id);
   const isCurrentHost = currentUser ? !!currentUser.isHost : !!isHost;
   const promotableUsers = users.filter((user) => user.id !== socket.id);
+  const filteredUsers = users.filter((user) =>
+    user.username.toLowerCase().includes(agentSearchQuery.trim().toLowerCase()),
+  );
   const filteredPromotableUsers = promotableUsers.filter((user) =>
     user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
   );
@@ -222,11 +230,38 @@ const ChatRoom = ({
     setIsRoomLocked(!!roomLocked);
   }, [roomLocked]);
 
+  useEffect(() => {
+    setSilencedUserIds(new Set(roomSilencedUserIds || []));
+  }, [roomSilencedUserIds]);
+
+  const isRadioSilenceEnforced = silencedUserIds.has(socket.id) && !isCurrentHost;
+
   const toggleRoomLock = () => {
     if (!isCurrentHost) return;
     const nextLockedState = !isRoomLocked;
     setIsRoomLocked(nextLockedState);
     socket.emit("toggle_room_lock", { roomId, locked: nextLockedState });
+  };
+
+  const toggleAgentRadioSilence = (userId) => {
+    if (!isCurrentHost || !userId || userId === socket.id) return;
+
+    const nextSilencedState = !silencedUserIds.has(userId);
+    setSilencedUserIds((prev) => {
+      const next = new Set(prev);
+      if (nextSilencedState) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+      return next;
+    });
+
+    socket.emit("toggle_agent_radio_silence", {
+      roomId,
+      userId,
+      silenced: nextSilencedState,
+    });
   };
 
   const renderMessageText = (text, keyPrefix = "msg") => {
@@ -253,7 +288,6 @@ const ChatRoom = ({
     });
   };
 
-  const [starredMessageIds, setStarredMessageIds] = useState(() => new Set());
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
 
   const [showPollModal, setShowPollModal] = useState(false);
@@ -592,6 +626,10 @@ const ChatRoom = ({
   }, []);
 
   const startReplying = (msg) => {
+    if (!msg || msg.own || msg.username === username) {
+      setActiveMenuId(null);
+      return;
+    }
     setReplyingTo(msg);
     setEditingMessageId(null);
     setActiveMenuId(null);
@@ -630,33 +668,16 @@ const ChatRoom = ({
     }
   };
 
-  const storageKeyStarred = `secureChatRoom:${roomId}:starredMessageIds`;
   const storageKeyPinned = `secureChatRoom:${roomId}:pinnedMessageId`;
 
   useEffect(() => {
     try {
-      const rawStarred = JSON.parse(
-        localStorage.getItem(storageKeyStarred) || "[]",
-      );
-      setStarredMessageIds(
-        new Set(Array.isArray(rawStarred) ? rawStarred : []),
-      );
       const rawPinned = localStorage.getItem(storageKeyPinned);
       setPinnedMessageId(rawPinned || null);
     } catch {
-      setStarredMessageIds(new Set());
       setPinnedMessageId(null);
     }
   }, [roomId]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        storageKeyStarred,
-        JSON.stringify(Array.from(starredMessageIds)),
-      );
-    } catch {}
-  }, [storageKeyStarred, starredMessageIds]);
 
   useEffect(() => {
     try {
@@ -688,17 +709,6 @@ const ChatRoom = ({
     };
   }, []);
 
-  const toggleStarMessage = (messageId) => {
-    if (!messageId) return;
-    setStarredMessageIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(messageId)) next.delete(messageId);
-      else next.add(messageId);
-      return next;
-    });
-    setActiveMenuId(null);
-  };
-
   const togglePinMessage = (messageId) => {
     if (!messageId) return;
     setPinnedMessageId((prev) => (prev === messageId ? null : messageId));
@@ -729,6 +739,7 @@ const ChatRoom = ({
   };
 
   const togglePollModal = () => {
+    if (isRadioSilenceEnforced) return;
     if (editingMessageId) return;
     setShowPollModal((v) => !v);
   };
@@ -777,6 +788,7 @@ const ChatRoom = ({
   };
 
   const postPoll = async () => {
+    if (isRadioSilenceEnforced) return;
     const q = pollQuestion.trim();
     const answers = pollAnswers.map((a) => a.trim()).filter(Boolean);
     if (!q || answers.length < 2) return;
@@ -828,6 +840,10 @@ const ChatRoom = ({
   };
 
   const handleFileSelect = async (e) => {
+    if (isRadioSilenceEnforced) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
@@ -899,6 +915,7 @@ const ChatRoom = ({
   };
 
   const sendSelectedAttachments = async () => {
+    if (isRadioSilenceEnforced) return;
     if (!selectedAttachments.length) return;
 
     const attachmentsToSend = [...selectedAttachments];
@@ -986,6 +1003,7 @@ const ChatRoom = ({
   };
 
   const startRecording = async () => {
+    if (isRadioSilenceEnforced) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -1076,6 +1094,7 @@ const ChatRoom = ({
   };
 
   const sendAudioMessage = async () => {
+    if (isRadioSilenceEnforced) return;
     if (!audioBlob) return;
 
     const reader = new FileReader();
@@ -1269,6 +1288,7 @@ const ChatRoom = ({
 
   // Typing & Input Logic
   const handleInputChange = (e) => {
+    if (isRadioSilenceEnforced) return;
     setCurrentMessage(e.target.value);
     if (!isLocalTyping) {
       setIsLocalTyping(true);
@@ -1432,6 +1452,7 @@ const ChatRoom = ({
   };
 
   const sendMessage = async () => {
+    if (isRadioSilenceEnforced) return;
     if (!currentMessage.trim()) return;
     setIsLocalTyping(false);
     socket.emit("typing_status", { roomId, username, isTyping: false });
@@ -1492,6 +1513,7 @@ const ChatRoom = ({
   };
 
   const sendHighClearanceMessage = async (messageData) => {
+    if (isRadioSilenceEnforced) return;
     const messageId = uuidv4();
     const time = new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -1663,6 +1685,13 @@ const ChatRoom = ({
       if (incomingRoomId !== roomId) return;
       setIsRoomLocked(!!isLocked);
     });
+    socket.on(
+      "room_silence_state",
+      ({ roomId: incomingRoomId, silencedUserIds: nextSilencedUserIds }) => {
+        if (incomingRoomId !== roomId) return;
+        setSilencedUserIds(new Set(nextSilencedUserIds || []));
+      },
+    );
 
     socket.on(
       "join_request",
@@ -1687,6 +1716,7 @@ const ChatRoom = ({
       socket.off("host_transferred");
       socket.off("intrusion_detected");
       socket.off("room_lock_state");
+      socket.off("room_silence_state");
       if (intrusionHudTimeoutRef.current) {
         clearTimeout(intrusionHudTimeoutRef.current);
       }
@@ -1700,6 +1730,25 @@ const ChatRoom = ({
     isCurrentHost,
     notificationPermission,
   ]);
+
+  useEffect(() => {
+    if (!isRadioSilenceEnforced) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (isLocalTyping) {
+      socket.emit("typing_status", { roomId, username, isTyping: false });
+      setIsLocalTyping(false);
+    }
+
+    setCurrentMessage("");
+    setShowMobileToolbar(false);
+    setShowTimerMenu(false);
+    setShowPollModal(false);
+    setShowHighClearanceComposer(false);
+  }, [isRadioSilenceEnforced, isLocalTyping, roomId, socket, username]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -2146,11 +2195,31 @@ const ChatRoom = ({
                 </div>
               )}
 
-              <div className="flex items-center justify-between mb-4 mt-1">
-                <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
+              <div className="flex items-center gap-2 mb-4 mt-1">
+                <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
                   <LuUsers size={11} className="text-zinc-600" /> Agents Online
                 </h3>
-                <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30">
+                <div className="min-w-0 flex-1 flex items-center gap-1.5 bg-zinc-900/70 border border-zinc-700/60 rounded-lg px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] focus-within:border-zinc-500/70 focus-within:bg-zinc-900/90">
+                  <input
+                    type="text"
+                    value={agentSearchQuery}
+                    onChange={(e) => setAgentSearchQuery(e.target.value)}
+                    placeholder="Search agent"
+                    className="min-w-0 flex-1 bg-transparent text-[10px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+                  />
+                  {agentSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setAgentSearchQuery("")}
+                      className="shrink-0 text-zinc-500 hover:text-white transition-colors"
+                      title="Clear search"
+                      aria-label="Clear search"
+                    >
+                      <LuX size={12} />
+                    </button>
+                  )}
+                </div>
+                <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30 shrink-0">
                   {users.length}/{roomCapacity || 50}
                 </span>
               </div>
@@ -2194,8 +2263,15 @@ const ChatRoom = ({
                       </span>
                     </div>
                   </div>
+                ) : filteredUsers.length === 0 ? (
+                  <div className="p-3 rounded-xl border border-zinc-800/40 bg-zinc-900/30 text-center">
+                    <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-zinc-500">
+                      No matching codename
+                    </p>
+                  </div>
                 ) : (
-                  users.map((user, i) => {
+                  filteredUsers.map((user, i) => {
+                    const isUserSilenced = silencedUserIds.has(user.id);
                     const colors = [
                       'from-zinc-300 to-zinc-500',
                       'from-zinc-400 to-zinc-600',
@@ -2227,10 +2303,30 @@ const ChatRoom = ({
                               <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
                             </span>
                           )}
+                          {isUserSilenced && (
+                            <span className="text-[8px] px-1.5 py-0.5 bg-red-500/10 border border-red-500/30 text-red-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
+                              <LuMicOff size={8} /> SILENT
+                            </span>
+                          )}
                         </span>
                       </div>
                       {isCurrentHost && user.id !== socket.id && (
                         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => toggleAgentRadioSilence(user.id)}
+                            className={`p-1.5 rounded-lg ${
+                              isUserSilenced
+                                ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                : "text-zinc-500 hover:text-white hover:bg-white/10"
+                            }`}
+                            title={
+                              isUserSilenced
+                                ? `Restore ${user.username}'s channel`
+                                : "Enforce Radio Silence"
+                            }
+                          >
+                            {isUserSilenced ? <LuMicOff size={14} /> : <LuMic size={14} />}
+                          </button>
                           <button
                             onClick={() => transferHostTo(user.id, user.username)}
                             className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
@@ -2633,11 +2729,6 @@ const ChatRoom = ({
                         {pinnedMessageId === msg.id && !msg.deleted && (
                           <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white">
                             <LuPin size={9} /> PINNED
-                          </span>
-                        )}
-                        {starredMessageIds.has(msg.id) && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white">
-                            <LuStar size={9} /> STAR
                           </span>
                         )}
                         {msg.timer > 0 && !msg.deleted && (
@@ -3074,19 +3165,14 @@ const ChatRoom = ({
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[150px] sm:min-w-[160px] rounded-xl overflow-hidden`}
                       >
-                        <button
-                          onClick={() => startReplying(msg)}
-                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                        >
-                          <LuReply size={13} /> Reply
-                        </button>
-                        <button
-                          onClick={() => toggleStarMessage(msg.id)}
-                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                        >
-                          <LuStar size={13} className={starredMessageIds.has(msg.id) ? "text-white fill-white" : ""} />
-                          {starredMessageIds.has(msg.id) ? "Unstar" : "Star"}
-                        </button>
+                        {!msg.own && msg.username !== username && (
+                          <button
+                            onClick={() => startReplying(msg)}
+                            className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
+                          >
+                            <LuReply size={13} /> Reply
+                          </button>
+                        )}
                         <button
                           onClick={() => togglePinMessage(msg.id)}
                           className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
@@ -3273,7 +3359,7 @@ const ChatRoom = ({
           )}
 
           <div
-            className={`flex ${hasSelectedAttachments ? "flex-col" : "items-center"} p-1 sm:p-1.5 transition-all rounded-2xl ${editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
+            className={`flex ${hasSelectedAttachments ? "flex-col" : "items-center"} p-1 sm:p-1.5 transition-all rounded-2xl ${isRadioSilenceEnforced ? "bg-zinc-900/70 border border-zinc-700/50 opacity-80" : editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
             <div className="flex items-center w-full">
               {/* ── Mobile: single + button with popup (hidden during recording/audio preview) ── */}
@@ -3282,10 +3368,12 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={(e) => {
+                    if (isRadioSilenceEnforced) return;
                     e.stopPropagation();
                     setShowMobileToolbar(!showMobileToolbar);
                   }}
-                  className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
+                  className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                  disabled={isRadioSilenceEnforced}
                 >
                   <LuPlus size={20} strokeWidth={2.5} className={`transition-transform duration-200 ${showMobileToolbar ? "rotate-45" : ""}`} />
                   {/* Active indicator dot */}
@@ -3355,8 +3443,8 @@ const ChatRoom = ({
                             togglePollModal();
                             setShowMobileToolbar(false);
                           }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId || isRadioSilenceEnforced}
                         >
                           <LuChartBar size={18} />
                           <span className="text-[11px] font-bold uppercase tracking-wider">Create Poll</span>
@@ -3369,8 +3457,8 @@ const ChatRoom = ({
                             fileInputRef.current?.click();
                             setShowMobileToolbar(false);
                           }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId || isRadioSilenceEnforced}
                         >
                           <LuPaperclip size={18} />
                           <span className="text-[11px] font-bold uppercase tracking-wider">Attach File</span>
@@ -3383,8 +3471,8 @@ const ChatRoom = ({
                             setShowHighClearanceComposer(true);
                             setShowMobileToolbar(false);
                           }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId || isRadioSilenceEnforced}
                         >
                           <div className="relative">
                             <LuLock size={18} />
@@ -3404,8 +3492,8 @@ const ChatRoom = ({
                             }
                             setShowMobileToolbar(false);
                           }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${isRecording ? "text-red-400 bg-red-500/15" : audioBlob ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${isRecording ? "text-red-400 bg-red-500/15" : audioBlob ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!!editingMessageId || isRadioSilenceEnforced}
                         >
                           {isRecording ? <LuSquare size={16} /> : <LuMic size={18} />}
                           <span className="text-[11px] font-bold uppercase tracking-wider">
@@ -3426,9 +3514,11 @@ const ChatRoom = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (isRadioSilenceEnforced) return;
                       setShowTimerMenu(!showTimerMenu);
                     }}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"}`}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    disabled={isRadioSilenceEnforced}
                   >
                     <LuTimer size={16} />
                   </button>
@@ -3461,19 +3551,22 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={togglePollModal}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Create a poll"
-                  disabled={!!editingMessageId}
+                  disabled={!!editingMessageId || isRadioSilenceEnforced}
                 >
                   <LuChartBar size={16} />
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    if (isRadioSilenceEnforced) return;
+                    fileInputRef.current?.click();
+                  }}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Attach file or image"
-                  disabled={!!editingMessageId}
+                  disabled={!!editingMessageId || isRadioSilenceEnforced}
                 >
                   <LuPaperclip size={16} />
                 </button>
@@ -3481,9 +3574,9 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={() => setShowHighClearanceComposer(true)}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
                   title="Send high clearance message (biometric protected)"
-                  disabled={!!editingMessageId}
+                  disabled={!!editingMessageId || isRadioSilenceEnforced}
                 >
                   <LuLock size={17} />
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
@@ -3492,9 +3585,9 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={isRecording ? stopRecording : startRecording}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${isRecording ? "text-red-400 bg-red-500/15 animate-pulse" : audioBlob ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId ? "opacity-40 cursor-not-allowed" : ""}`}
+                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${isRecording ? "text-red-400 bg-red-500/15 animate-pulse" : audioBlob ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
                   title={isRecording ? "Stop recording" : "Record voice message"}
-                  disabled={!!editingMessageId}
+                  disabled={!!editingMessageId || isRadioSilenceEnforced}
                 >
                   {isRecording ? <LuSquare size={14} /> : <LuMic size={16} />}
                 </button>
@@ -3619,11 +3712,14 @@ const ChatRoom = ({
                       type="text"
                       value={currentMessage}
                       placeholder={
-                        editingMessageId
+                        isRadioSilenceEnforced
+                          ? `Radio Silence Enforced By HOST...`
+                          : editingMessageId
                           ? "Editing message..."
                           : "Type your encrypted signal..."
                       }
-                      className="flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 text-white outline-none placeholder:text-zinc-700 text-xs sm:text-sm font-mono tracking-wide min-w-0"
+                      className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
+                      disabled={isRadioSilenceEnforced}
                       onChange={handleInputChange}
                       onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                     />
@@ -3645,7 +3741,7 @@ const ChatRoom = ({
               <button
                 onClick={isRecording ? stopRecording : audioBlob ? sendAudioMessage : hasSelectedAttachments ? sendSelectedAttachments : sendMessage}
                 className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 flex items-center justify-center gap-1.5 ${isRecording ? "bg-red-500 text-white hover:bg-red-400" : editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
-                disabled={isRecording ? false : !audioBlob && !hasSelectedAttachments && !currentMessage.trim()}
+                disabled={isRadioSilenceEnforced || (isRecording ? false : !audioBlob && !hasSelectedAttachments && !currentMessage.trim())}
                 title={isRecording ? "Stop recording" : audioBlob ? "Send audio message" : "Send message"}
               >
                 {isRecording ? (
