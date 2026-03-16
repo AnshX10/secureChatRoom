@@ -21,6 +21,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [roomName, setRoomName] = useState("");
   const [roomCapacity, setRoomCapacity] = useState(50);
+  const [roomLocked, setRoomLocked] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
 
   // Check if we're on the demo route
@@ -48,24 +49,26 @@ function App() {
   }, []);
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity }) => {
+    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
       setRoomCapacity(capacity || 50);
+      setRoomLocked(!!isLocked);
       setIsHost(true);
       setIsInChat(true);
       setIsCreatingRoom(false);
     });
 
     // Handle Join Success (direct or after host approval)
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity, isLocked }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
       setRoomCapacity(capacity || 50);
+      setRoomLocked(!!isLocked);
       setIsHost(isHost);
       setIsInChat(true);
       setIsWaitingApproval(false);
@@ -90,6 +93,7 @@ function App() {
       setIsInChat(false);
       setRoomId("");
       setIsHost(false);
+      setRoomLocked(false);
     });
 
     // Handle Errors (show in UI)
@@ -168,6 +172,7 @@ function App() {
           initialUsers={initialUsers}
           roomName={roomName}
           roomCapacity={roomCapacity}
+          roomLocked={roomLocked}
         />
       )}
     </div>

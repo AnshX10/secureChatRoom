@@ -90,6 +90,7 @@ const ChatRoom = ({
   initialUsers,
   roomName,
   roomCapacity,
+  roomLocked,
 }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
@@ -128,6 +129,7 @@ const ChatRoom = ({
 
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [QRCodeComponent, setQRCodeComponent] = useState(null);
+  const [isRoomLocked, setIsRoomLocked] = useState(!!roomLocked);
 
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "denied",
@@ -211,6 +213,17 @@ const ChatRoom = ({
   const filteredPromotableUsers = promotableUsers.filter((user) =>
     user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
   );
+
+  useEffect(() => {
+    setIsRoomLocked(!!roomLocked);
+  }, [roomLocked]);
+
+  const toggleRoomLock = () => {
+    if (!isCurrentHost) return;
+    const nextLockedState = !isRoomLocked;
+    setIsRoomLocked(nextLockedState);
+    socket.emit("toggle_room_lock", { roomId, locked: nextLockedState });
+  };
 
   const renderMessageText = (text, keyPrefix = "msg") => {
     if (!text) return null;
@@ -787,6 +800,7 @@ const ChatRoom = ({
       id: messageId,
       roomId,
       username,
+      senderIsHost: isCurrentHost,
       message: "",
       time,
       edited: false,
@@ -903,6 +917,7 @@ const ChatRoom = ({
           id: messageId,
           roomId,
           username,
+          senderIsHost: isCurrentHost,
           message: encryptedImage,
           time,
           edited: false,
@@ -920,6 +935,7 @@ const ChatRoom = ({
           id: messageId,
           roomId,
           username,
+          senderIsHost: isCurrentHost,
           message: encryptedData,
           fileName: encryptedName,
           fileSize: attachment.size,
@@ -1069,6 +1085,7 @@ const ChatRoom = ({
         id: messageId,
         roomId,
         username,
+        senderIsHost: isCurrentHost,
         message: encryptedAudio,
         audioDuration: recordingDuration,
         time,
@@ -1451,6 +1468,7 @@ const ChatRoom = ({
         id: messageId,
         roomId,
         username,
+        senderIsHost: isCurrentHost,
         message: encrypted,
         time,
         edited: false,
@@ -1484,6 +1502,7 @@ const ChatRoom = ({
       id: messageId,
       roomId,
       username,
+      senderIsHost: isCurrentHost,
       message: encryptedContent,
       time,
       edited: false,
@@ -1616,6 +1635,10 @@ const ChatRoom = ({
     socket.on("kicked", () => {
       leaveRoom();
     });
+    socket.on("room_lock_state", ({ roomId: incomingRoomId, isLocked }) => {
+      if (incomingRoomId !== roomId) return;
+      setIsRoomLocked(!!isLocked);
+    });
 
     socket.on(
       "join_request",
@@ -1638,6 +1661,7 @@ const ChatRoom = ({
       socket.off("poll_vote_update");
       socket.off("join_request");
       socket.off("host_transferred");
+      socket.off("room_lock_state");
     };
   }, [
     socket,
@@ -1962,16 +1986,39 @@ const ChatRoom = ({
 
               {isCurrentHost && (
                 <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-3 gap-2">
                     <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
                       <LuKeyRound size={11} className="text-zinc-500" /> Magic Invite
                     </p>
-                    <button
-                      onClick={() => setShowMagicLink(!showMagicLink)}
-                      className="text-[8px] uppercase text-zinc-600 hover:text-white transition-all font-bold px-2 py-1 rounded-md hover:bg-white/5 active:scale-95"
-                    >
-                      {showMagicLink ? "Hide" : "Show"}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={toggleRoomLock}
+                        className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-all active:scale-95 ${
+                          isRoomLocked
+                            ? "border-red-500/40 bg-red-500/10 text-red-400 shadow-[0_0_16px_rgba(239,68,68,0.2)]"
+                            : "border-zinc-700/40 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10"
+                        }`}
+                        title={isRoomLocked ? "Unlock frequency" : "Lock frequency"}
+                        aria-label={isRoomLocked ? "Unlock frequency" : "Lock frequency"}
+                      >
+                        <LuLock size={13} />
+                      </button>
+                      <button
+                        onClick={() => setShowMagicLink(!showMagicLink)}
+                        className="text-[8px] uppercase text-zinc-600 hover:text-white transition-all font-bold px-2 py-1 rounded-md hover:bg-white/5 active:scale-95"
+                      >
+                        {showMagicLink ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`mb-3 text-[8px] uppercase tracking-[0.18em] font-bold px-2.5 py-1.5 rounded-lg border ${
+                    isRoomLocked
+                      ? "text-red-400 border-red-500/30 bg-red-500/10"
+                      : "text-zinc-500 border-zinc-700/30 bg-black/25"
+                  }`}>
+                    {isRoomLocked ? "Lockdown Protocol Active" : "Frequency Open"}
                   </div>
 
                   {showMagicLink &&
@@ -2295,6 +2342,25 @@ const ChatRoom = ({
           </div>
 
           <div className="z-10 min-w-[60px] sm:min-w-[80px] flex justify-end items-center gap-1 sm:gap-1.5">
+            {isCurrentHost && (
+              <button
+                type="button"
+                onClick={toggleRoomLock}
+                className={`p-2 rounded-xl transition-all active:scale-90 ${
+                  isRoomLocked
+                    ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    : "text-zinc-500 hover:text-white hover:bg-white/5"
+                }`}
+                title={
+                  isRoomLocked
+                    ? "Lockdown active — click to unlock frequency"
+                    : "Frequency open — click to lock"
+                }
+              >
+                <LuLock size={16} />
+              </button>
+            )}
+
             {typeof Notification !== "undefined" && (
               <button
                 type="button"
@@ -2428,6 +2494,8 @@ const ChatRoom = ({
           <AnimatePresence initial={false}>
           {messageList.map((msg) => {
             const isDeleting = deletingIds.has(msg.id);
+            const isCommanderMessage =
+              !msg.system && !msg.deleted && !!msg.senderIsHost;
             return (
             <motion.div
               ref={(el) => {
@@ -2503,7 +2571,7 @@ const ChatRoom = ({
                           : msg.own
                             ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
                             : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
-                    } ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}
+                    } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}
                   >
                     <div className="flex justify-between items-start gap-4 mb-2">
                       {!msg.own && !msg.deleted && (
@@ -2921,7 +2989,7 @@ const ChatRoom = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-mono">
+                      <p className={`leading-relaxed whitespace-pre-wrap break-words font-mono ${isCommanderMessage ? "text-sm sm:text-base" : "text-xs sm:text-sm"}`}>
                         {msg.deleted && <LuTrash2 className="inline mr-1 opacity-50" size={13} />}{" "}
                         {renderMessageText(msg.message, msg.id || "message")}
                       </p>

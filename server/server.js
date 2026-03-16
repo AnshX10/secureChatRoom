@@ -105,6 +105,7 @@ io.on("connection", (socket) => {
       createdAt: createdAt,
       roomName: roomName || "",
       capacity: roomCapacity,
+      isLocked: false,
       requireApproval: !!requireApproval,
       pendingRequests: []
     };
@@ -117,7 +118,8 @@ io.on("connection", (socket) => {
       createdAt, 
       users: rooms[roomId].users,
       roomName: rooms[roomId].roomName,
-      capacity: rooms[roomId].capacity
+      capacity: rooms[roomId].capacity,
+      isLocked: rooms[roomId].isLocked,
     });
     
     // Broadcast list to the room (redundant but safe)
@@ -133,6 +135,9 @@ io.on("connection", (socket) => {
     if (room) {
       if (room.password !== hash(password)) {
         return socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
+      }
+      if (room.isLocked) {
+        return socket.emit("error", "ACCESS DENIED: Frequency Locked By Host.");
       }
       if (room.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         return socket.emit("error", "CODENAME ALREADY IN USE.");
@@ -170,7 +175,8 @@ io.on("connection", (socket) => {
         createdAt: room.createdAt,
         users: room.users,
         roomName: room.roomName || "",
-        capacity: room.capacity
+        capacity: room.capacity,
+        isLocked: room.isLocked,
       });
   
       io.to(roomId).emit("receive_message", {
@@ -211,6 +217,10 @@ io.on("connection", (socket) => {
       });
     }
 
+    if (room.isLocked) {
+      return targetSocket.emit("error", "[ ERROR: FREQUENCY LOCKED BY COMMANDER ]");
+    }
+
     // Ensure codename is still unique at approval time
     if (room.users.some((u) => u.username.toLowerCase() === request.username.toLowerCase())) {
       return targetSocket.emit("error", "CODENAME ALREADY IN USE.");
@@ -232,7 +242,8 @@ io.on("connection", (socket) => {
       createdAt: room.createdAt,
       users: room.users,
       roomName: room.roomName || "",
-      capacity: room.capacity
+      capacity: room.capacity,
+      isLocked: room.isLocked,
     });
 
     io.to(roomId).emit("receive_message", {
@@ -241,6 +252,26 @@ io.on("connection", (socket) => {
     });
 
     io.to(roomId).emit("update_users", room.users);
+  });
+
+  socket.on("toggle_room_lock", ({ roomId, locked }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    room.isLocked = typeof locked === "boolean" ? locked : !room.isLocked;
+
+    io.to(roomId).emit("room_lock_state", {
+      roomId,
+      isLocked: room.isLocked,
+      updatedBy: socket.id,
+    });
+
+    io.to(roomId).emit("receive_message", {
+      system: true,
+      message: room.isLocked
+        ? "[ LOCKDOWN PROTOCOL ENGAGED ] Frequency sealed by commander."
+        : "[ LOCKDOWN PROTOCOL DISENGAGED ] Frequency open for approved joins.",
+    });
   });
 
   // NEW: Kick User Feature
@@ -291,16 +322,26 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send_message", (data) => {
-    const { roomId, messageId, timer, type } = data; // Receive timer (in ms) and message type
+    const { roomId, timer, type } = data; // Receive timer (in ms) and message type
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const senderInRoom = room.users.some((user) => user.id === socket.id);
+    if (!senderInRoom) return;
+
+    const payload = {
+      ...data,
+      senderIsHost: room.hostId === socket.id,
+    };
 
     // Broadcast message to others immediately
-    socket.to(roomId).emit("receive_message", data);
+    socket.to(roomId).emit("receive_message", payload);
 
     // --- Handle Self-Destruct (not for high-clearance messages) ---
     if (timer && timer > 0 && type !== "high-clearance") {
       setTimeout(() => {
         // Trigger the delete event for everyone in the room (including sender)
-        io.to(roomId).emit("message_deleted", data.id);
+        io.to(roomId).emit("message_deleted", payload.id);
       }, timer);
     }
   });
