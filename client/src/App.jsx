@@ -20,6 +20,7 @@ function App() {
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [roomName, setRoomName] = useState("");
+  const [roomCapacity, setRoomCapacity] = useState(50);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
 
   // Check if we're on the demo route
@@ -47,22 +48,24 @@ function App() {
   }, []);
 
   useEffect(() => {
-    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName }) => {
+    socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
+      setRoomCapacity(capacity || 50);
       setIsHost(true);
       setIsInChat(true);
       setIsCreatingRoom(false);
     });
 
     // Handle Join Success (direct or after host approval)
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
       setRoomName(serverRoomName || "");
+      setRoomCapacity(capacity || 50);
       setIsHost(isHost);
       setIsInChat(true);
       setIsWaitingApproval(false);
@@ -106,14 +109,21 @@ function App() {
     };
   }, []);
 
-  const createRoom = (user, password, name, requireApproval) => {
+  const createRoom = (user, password, name, requireApproval, capacity) => {
     if (!user || !password || !name) return;
     setErrorMessage("");
     setIsCreatingRoom(true);
     setUsername(user);
     setRoomPassword(password);
     setRoomName(name);
-    socket.emit("create_room", { username: user, password: password, roomName: name, requireApproval: !!requireApproval });
+    setRoomCapacity(capacity || 50);
+    socket.emit("create_room", {
+      username: user,
+      password: password,
+      roomName: name,
+      requireApproval: !!requireApproval,
+      capacity,
+    });
   };
 
   const joinRoom = (user, room, password) => {
@@ -157,6 +167,7 @@ function App() {
           createdAt={startTime}
           initialUsers={initialUsers}
           roomName={roomName}
+          roomCapacity={roomCapacity}
         />
       )}
     </div>

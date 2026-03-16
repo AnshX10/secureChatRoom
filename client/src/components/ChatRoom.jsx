@@ -89,6 +89,7 @@ const ChatRoom = ({
   createdAt,
   initialUsers,
   roomName,
+  roomCapacity,
 }) => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
@@ -203,6 +204,13 @@ const ChatRoom = ({
   const inputRef = useRef(null);
 
   const [joinRequests, setJoinRequests] = useState([]);
+  const [hostTransferSearch, setHostTransferSearch] = useState("");
+  const currentUser = users.find((user) => user.id === socket.id);
+  const isCurrentHost = currentUser ? !!currentUser.isHost : !!isHost;
+  const promotableUsers = users.filter((user) => user.id !== socket.id);
+  const filteredPromotableUsers = promotableUsers.filter((user) =>
+    user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
+  );
 
   const renderMessageText = (text, keyPrefix = "msg") => {
     if (!text) return null;
@@ -1253,14 +1261,17 @@ const ChatRoom = ({
   };
 
   const kickAgent = (userId, agentName) => {
-    if (window.confirm(`TERMINATE AGENT ${agentName.toUpperCase()}?`)) {
-      socket.emit("kick_user", { roomId, userId });
-    }
+    socket.emit("kick_user", { roomId, userId });
   };
 
   const decideJoinRequest = (socketId, approve) => {
     socket.emit("approve_join_request", { roomId, socketId, approve });
     setJoinRequests((prev) => prev.filter((r) => r.socketId !== socketId));
+  };
+
+  const transferHostTo = (newHostId, newHostUsername) => {
+    if (!isCurrentHost || !newHostId || newHostId === socket.id) return;
+    socket.emit("transfer_host", { roomId, newHostId });
   };
 
   const handleTerminateClick = () => {
@@ -1269,6 +1280,7 @@ const ChatRoom = ({
     setShowSlideConfirm(true);
     setSlidePosition(0);
     slidePositionRef.current = 0;
+    setHostTransferSearch("");
   };
 
   const handleLeaveClick = () => {
@@ -1383,6 +1395,13 @@ const ChatRoom = ({
     setConfirmAction(null);
     confirmActionRef.current = null;
     setIsSliding(false);
+    setHostTransferSearch("");
+  };
+
+  const promoteHostFromPopup = (targetUser) => {
+    if (!isCurrentHost || !targetUser || targetUser.id === socket.id) return;
+    socket.emit("transfer_host", { roomId, newHostId: targetUser.id });
+    closeSlideConfirm();
   };
 
   const startEditing = (msg) => {
@@ -1590,6 +1609,10 @@ const ChatRoom = ({
       );
     });
     socket.on("update_users", (userList) => setUsers(userList));
+    socket.on("host_transferred", ({ roomId: incomingRoomId }) => {
+      if (incomingRoomId !== roomId) return;
+      setJoinRequests([]);
+    });
     socket.on("kicked", () => {
       leaveRoom();
     });
@@ -1614,6 +1637,7 @@ const ChatRoom = ({
       socket.off("kicked");
       socket.off("poll_vote_update");
       socket.off("join_request");
+      socket.off("host_transferred");
     };
   }, [
     socket,
@@ -1936,7 +1960,7 @@ const ChatRoom = ({
                 </div>
               </div>
 
-              {isHost && (
+              {isCurrentHost && (
                 <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
@@ -2004,7 +2028,7 @@ const ChatRoom = ({
                 </div>
               )}
 
-              {isHost && joinRequests.length > 0 && (
+              {isCurrentHost && joinRequests.length > 0 && (
                 <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/40 to-transparent" />
                   <p className="text-[9px] uppercase font-black text-zinc-300 tracking-[0.25em] mb-3 flex items-center gap-2">
@@ -2051,7 +2075,7 @@ const ChatRoom = ({
                   <LuUsers size={11} className="text-zinc-600" /> Agents Online
                 </h3>
                 <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30">
-                  {users.length}
+                  {users.length}/{roomCapacity || 50}
                 </span>
               </div>
 
@@ -2065,7 +2089,7 @@ const ChatRoom = ({
                       <span className="text-xs uppercase tracking-wide truncate">
                         {username}{" "}
                         <span className="text-zinc-600 ml-1">(YOU)</span>
-                        {isHost && (
+                        {isCurrentHost && (
                           <span className="ml-2 text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
                             <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
                           </span>
@@ -2108,14 +2132,23 @@ const ChatRoom = ({
                           )}
                         </span>
                       </div>
-                      {isHost && user.id !== socket.id && (
-                        <button
-                          onClick={() => kickAgent(user.id, user.username)}
-                          className="text-red-900 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 rounded-lg"
-                          title={`Remove ${user.username}`}
-                        >
-                          <LuUserMinus size={16} />
-                        </button>
+                      {isCurrentHost && user.id !== socket.id && (
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => transferHostTo(user.id, user.username)}
+                            className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
+                            title={`Transfer host to ${user.username}`}
+                          >
+                            <LuCrown size={14} />
+                          </button>
+                          <button
+                            onClick={() => kickAgent(user.id, user.username)}
+                            className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
+                            title={`Remove ${user.username}`}
+                          >
+                            <LuUserMinus size={16} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -2127,7 +2160,7 @@ const ChatRoom = ({
                 <div className="p-4 flex-shrink-0 relative">
               <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
               <div className="pt-1">
-                {isHost ? (
+                {isCurrentHost ? (
                   <button
                     onClick={handleTerminateClick}
                     className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
@@ -3757,6 +3790,46 @@ const ChatRoom = ({
                       : "Are you sure you want to leave? Slide to confirm."}
                   </p>
                 </div>
+
+                {confirmAction === "terminate" && isCurrentHost && promotableUsers.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 mb-2 font-bold">
+                      Promote a new host instead of terminating
+                    </p>
+                    <input
+                      type="text"
+                      value={hostTransferSearch}
+                      onChange={(e) => setHostTransferSearch(e.target.value)}
+                      placeholder="Search codename"
+                      className="w-full mb-2 bg-black/40 border border-zinc-800/60 text-white px-3 py-2 text-xs outline-none rounded-lg focus:border-zinc-600 placeholder:text-zinc-700"
+                    />
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {filteredPromotableUsers.length === 0 ? (
+                        <p className="text-[10px] text-zinc-600 uppercase tracking-wider py-1">
+                          No matching codename found
+                        </p>
+                      ) : (
+                        filteredPromotableUsers.map((user) => (
+                          <div
+                            key={user.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 bg-black/20 px-2.5 py-2"
+                          >
+                            <span className="text-xs text-zinc-200 uppercase tracking-wide truncate">
+                              {user.username}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => promoteHostFromPopup(user)}
+                              className="shrink-0 px-2.5 py-1 text-[9px] uppercase tracking-widest font-black rounded-md border border-zinc-700/60 text-zinc-300 hover:bg-white hover:text-black hover:border-white transition-all"
+                            >
+                              Promote
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div
                   ref={slideTrackRef}

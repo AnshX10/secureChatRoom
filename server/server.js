@@ -36,6 +36,9 @@ const io = new Server(server, {
 const MAX_ROOMS = parseInt(process.env.MAX_ROOMS, 10) || 50_000;
 const MIN_ENCRYPTION_KEY_LENGTH = parseInt(process.env.MIN_ENCRYPTION_KEY_LENGTH, 10) || 6;
 const MAX_ENCRYPTION_KEY_LENGTH = parseInt(process.env.MAX_ENCRYPTION_KEY_LENGTH, 10) || 64;
+const DEFAULT_ROOM_CAPACITY = parseInt(process.env.DEFAULT_ROOM_CAPACITY, 10) || 50;
+const MIN_ROOM_CAPACITY = parseInt(process.env.MIN_ROOM_CAPACITY, 10) || 2;
+const MAX_ROOM_CAPACITY = parseInt(process.env.MAX_ROOM_CAPACITY, 10) || 50;
 const MAX_ROOM_AGE_MS = parseInt(process.env.MAX_ROOM_AGE_MS, 10) || 24 * 60 * 60 * 1000; // 24h
 const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS, 10) || 15 * 60 * 1000; // 15 min
 const DESTROYED_ROOM_MEMORY_MS = 7 * 24 * 60 * 60 * 1000; // remember destroyed rooms for 7 days
@@ -47,6 +50,14 @@ const destroyedRooms = new Map();
 
 function markRoomDestroyed(roomId) {
   destroyedRooms.set(roomId, Date.now());
+}
+
+function normalizeRoomCapacity(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return Math.max(MIN_ROOM_CAPACITY, Math.min(MAX_ROOM_CAPACITY, DEFAULT_ROOM_CAPACITY));
+  }
+  return Math.max(MIN_ROOM_CAPACITY, Math.min(MAX_ROOM_CAPACITY, parsed));
 }
 
 function cleanupStaleRooms() {
@@ -70,7 +81,7 @@ setInterval(cleanupStaleRooms, CLEANUP_INTERVAL_MS);
 io.on("connection", (socket) => {
   // console.log(`User connected: ${socket.id}`);
 
-  socket.on("create_room", ({ username, password, roomName, requireApproval }) => {
+  socket.on("create_room", ({ username, password, roomName, requireApproval, capacity }) => {
     cleanupStaleRooms();
     if (Object.keys(rooms).length >= MAX_ROOMS) {
       return socket.emit("error", "ROOM_LIMIT_REACHED");
@@ -85,6 +96,7 @@ io.on("connection", (socket) => {
 
     const createdAt = Date.now();
     const hostUser = { id: socket.id, username, isHost: true };
+    const roomCapacity = normalizeRoomCapacity(capacity);
 
     rooms[roomId] = {
       hostId: socket.id,
@@ -92,6 +104,7 @@ io.on("connection", (socket) => {
       password: hash(password),
       createdAt: createdAt,
       roomName: roomName || "",
+      capacity: roomCapacity,
       requireApproval: !!requireApproval,
       pendingRequests: []
     };
@@ -103,7 +116,8 @@ io.on("connection", (socket) => {
       roomId, 
       createdAt, 
       users: rooms[roomId].users,
-      roomName: rooms[roomId].roomName
+      roomName: rooms[roomId].roomName,
+      capacity: rooms[roomId].capacity
     });
     
     // Broadcast list to the room (redundant but safe)
@@ -122,6 +136,9 @@ io.on("connection", (socket) => {
       }
       if (room.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         return socket.emit("error", "CODENAME ALREADY IN USE.");
+      }
+      if (room.users.length >= room.capacity) {
+        return socket.emit("error", "ROOM IS FULL.");
       }
 
       // If this room requires host approval, queue the request instead of joining immediately
@@ -152,7 +169,8 @@ io.on("connection", (socket) => {
         isHost: false, 
         createdAt: room.createdAt,
         users: room.users,
-        roomName: room.roomName || ""
+        roomName: room.roomName || "",
+        capacity: room.capacity
       });
   
       io.to(roomId).emit("receive_message", {
@@ -197,6 +215,12 @@ io.on("connection", (socket) => {
     if (room.users.some((u) => u.username.toLowerCase() === request.username.toLowerCase())) {
       return targetSocket.emit("error", "CODENAME ALREADY IN USE.");
     }
+    if (room.users.length >= room.capacity) {
+      return targetSocket.emit("join_request_result", {
+        approved: false,
+        reason: "ROOM IS FULL."
+      });
+    }
 
     targetSocket.join(roomId);
     const newUser = { id: socketId, username: request.username, isHost: false };
@@ -207,7 +231,8 @@ io.on("connection", (socket) => {
       isHost: false,
       createdAt: room.createdAt,
       users: room.users,
-      roomName: room.roomName || ""
+      roomName: room.roomName || "",
+      capacity: room.capacity
     });
 
     io.to(roomId).emit("receive_message", {
@@ -235,6 +260,34 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("update_users", room.users);
       }
     }
+  });
+
+  socket.on("transfer_host", ({ roomId, newHostId }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id || !newHostId || newHostId === socket.id) return;
+
+    const nextHost = room.users.find((user) => user.id === newHostId);
+    if (!nextHost) return;
+
+    room.hostId = newHostId;
+    room.users = room.users.map((user) => ({
+      ...user,
+      isHost: user.id === newHostId,
+    }));
+
+    io.to(roomId).emit("host_transferred", {
+      roomId,
+      newHostId,
+      newHostUsername: nextHost.username,
+      previousHostId: socket.id,
+    });
+
+    io.to(roomId).emit("receive_message", {
+      system: true,
+      message: `${nextHost.username} is now session host.`,
+    });
+
+    io.to(roomId).emit("update_users", room.users);
   });
 
   socket.on("send_message", (data) => {
@@ -304,9 +357,32 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("update_users", room.users);
 
         if (room.hostId === socket.id) {
-          io.to(roomId).emit("room_closed");
-          markRoomDestroyed(roomId);
-          delete rooms[roomId];
+          if (room.users.length === 0) {
+            io.to(roomId).emit("room_closed");
+            markRoomDestroyed(roomId);
+            delete rooms[roomId];
+          } else {
+            const nextHost = room.users[0];
+            room.hostId = nextHost.id;
+            room.users = room.users.map((user) => ({
+              ...user,
+              isHost: user.id === nextHost.id,
+            }));
+
+            io.to(roomId).emit("host_transferred", {
+              roomId,
+              newHostId: nextHost.id,
+              newHostUsername: nextHost.username,
+              previousHostId: socket.id,
+            });
+
+            io.to(roomId).emit("receive_message", {
+              system: true,
+              message: `${nextHost.username} is now session host.`,
+            });
+
+            io.to(roomId).emit("update_users", room.users);
+          }
         }
         break;
       }

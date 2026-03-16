@@ -6,6 +6,9 @@ import { decryptMagicLinkPayload } from '../utils/magicLink';
 
 const MIN_ENCRYPTION_KEY_LENGTH = 6;
 const MAX_ENCRYPTION_KEY_LENGTH = 64;
+const MIN_ROOM_CAPACITY = 2;
+const MAX_ROOM_CAPACITY = 50;
+const DEFAULT_ROOM_CAPACITY = 50;
 
 const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
   const [view, setView] = useState("menu"); 
@@ -15,6 +18,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   const [roomName, setRoomName] = useState("");
   const [isMagicLink, setIsMagicLink] = useState(false);
   const [requireApproval, setRequireApproval] = useState(false);
+  const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
@@ -57,7 +61,11 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   const handleCreate = () => {
     if (!username || !roomPassword || !roomName) return;
     if (!validateEncryptionKey(roomPassword)) return;
-    createRoom(username, roomPassword, roomName, requireApproval);
+    const normalizedCapacity = Math.max(
+      MIN_ROOM_CAPACITY,
+      Math.min(MAX_ROOM_CAPACITY, parseInt(roomCapacity, 10) || DEFAULT_ROOM_CAPACITY),
+    );
+    createRoom(username, roomPassword, roomName, requireApproval, normalizedCapacity);
   };
 
   const variants = {
@@ -186,6 +194,22 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
                     <LuKeyRound className="text-zinc-600 shrink-0" size={16} />
                     <input type="text" placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} />
+                  </div>
+
+                  <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
+                    <LuUser className="text-zinc-600 shrink-0" size={16} />
+                    <input
+                      type="number"
+                      min={MIN_ROOM_CAPACITY}
+                      max={MAX_ROOM_CAPACITY}
+                      placeholder="ROOM CAPACITY"
+                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm"
+                      value={roomCapacity}
+                      onChange={(e) => setRoomCapacity(e.target.value)}
+                    />
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-600">
+                      max {MAX_ROOM_CAPACITY}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between gap-3 pt-2 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] text-zinc-400">
