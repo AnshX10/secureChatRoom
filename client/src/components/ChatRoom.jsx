@@ -218,7 +218,26 @@ const ChatRoom = ({
   const filteredPromotableUsers = promotableUsers.filter((user) =>
     user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
   );
+  const allAgents = users.filter((user) => !user.isHost);
+  const agentsNeedingContext = allAgents.filter((user) => !user.hasFullHistory);
+  const contextSyncedAgentsCount = allAgents.length - agentsNeedingContext.length;
   const roomIdDisplay = (roomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
+
+  useEffect(() => {
+    if (currentUser?.hasFullHistory) {
+      setIsContextRequestPending(false);
+    }
+  }, [currentUser?.hasFullHistory]);
+
+  useEffect(() => {
+    setContextRequests((prev) =>
+      prev.filter((request) =>
+        users.some(
+          (u) => u.id === request.requesterUserId && !u.isHost && !u.hasFullHistory,
+        ),
+      ),
+    );
+  }, [users]);
 
   useEffect(() => {
     setIsRoomLocked(!!roomLocked);
@@ -332,6 +351,13 @@ const ChatRoom = ({
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
   const mobileToolbarRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
+
+  // Context message states
+  const [showContextModal, setShowContextModal] = useState(false);
+  const [contextModalMode, setContextModalMode] = useState("agent"); // "agent" or "all"
+  const [selectedContextAgent, setSelectedContextAgent] = useState(null);
+  const [contextRequests, setContextRequests] = useState([]);
+  const [isContextRequestPending, setIsContextRequestPending] = useState(false);
 
   const timerOptions = [
     { label: "OFF", value: 0 },
@@ -843,7 +869,7 @@ const ChatRoom = ({
     };
 
     await socket.emit("send_message", messageData);
-    setMessageList((list) => [...list, { ...messageData, own: true }]);
+    setMessageList((list) => [...list, { ...messageData, own: true, sentAt: Date.now() }]);
     setShowPollModal(false);
     resetPollDraft();
   };
@@ -963,7 +989,7 @@ const ChatRoom = ({
           type: "image",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, own: true }]);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, own: true, sentAt: Date.now() }]);
       } else {
         const encryptedData = encrypt(attachment.data);
         const encryptedName = encrypt(attachment.name);
@@ -984,7 +1010,7 @@ const ChatRoom = ({
           type: "file",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, own: true }]);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, own: true, sentAt: Date.now() }]);
       }
     }
 
@@ -1141,7 +1167,7 @@ const ChatRoom = ({
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: base64, own: true },
+        { ...messageData, message: base64, own: true, sentAt: Date.now() },
       ]);
 
       // Cleanup
@@ -1330,6 +1356,38 @@ const ChatRoom = ({
   const transferHostTo = (newHostId, newHostUsername) => {
     if (!isCurrentHost || !newHostId || newHostId === socket.id) return;
     socket.emit("transfer_host", { roomId, newHostId });
+  };
+
+  const sendContextToAgent = (targetUserId) => {
+    if (!isCurrentHost || !targetUserId) return;
+    socket.emit("send_context_to_agent", { roomId, targetUserId });
+    setShowContextModal(false);
+  };
+
+  const sendContextToAll = () => {
+    if (!isCurrentHost) return;
+    socket.emit("send_context_to_all", { roomId });
+    setShowContextModal(false);
+  };
+
+  const requestContext = () => {
+    if (isCurrentHost) return;
+    if (currentUser?.hasFullHistory) return;
+    if (isContextRequestPending) return;
+    setIsContextRequestPending(true);
+    socket.emit("request_context", { roomId });
+  };
+
+  const approveContextRequest = (requesterUserId) => {
+    if (!isCurrentHost) return;
+    socket.emit("send_context_to_agent", { roomId, targetUserId: requesterUserId });
+    setContextRequests((prev) => prev.filter((r) => r.requesterUserId !== requesterUserId));
+  };
+
+  const rejectContextRequest = (requesterUserId) => {
+    if (!isCurrentHost) return;
+    socket.emit("reject_context_request", { roomId, requesterUserId });
+    setContextRequests((prev) => prev.filter((r) => r.requesterUserId !== requesterUserId));
   };
 
   const handleTerminateClick = () => {
@@ -1522,7 +1580,7 @@ const ChatRoom = ({
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: currentMessage, own: true },
+        { ...messageData, message: currentMessage, own: true, sentAt: Date.now() },
       ]);
       setCurrentMessage("");
       setReplyingTo(null);
@@ -1563,7 +1621,8 @@ const ChatRoom = ({
         ...highClearanceMessageData, 
         message: encryptedContent,
         highClearanceContent: messageData,
-        own: true 
+        own: true,
+        sentAt: Date.now()
       },
     ]);
   };
@@ -1587,12 +1646,13 @@ const ChatRoom = ({
       if (data.system) {
         messageToAdd = { ...data, id: data.id || uuidv4() };
       } else if (data.type === "poll" || data.poll) {
-        messageToAdd = { ...data, own: isOwnMessage };
+        messageToAdd = { ...data, own: isOwnMessage, isContextMessage: data.isContextMessage };
       } else if (data.type === "image") {
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
           own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
         };
       } else if (data.type === "file") {
         messageToAdd = {
@@ -1600,12 +1660,14 @@ const ChatRoom = ({
           message: decrypt(data.message),
           fileName: decrypt(data.fileName),
           own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
         };
       } else if (data.type === "audio") {
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
           own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
         };
       } else if (data.type === "high-clearance") {
         messageToAdd = {
@@ -1613,16 +1675,40 @@ const ChatRoom = ({
           message: data.message, // Keep encrypted for non-owners
           own: isOwnMessage,
           highClearanceContent: isOwnMessage ? JSON.parse(decrypt(data.message)) : null,
+          isContextMessage: data.isContextMessage,
         };
       } else {
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
           own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
         };
       }
 
-      setMessageList((l) => [...l, messageToAdd]);
+      setMessageList((l) => {
+        // If this is a context message with a timestamp, insert it at the correct chronological position
+        if (data.isContextMessage && data.sentAt) {
+          // Find the correct position by comparing timestamps
+          // Messages are ordered by sentAt, and context messages should be inserted in their proper time slot
+          const insertIndex = l.findIndex((msg) => {
+            // If msg has no sentAt, it's likely a system message, skip it
+            if (!msg.sentAt) return false;
+            // Insert before the first message sent after this context message
+            return msg.sentAt > data.sentAt;
+          });
+          
+          if (insertIndex === -1) {
+            // All messages with sentAt were sent before this one, or list is empty
+            return [...l, messageToAdd];
+          } else {
+            // Insert at the correct chronological position
+            return [...l.slice(0, insertIndex), messageToAdd, ...l.slice(insertIndex)];
+          }
+        }
+        // Regular messages always append at the end
+        return [...l, messageToAdd];
+      });
 
       if (!isOwnMessage) {
         showBrowserNotification(messageToAdd);
@@ -1674,6 +1760,7 @@ const ChatRoom = ({
     socket.on("host_transferred", ({ roomId: incomingRoomId }) => {
       if (incomingRoomId !== roomId) return;
       setJoinRequests([]);
+      setContextRequests([]);
     });
     socket.on("kicked", () => {
       leaveRoom();
@@ -1721,6 +1808,34 @@ const ChatRoom = ({
       },
     );
 
+    socket.on(
+      "context_request",
+      ({ roomId: incomingRoomId, requesterUserId, requesterUsername }) => {
+        if (incomingRoomId !== roomId || !isCurrentHost) return;
+        setContextRequests((prev) => {
+          if (prev.some((r) => r.requesterUserId === requesterUserId)) return prev;
+          return [...prev, { requesterUserId, requesterUsername }];
+        });
+      },
+    );
+
+    socket.on("context_request_sent", () => {
+      setIsContextRequestPending(true);
+    });
+
+    socket.on("context_request_rejected", ({ roomId: incomingRoomId }) => {
+      if (incomingRoomId !== roomId) return;
+      setIsContextRequestPending(false);
+      setMessageList((list) => [
+        ...list,
+        {
+          id: uuidv4(),
+          system: true,
+          message: "Host rejected your context request.",
+        },
+      ]);
+    });
+
     return () => {
       socket.off("receive_message");
       socket.off("update_users");
@@ -1734,6 +1849,9 @@ const ChatRoom = ({
       socket.off("intrusion_detected");
       socket.off("room_lock_state");
       socket.off("room_silence_state");
+      socket.off("context_request");
+      socket.off("context_request_sent");
+      socket.off("context_request_rejected");
       if (intrusionHudTimeoutRef.current) {
         clearTimeout(intrusionHudTimeoutRef.current);
       }
@@ -2238,6 +2356,9 @@ const ChatRoom = ({
                 ) : (
                   filteredUsers.map((user, i) => {
                     const isUserSilenced = silencedUserIds.has(user.id);
+                    const contextRequestForUser = contextRequests.find(
+                      (request) => request.requesterUserId === user.id,
+                    );
                     const colors = [
                       'from-zinc-300 to-zinc-500',
                       'from-zinc-400 to-zinc-600',
@@ -2274,41 +2395,76 @@ const ChatRoom = ({
                               <LuMicOff size={8} /> SILENT
                             </span>
                           )}
+                          {isCurrentHost && contextRequestForUser && (
+                            <span className="text-[8px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
+                              <LuMessageSquarePlus size={8} /> CONTEXT REQ
+                            </span>
+                          )}
                         </span>
                       </div>
-                      {isCurrentHost && user.id !== socket.id && (
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-                          <button
-                            onClick={() => toggleAgentRadioSilence(user.id)}
-                            className={`p-1.5 rounded-lg ${
-                              isUserSilenced
-                                ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                : "text-zinc-500 hover:text-white hover:bg-white/10"
-                            }`}
-                            title={
-                              isUserSilenced
-                                ? `Restore ${user.username}'s channel`
-                                : "Enforce Radio Silence"
-                            }
-                          >
-                            {isUserSilenced ? <LuMicOff size={14} /> : <LuMic size={14} />}
-                          </button>
-                          <button
-                            onClick={() => transferHostTo(user.id, user.username)}
-                            className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
-                            title={`Transfer host to ${user.username}`}
-                          >
-                            <LuCrown size={14} />
-                          </button>
-                          <button
-                            onClick={() => kickAgent(user.id, user.username)}
-                            className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
-                            title={`Remove ${user.username}`}
-                          >
-                            <LuUserMinus size={16} />
-                          </button>
-                        </div>
-                      )}
+                      {isCurrentHost && user.id !== socket.id &&
+                        (contextRequestForUser ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => rejectContextRequest(user.id)}
+                              className="text-zinc-500 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded-lg"
+                              title={`Reject ${user.username}'s context request`}
+                            >
+                              <LuX size={14} />
+                            </button>
+                            <button
+                              onClick={() => approveContextRequest(user.id)}
+                              className="text-zinc-500 hover:text-blue-300 p-1.5 hover:bg-blue-500/10 rounded-lg"
+                              title={`Accept ${user.username}'s context request`}
+                            >
+                              <LuCheck size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                            <button
+                              onClick={() => toggleAgentRadioSilence(user.id)}
+                              className={`p-1.5 rounded-lg ${
+                                isUserSilenced
+                                  ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                  : "text-zinc-500 hover:text-white hover:bg-white/10"
+                              }`}
+                              title={
+                                isUserSilenced
+                                  ? `Restore ${user.username}'s channel`
+                                  : "Enforce Radio Silence"
+                              }
+                            >
+                              {isUserSilenced ? <LuMicOff size={14} /> : <LuMic size={14} />}
+                            </button>
+                            <button
+                              onClick={() => transferHostTo(user.id, user.username)}
+                              className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
+                              title={`Transfer host to ${user.username}`}
+                            >
+                              <LuCrown size={14} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedContextAgent(user);
+                                setContextModalMode("agent");
+                                setShowContextModal(true);
+                              }}
+                              className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={user.hasFullHistory ? `${user.username} already has context` : `Send context to ${user.username}`}
+                              disabled={!!user.hasFullHistory}
+                            >
+                              <LuMessageSquarePlus size={14} />
+                            </button>
+                            <button
+                              onClick={() => kickAgent(user.id, user.username)}
+                              className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
+                              title={`Remove ${user.username}`}
+                            >
+                              <LuUserMinus size={16} />
+                            </button>
+                          </div>
+                        ))}
                     </div>
                   );
                   })
@@ -2320,19 +2476,39 @@ const ChatRoom = ({
               <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
               <div className="pt-1">
                 {isCurrentHost ? (
-                  <button
-                    onClick={handleTerminateClick}
-                    className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
-                  >
-                    <LuLogOut size={14} /> TERMINATE ROOM
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        setContextModalMode("all");
+                        setShowContextModal(true);
+                      }}
+                      className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2"
+                    >
+                      <LuMessageSquarePlus size={13} /> SEND CONTEXT TO ALL
+                    </button>
+                    <button
+                      onClick={handleTerminateClick}
+                      className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
+                    >
+                      <LuLogOut size={14} /> TERMINATE ROOM
+                    </button>
+                  </>
                 ) : (
-                  <button
-                    onClick={handleLeaveClick}
-                    className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
-                  >
-                    <LuLogOut size={14} /> LEAVE ROOM
-                  </button>
+                  <>
+                    <button
+                      onClick={requestContext}
+                      disabled={!!currentUser?.hasFullHistory || isContextRequestPending}
+                      className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <LuMessageSquarePlus size={13} /> {isContextRequestPending ? "CONTEXT REQUESTED" : "REQUEST CONTEXT"}
+                    </button>
+                    <button
+                      onClick={handleLeaveClick}
+                      className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
+                    >
+                      <LuLogOut size={14} /> LEAVE ROOM
+                    </button>
+                  </>
                 )}
               </div>
                 </div>
@@ -2683,7 +2859,7 @@ const ChatRoom = ({
                           : msg.own
                             ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
                             : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
-                    } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""}`}
+                    } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
                   >
                     <div className="flex justify-between items-start gap-4 mb-2">
                       {!msg.own && !msg.deleted && (
@@ -2692,6 +2868,9 @@ const ChatRoom = ({
                         </p>
                       )}
                       <div className="flex items-center gap-2 ml-auto shrink-0">
+                        {msg.isContextMessage && !msg.deleted && (
+                          <span className="context-message-badge">CONTEXT</span>
+                        )}
                         {pinnedMessageId === msg.id && !msg.deleted && (
                           <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white">
                             <LuPin size={9} /> PINNED
@@ -4173,6 +4352,106 @@ const ChatRoom = ({
         </AnimatePresence>
 
         {/* Biometric Vault Modal */}
+        {showContextModal && isCurrentHost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+            onClick={() => setShowContextModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ type: "spring", damping: 22, stiffness: 240 }}
+              className="w-full max-w-md bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 sm:p-5 flex items-center justify-between border-b border-zinc-800/30 relative sticky top-0 bg-[#0f0f11] z-10">
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-700/20 to-transparent" />
+                <h3 className="text-base font-black text-white flex items-center gap-2.5 uppercase tracking-[0.1em]">
+                  <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-700/30">
+                    <LuMessageSquarePlus size={16} className="text-blue-400" />
+                  </div>
+                  {contextModalMode === "all" ? "Send Context to All" : "Send Context"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowContextModal(false)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <LuX size={18} className="text-zinc-400" />
+                </button>
+              </div>
+
+              <div className="p-4 sm:p-5 space-y-4">
+                {contextModalMode === "agent" && selectedContextAgent ? (
+                  <>
+                    <p className="text-sm text-zinc-400">
+                      Send all previous messages from the chat history to{" "}
+                      <span className="font-bold text-white">{selectedContextAgent.username}</span>?
+                    </p>
+                    <div className="bg-blue-500/10 border border-blue-700/30 rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">Info</p>
+                      <p className="text-xs text-blue-200 mt-1">
+                        This will send all previous messages as context. The context messages will appear with a dotted border and be slightly dimmed.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowContextModal(false)}
+                        className="flex-1 px-4 py-2.5 rounded-lg border border-zinc-700/60 text-zinc-300 font-bold uppercase text-xs tracking-wider hover:bg-zinc-900 transition-all active:scale-95"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => sendContextToAgent(selectedContextAgent.id)}
+                        disabled={!!selectedContextAgent?.hasFullHistory}
+                        className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-bold uppercase text-xs tracking-wider hover:bg-blue-700 transition-all active:scale-95 hover:shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Send Context
+                      </button>
+                    </div>
+                  </>
+                ) : contextModalMode === "all" ? (
+                  <>
+                    <p className="text-sm text-zinc-400">
+                      Send all previous messages to agents who don't have context yet?
+                    </p>
+                    <div className="bg-blue-500/10 border border-blue-700/30 rounded-xl p-3 space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">Info</p>
+                      <p className="text-xs text-blue-200">
+                        Agents who already have context will not receive duplicate messages.
+                      </p>
+                      <div className="mt-2 text-xs text-blue-200 space-y-1">
+                        <p><span className="font-bold">Total Agents:</span> {allAgents.length}</p>
+                        <p><span className="font-bold">Already have context:</span> {contextSyncedAgentsCount}</p>
+                        <p><span className="font-bold">Will receive context:</span> {agentsNeedingContext.length}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowContextModal(false)}
+                        className="flex-1 px-4 py-2.5 rounded-lg border border-zinc-700/60 text-zinc-300 font-bold uppercase text-xs tracking-wider hover:bg-zinc-900 transition-all active:scale-95"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={sendContextToAll}
+                        disabled={agentsNeedingContext.length === 0}
+                        className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-bold uppercase text-xs tracking-wider hover:bg-blue-700 transition-all active:scale-95 hover:shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Send to All
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         <BiometricVault
           message={vaultMessage}
           username={username}

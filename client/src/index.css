@@ -186,3 +186,31 @@ img, video {
     scroll-behavior: auto !important;
   }
 }
+
+/* ===== CONTEXT MESSAGE STYLING ===== */
+.context-message {
+  border: 2px dotted rgba(120, 113, 109, 0.5);
+  background: linear-gradient(to right, rgba(120, 113, 109, 0.08), rgba(120, 113, 109, 0.03));
+}
+
+.context-message-own {
+  opacity: 1;
+  border-color: rgba(82, 82, 91, 0.55);
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.96), rgba(244, 244, 245, 0.94));
+}
+
+.context-message-other {
+  opacity: 0.82;
+}
+
+.context-message-badge {
+  display: inline-block;
+  background: rgba(120, 113, 109, 0.2);
+  color: rgba(120, 113, 109, 0.8);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-right: 0.5rem;
+}

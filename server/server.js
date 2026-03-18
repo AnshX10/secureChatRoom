@@ -49,6 +49,53 @@ const pendingRooms = {}; // Host has created a room but it hasn't been created y
 /** @type {Map<string, number>} roomId -> destroyedAt (so we can tell "room destroyed" from "room never existed") */
 const destroyedRooms = new Map();
 
+// Context message tracking: roomId -> { messages: [] }
+const contextMessages = {};
+
+function ensureContextData(roomId) {
+  if (!contextMessages[roomId]) {
+    contextMessages[roomId] = {
+      messages: [],
+    };
+  }
+  return contextMessages[roomId];
+}
+
+function emitFullContextToUser({ roomId, user, socketId }) {
+  const contextData = contextMessages[roomId];
+  if (!contextData || contextData.messages.length === 0) {
+    return { sent: false, reason: "NO_CONTEXT" };
+  }
+
+  if (!user || user.isHost || user.hasFullHistory) {
+    return { sent: false, reason: "ALREADY_HAS_CONTEXT" };
+  }
+
+  const targetSocket = io.sockets.sockets.get(socketId);
+  if (!targetSocket) {
+    return { sent: false, reason: "SOCKET_NOT_FOUND" };
+  }
+
+  // Filter to only messages sent BEFORE this user joined
+  const preJoinMessages = contextData.messages.filter(
+    (msg) => !msg.sentAt || msg.sentAt < user.joinedAt
+  );
+
+  preJoinMessages.forEach((msg) => {
+    targetSocket.emit("receive_message", {
+      ...msg,
+      isContextMessage: true,
+    });
+  });
+
+  user.hasFullHistory = true;
+  const room = rooms[roomId];
+  if (room) {
+    io.to(roomId).emit("update_users", room.users);
+  }
+  return { sent: true };
+}
+
 function markRoomDestroyed(roomId) {
   destroyedRooms.set(roomId, Date.now());
 }
@@ -69,6 +116,7 @@ function cleanupStaleRooms() {
       io.in(roomId).socketsLeave(roomId);
       markRoomDestroyed(roomId);
       delete rooms[roomId];
+      delete contextMessages[roomId];
     }
   }
   // Prune old destroyed-room entries so memory doesn't grow forever
@@ -149,8 +197,9 @@ io.on("connection", (socket) => {
       }
 
       // CREATE the actual room now (first agent is joining)
-      const hostUser = { id: pendingRoom.hostId, username: pendingRoom.username, isHost: true };
-      const newUser = { id: socket.id, username, isHost: false };
+      const nowTime = Date.now();
+      const hostUser = { id: pendingRoom.hostId, username: pendingRoom.username, isHost: true, hasFullHistory: true, joinedAt: nowTime };
+      const newUser = { id: socket.id, username, isHost: false, hasFullHistory: true, joinedAt: nowTime };
       const actualCreatedAt = Date.now(); // Room is created NOW when first agent joins
 
       rooms[roomId] = {
@@ -167,6 +216,9 @@ io.on("connection", (socket) => {
         requireApproval: pendingRoom.requireApproval,
         pendingRequests: pendingRoom.pendingRequests
       };
+
+      // Initialize context tracking for this room
+      ensureContextData(roomId);
 
       // Remove from pending
       delete pendingRooms[roomId];
@@ -258,7 +310,10 @@ io.on("connection", (socket) => {
       }
   
       socket.join(roomId);
-      const newUser = { id: socket.id, username, isHost: false }; 
+      const contextData = ensureContextData(roomId);
+      const needsContext = contextData.messages.length > 0;
+      const nowTime = Date.now();
+      const newUser = { id: socket.id, username, isHost: false, hasFullHistory: !needsContext, joinedAt: nowTime }; 
       room.users.push(newUser); // Add new user to list
 
       if (room.isHalted) {
@@ -340,7 +395,10 @@ io.on("connection", (socket) => {
     }
 
     targetSocket.join(roomId);
-    const newUser = { id: socketId, username: request.username, isHost: false };
+    const contextData = ensureContextData(roomId);
+    const needsContext = contextData.messages.length > 0;
+    const nowTime = Date.now();
+    const newUser = { id: socketId, username: request.username, isHost: false, hasFullHistory: !needsContext, joinedAt: nowTime };
     room.users.push(newUser);
 
     if (room.isHalted) {
@@ -467,6 +525,23 @@ io.on("connection", (socket) => {
     const nextHost = room.users.find((user) => user.id === newHostId);
     if (!nextHost) return;
 
+    if (!nextHost.hasFullHistory) {
+      const syncResult = emitFullContextToUser({
+        roomId,
+        user: nextHost,
+        socketId: newHostId,
+      });
+
+      if (!syncResult.sent && syncResult.reason === "SOCKET_NOT_FOUND") {
+        socket.emit("error", "TARGET AGENT IS OFFLINE.");
+        return;
+      }
+
+      if (!syncResult.sent && syncResult.reason === "NO_CONTEXT") {
+        nextHost.hasFullHistory = true;
+      }
+    }
+
     room.hostId = newHostId;
     room.users = room.users.map((user) => ({
       ...user,
@@ -497,13 +572,36 @@ io.on("connection", (socket) => {
     if (!senderInRoom) return;
     if ((room.silencedUserIds || []).includes(socket.id) && room.hostId !== socket.id) return;
 
+    const sentAtTimestamp = Date.now();
     const payload = {
       ...data,
       senderIsHost: room.hostId === socket.id,
+      sentAt: sentAtTimestamp,
     };
 
     if (payload?.id) {
       room.messageOwners[payload.id] = socket.id;
+    }
+
+    // Store ALL messages (from any user) in context for sharing (excluding system and high-clearance messages)
+    if (!data.system && type !== "high-clearance") {
+      const contextData = ensureContextData(roomId);
+      contextData.messages.push({
+        id: data.id,
+        username: data.username,
+        message: data.message,
+        type: data.type || "text",
+        time: data.time,
+        replyTo: data.replyTo || null,
+        edited: data.edited,
+        fileName: data.fileName || null,
+        fileSize: data.fileSize || null,
+        fileType: data.fileType || null,
+        audioDuration: data.audioDuration || null,
+        poll: data.poll || null,
+        senderIsHost: room.hostId === socket.id,
+        sentAt: sentAtTimestamp,
+      });
     }
 
     // Broadcast message to others immediately
@@ -519,6 +617,60 @@ io.on("connection", (socket) => {
         }
       }, timer);
     }
+  });
+
+  // --- NEW: SEND CONTEXT TO SPECIFIC AGENT ---
+  socket.on("send_context_to_agent", ({ roomId, targetUserId }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    const targetUser = room.users.find((u) => u.id === targetUserId && !u.isHost);
+    if (!targetUser) return;
+
+    const contextData = contextMessages[roomId];
+    if (!contextData || contextData.messages.length === 0) {
+      socket.emit("error", "NO CONTEXT AVAILABLE TO SEND.");
+      return;
+    }
+
+    if (targetUser.hasFullHistory) {
+      socket.emit("error", `${targetUser.username} ALREADY HAS CONTEXT.`);
+      return;
+    }
+
+    const result = emitFullContextToUser({
+      roomId,
+      user: targetUser,
+      socketId: targetUserId,
+    });
+    if (!result.sent && result.reason === "SOCKET_NOT_FOUND") {
+      socket.emit("error", "TARGET AGENT IS OFFLINE.");
+    }
+  });
+
+  // --- NEW: SEND CONTEXT TO ALL AGENTS ---
+  socket.on("send_context_to_all", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    const contextData = contextMessages[roomId];
+    if (!contextData || contextData.messages.length === 0) {
+      socket.emit("error", "NO CONTEXT AVAILABLE TO SEND.");
+      return;
+    }
+
+    // Get all agents who don't already have context
+    const agentsToReceiveContext = room.users.filter((u) => !u.isHost && !u.hasFullHistory);
+
+    if (agentsToReceiveContext.length === 0) {
+      socket.emit("error", "NO NEW OR REJOINED AGENTS NEED CONTEXT.");
+      return;
+    }
+
+    // Send context to each agent who doesn't have it
+    agentsToReceiveContext.forEach((agent) => {
+      emitFullContextToUser({ roomId, user: agent, socketId: agent.id });
+    });
   });
 
   // --- NEW: POLL VOTING (broadcast updates) ---
@@ -569,7 +721,51 @@ io.on("connection", (socket) => {
       io.in(roomId).socketsLeave(roomId);
       markRoomDestroyed(roomId);
       delete rooms[roomId];
+      delete contextMessages[roomId];
     }
+  });
+
+  // --- AGENT REQUESTS CONTEXT FROM HOST ---
+  socket.on("request_context", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const requester = room.users.find((u) => u.id === socket.id && !u.isHost);
+    if (!requester) return;
+
+    if (requester.hasFullHistory) {
+      socket.emit("error", "YOU ALREADY HAVE THE FULL CONTEXT.");
+      return;
+    }
+
+    const contextData = contextMessages[roomId];
+    if (!contextData || contextData.messages.length === 0) {
+      socket.emit("error", "NO CONTEXT AVAILABLE YET.");
+      return;
+    }
+
+    io.to(room.hostId).emit("context_request", {
+      roomId,
+      requesterUserId: socket.id,
+      requesterUsername: requester.username,
+    });
+
+    socket.emit("context_request_sent", {
+      message: "Context request sent to host. Awaiting approval...",
+    });
+  });
+
+  socket.on("reject_context_request", ({ roomId, requesterUserId }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    const requester = room.users.find((u) => u.id === requesterUserId && !u.isHost);
+    if (!requester) return;
+
+    io.to(requesterUserId).emit("context_request_rejected", {
+      roomId,
+      message: "Host rejected your context request.",
+    });
   });
 
   socket.on("disconnect", () => {
@@ -620,6 +816,7 @@ io.on("connection", (socket) => {
             io.to(roomId).emit("room_closed");
             markRoomDestroyed(roomId);
             delete rooms[roomId];
+            delete contextMessages[roomId];
           } else {
             const nextHost = room.users[0];
             room.hostId = nextHost.id;
