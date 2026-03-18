@@ -130,8 +130,6 @@ const ChatRoom = ({
   const mobileOpenDragStartXRef = useRef(null);
   const mobileCloseDragStartXRef = useRef(null);
 
-  const [showMagicLink, setShowMagicLink] = useState(false);
-  const [QRCodeComponent, setQRCodeComponent] = useState(null);
   const [isRoomLocked, setIsRoomLocked] = useState(!!roomLocked);
   const [silencedUserIds, setSilencedUserIds] = useState(
     new Set(roomSilencedUserIds || []),
@@ -145,15 +143,7 @@ const ChatRoom = ({
     typeof Notification !== "undefined" ? Notification.permission : "denied",
   );
 
-  useEffect(() => {
-    import("qrcode.react")
-      .then((module) => {
-        setQRCodeComponent(() => module.QRCodeSVG);
-      })
-      .catch(() => {
-        setQRCodeComponent(null);
-      });
-  }, []);
+
 
   useEffect(() => {
     if (
@@ -2088,96 +2078,24 @@ const ChatRoom = ({
                 </div>
               </div>
 
-              {isCurrentHost && (
-                <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40">
-                  <div className="flex items-center justify-between mb-3 gap-2">
-                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
-                      <LuKeyRound size={11} className="text-zinc-500" /> Magic Invite
+              {isCurrentHost && (() => {
+                const encryptedPayload = encryptMagicLinkPayload(roomId, roomPassword);
+                const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(magicLink)}
+                    className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 flex items-center justify-between gap-2 hover:border-zinc-700/60 hover:bg-zinc-900/50 active:scale-[0.99] transition-all group"
+                  >
+                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
+                      <LuKeyRound size={11} /> Magic Invite
                     </p>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={toggleRoomLock}
-                        className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-all active:scale-95 ${
-                          isRoomLocked
-                            ? "border-red-500/40 bg-red-500/10 text-red-400 shadow-[0_0_16px_rgba(239,68,68,0.2)]"
-                            : "border-zinc-700/40 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10"
-                        }`}
-                        title={isRoomLocked ? "Unlock frequency" : "Lock frequency"}
-                        aria-label={isRoomLocked ? "Unlock frequency" : "Lock frequency"}
-                      >
-                        <LuLock size={13} />
-                      </button>
-                      <button
-                        onClick={() => setShowMagicLink(!showMagicLink)}
-                        className="text-[8px] uppercase text-zinc-600 hover:text-white transition-all font-bold px-2 py-1 rounded-md hover:bg-white/5 active:scale-95"
-                      >
-                        {showMagicLink ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className={`mb-3 text-[8px] uppercase tracking-[0.18em] font-bold px-2.5 py-1.5 rounded-lg border ${
-                    isRoomLocked
-                      ? "text-red-400 border-red-500/30 bg-red-500/10"
-                      : "text-zinc-500 border-zinc-700/30 bg-black/25"
-                  }`}>
-                    {isRoomLocked ? "Lockdown Protocol Active" : "Frequency Open"}
-                  </div>
-
-                  {showMagicLink &&
-                    (() => {
-                      const encryptedPayload = encryptMagicLinkPayload(
-                        roomId,
-                        roomPassword,
-                      );
-                      const magicLink = `${window.location.origin}${window.location.pathname}#invite=${encryptedPayload}`;
-                      return (
-                        <div className="space-y-3">
-                          <div className="bg-black/40 border border-zinc-800/50 p-3 rounded-lg">
-                            <p className="text-[8px] uppercase text-zinc-500 mb-2 tracking-widest">
-                              Invite Link
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={magicLink}
-                                readOnly
-                                className="flex-1 bg-transparent text-[9px] text-zinc-400 font-mono truncate outline-none selection:bg-zinc-600/30"
-                              />
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(magicLink);
-                                }}
-                                className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-zinc-600 hover:text-white shrink-0 active:scale-90"
-                                title="Copy link"
-                              >
-                                <LuCopy size={13} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {QRCodeComponent && (
-                            <div className="flex justify-center bg-black/40 border border-zinc-800/50 p-4 rounded-lg">
-                              <QRCodeComponent
-                                value={magicLink}
-                                size={148}
-                                level="M"
-                                bgColor="#0a0a0c"
-                                fgColor="#e4e4e7"
-                              />
-                            </div>
-                          )}
-
-                          <p className="text-[7px] text-zinc-600 text-center leading-relaxed">
-                            Share this link. Recipients only need to enter their
-                            codename.
-                          </p>
-                        </div>
-                      );
-                    })()}
-                </div>
-              )}
+                    <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
+                      <LuCopy size={11} /> Tap to Copy 
+                    </span>
+                  </button>
+                );
+              })()}
 
               {isCurrentHost && joinRequests.length > 0 && (
                 <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
