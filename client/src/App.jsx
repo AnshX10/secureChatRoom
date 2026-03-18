@@ -24,6 +24,7 @@ function App() {
   const [roomLocked, setRoomLocked] = useState(false);
   const [roomSilencedUserIds, setRoomSilencedUserIds] = useState([]);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [isWaitingForFirstAgent, setIsWaitingForFirstAgent] = useState(false); // Host waiting for first agent to join
 
   // Check if we're on the demo route
   const [isDemoRoute, setIsDemoRoute] = useState(false);
@@ -50,6 +51,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    socket.on("room_created_pending", ({ roomId, createdAt, roomName: serverRoomName, capacity, isWaitingForFirstAgent }) => {
+      setRoomId(roomId);
+      setStartTime(createdAt);
+      setInitialUsers([{ id: socket.id, username, isHost: true }]); // Just the host for now
+      setRoomName(serverRoomName || "");
+      setRoomCapacity(capacity || 50);
+      setRoomLocked(false);
+      setRoomSilencedUserIds([]);
+      setIsHost(true);
+      setIsWaitingForFirstAgent(true); // Show waiting state
+      setIsCreatingRoom(false);
+    });
+
     socket.on("room_created", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
@@ -59,8 +73,33 @@ function App() {
       setRoomLocked(!!isLocked);
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsHost(true);
+      setIsWaitingForFirstAgent(false); // First agent joined, room is now created
       setIsInChat(true);
       setIsCreatingRoom(false);
+    });
+
+    socket.on("room_halted", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
+      setRoomId(roomId);
+      setStartTime(createdAt);
+      setInitialUsers(users);
+      setRoomName(serverRoomName || "");
+      setRoomCapacity(capacity || 50);
+      setRoomLocked(!!isLocked);
+      setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
+      setIsInChat(false);
+      setIsWaitingForFirstAgent(true);
+    });
+
+    socket.on("room_resumed", ({ roomId, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
+      setRoomId(roomId);
+      setStartTime(createdAt);
+      setInitialUsers(users);
+      setRoomName(serverRoomName || "");
+      setRoomCapacity(capacity || 50);
+      setRoomLocked(!!isLocked);
+      setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
+      setIsWaitingForFirstAgent(false);
+      setIsInChat(true);
     });
 
     // Handle Join Success (direct or after host approval)
@@ -98,6 +137,7 @@ function App() {
       setIsHost(false);
       setRoomLocked(false);
       setRoomSilencedUserIds([]);
+      setIsWaitingForFirstAgent(false);
     });
 
     // Handle Errors (show in UI)
@@ -108,14 +148,17 @@ function App() {
     });
 
     return () => {
+      socket.off("room_created_pending");
       socket.off("room_created");
+      socket.off("room_halted");
+      socket.off("room_resumed");
       socket.off("joined_room_success");
       socket.off("join_request_pending");
       socket.off("join_request_result");
       socket.off("room_closed");
       socket.off("error");
     };
-  }, []);
+  }, [username]);
 
   const createRoom = (user, password, name, requireApproval, capacity) => {
     if (!user || !password || !name) return;
@@ -159,6 +202,9 @@ function App() {
           createRoom={createRoom} 
           joinRoom={joinRoom} 
           isCreatingRoom={isCreatingRoom}
+          isWaitingForFirstAgent={isWaitingForFirstAgent}
+          roomId={roomId}
+          hostRoomPassword={roomPassword}
           errorMessage={errorMessage}
           setErrorMessage={setErrorMessage}
           clearError={() => setErrorMessage("")}

@@ -95,6 +95,7 @@ const ChatRoom = ({
   roomLocked,
   roomSilencedUserIds,
 }) => {
+  const hostChatStorageKey = isHost && roomId ? `host_chat_history_${roomId}` : null;
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [deletingIds, setDeletingIds] = useState(new Set());
@@ -650,6 +651,27 @@ const ChatRoom = ({
     }, 1000);
     return () => clearInterval(interval);
   }, [createdAt]);
+
+  useEffect(() => {
+    if (!isHost || !hostChatStorageKey) return;
+    try {
+      const rawHistory = sessionStorage.getItem(hostChatStorageKey);
+      if (!rawHistory) return;
+      const parsedHistory = JSON.parse(rawHistory);
+      if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
+        setMessageList(parsedHistory);
+      }
+    } catch {
+      sessionStorage.removeItem(hostChatStorageKey);
+    }
+  }, [isHost, hostChatStorageKey]);
+
+  useEffect(() => {
+    if (!isHost || !hostChatStorageKey) return;
+    try {
+      sessionStorage.setItem(hostChatStorageKey, JSON.stringify(messageList));
+    } catch {}
+  }, [isHost, hostChatStorageKey, messageList]);
 
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
   const decrypt = (cipherText) => {

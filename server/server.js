@@ -45,6 +45,7 @@ const DESTROYED_ROOM_MEMORY_MS = 7 * 24 * 60 * 60 * 1000; // remember destroyed 
 
 // --- SOCKET LOGIC ---
 const rooms = {};
+const pendingRooms = {}; // Host has created a room but it hasn't been created yet (waiting for first agent)
 /** @type {Map<string, number>} roomId -> destroyedAt (so we can tell "room destroyed" from "room never existed") */
 const destroyedRooms = new Map();
 
@@ -92,15 +93,16 @@ io.on("connection", (socket) => {
     }
 
     let roomId = generateRoomId();
-    while (rooms[roomId]) roomId = generateRoomId();
+    while (rooms[roomId] || pendingRooms[roomId]) roomId = generateRoomId();
 
     const createdAt = Date.now();
     const hostUser = { id: socket.id, username, isHost: true };
     const roomCapacity = normalizeRoomCapacity(capacity);
 
-    rooms[roomId] = {
+    // Store as PENDING room (not created yet, waiting for first agent to join)
+    pendingRooms[roomId] = {
       hostId: socket.id,
-      users: [hostUser], // Add host IMMEDIATELY
+      username,
       password: hash(password),
       createdAt: createdAt,
       roomName: roomName || "",
@@ -112,21 +114,14 @@ io.on("connection", (socket) => {
       pendingRequests: []
     };
 
-    socket.join(roomId);
-
-    // Send the list containing the host back to the host
-    socket.emit("room_created", { 
+    // Send room_created to host with a status flag indicating it's waiting
+    socket.emit("room_created_pending", { 
       roomId, 
-      createdAt, 
-      users: rooms[roomId].users,
-      roomName: rooms[roomId].roomName,
-      capacity: rooms[roomId].capacity,
-      isLocked: rooms[roomId].isLocked,
-      silencedUserIds: rooms[roomId].silencedUserIds,
+      createdAt,
+      roomName: pendingRooms[roomId].roomName,
+      capacity: pendingRooms[roomId].capacity,
+      isWaitingForFirstAgent: true
     });
-    
-    // Broadcast list to the room (redundant but safe)
-    io.to(roomId).emit("update_users", rooms[roomId].users);
   });
 
   socket.on("join_room", ({ username, roomId, password }) => {
@@ -134,6 +129,93 @@ io.on("connection", (socket) => {
     if (keyLen < MIN_ENCRYPTION_KEY_LENGTH || keyLen > MAX_ENCRYPTION_KEY_LENGTH) {
       return socket.emit("error", `ENCRYPTION KEY MUST BE BETWEEN ${MIN_ENCRYPTION_KEY_LENGTH} AND ${MAX_ENCRYPTION_KEY_LENGTH} CHARACTERS.`);
     }
+
+    // Check if this is a PENDING room (first agent joining)
+    const pendingRoom = pendingRooms[roomId];
+    if (pendingRoom) {
+      if (pendingRoom.password !== hash(password)) {
+        io.to(pendingRoom.hostId).emit("intrusion_detected", {
+          roomId,
+          attemptedCodename: username || "UNKNOWN",
+          sourceSocketId: socket.id,
+          detectedAt: Date.now(),
+        });
+        return socket.emit("error", "ACCESS DENIED: Invalid Encryption Key.");
+      }
+
+      // Check if agent's username matches host's username
+      if (username.toLowerCase() === pendingRoom.username.toLowerCase()) {
+        return socket.emit("error", "CODENAME ALREADY IN USE.");
+      }
+
+      // CREATE the actual room now (first agent is joining)
+      const hostUser = { id: pendingRoom.hostId, username: pendingRoom.username, isHost: true };
+      const newUser = { id: socket.id, username, isHost: false };
+      const actualCreatedAt = Date.now(); // Room is created NOW when first agent joins
+
+      rooms[roomId] = {
+        hostId: pendingRoom.hostId,
+        users: [hostUser, newUser],
+        password: pendingRoom.password,
+        createdAt: actualCreatedAt,
+        roomName: pendingRoom.roomName,
+        capacity: pendingRoom.capacity,
+        isLocked: pendingRoom.isLocked,
+        isHalted: false,
+        silencedUserIds: pendingRoom.silencedUserIds,
+        messageOwners: pendingRoom.messageOwners,
+        requireApproval: pendingRoom.requireApproval,
+        pendingRequests: pendingRoom.pendingRequests
+      };
+
+      // Remove from pending
+      delete pendingRooms[roomId];
+
+      // Join the host to the room (host needs to be in socket.io room too)
+      const hostSocket = io.sockets.sockets.get(pendingRoom.hostId);
+      if (hostSocket) {
+        hostSocket.join(roomId);
+      }
+
+      // Join the new user
+      socket.join(roomId);
+
+      // Notify the HOST that room has been created (first agent joined)
+      io.to(pendingRoom.hostId).emit("room_created", {
+        roomId,
+        createdAt: rooms[roomId].createdAt,
+        users: rooms[roomId].users,
+        roomName: rooms[roomId].roomName,
+        capacity: rooms[roomId].capacity,
+        isLocked: rooms[roomId].isLocked,
+        silencedUserIds: rooms[roomId].silencedUserIds,
+      });
+
+      // Notify the agent (new user) they've joined
+      socket.emit("joined_room_success", {
+        roomId,
+        isHost: false,
+        createdAt: rooms[roomId].createdAt,
+        users: rooms[roomId].users,
+        roomName: rooms[roomId].roomName,
+        capacity: rooms[roomId].capacity,
+        isLocked: rooms[roomId].isLocked,
+        silencedUserIds: rooms[roomId].silencedUserIds,
+      });
+
+      // Announce to the room
+      io.to(roomId).emit("receive_message", {
+        system: true,
+        message: `${username} has entered the frequency.`,
+      });
+
+      // Update everyone
+      io.to(roomId).emit("update_users", rooms[roomId].users);
+
+      return;
+    }
+
+    // Regular room join (room already exists)
     const room = rooms[roomId];
     if (room) {
       if (room.password !== hash(password)) {
@@ -155,8 +237,10 @@ io.on("connection", (socket) => {
         return socket.emit("error", "ROOM IS FULL.");
       }
 
+      const requiresApprovalForThisJoin = room.requireApproval && !room.isHalted;
+
       // If this room requires host approval, queue the request instead of joining immediately
-      if (room.requireApproval) {
+      if (requiresApprovalForThisJoin) {
         room.pendingRequests = room.pendingRequests || [];
         if (room.pendingRequests.some(r => r.username.toLowerCase() === username.toLowerCase())) {
           return socket.emit("error", "JOIN REQUEST ALREADY PENDING FOR THIS CODENAME.");
@@ -176,6 +260,19 @@ io.on("connection", (socket) => {
       socket.join(roomId);
       const newUser = { id: socket.id, username, isHost: false }; 
       room.users.push(newUser); // Add new user to list
+
+      if (room.isHalted) {
+        room.isHalted = false;
+        io.to(room.hostId).emit("room_resumed", {
+          roomId,
+          createdAt: room.createdAt,
+          users: room.users,
+          roomName: room.roomName || "",
+          capacity: room.capacity,
+          isLocked: room.isLocked,
+          silencedUserIds: room.silencedUserIds,
+        });
+      }
 
       // Send the FULL list including the new user to the person joining
       socket.emit("joined_room_success", { 
@@ -245,6 +342,19 @@ io.on("connection", (socket) => {
     targetSocket.join(roomId);
     const newUser = { id: socketId, username: request.username, isHost: false };
     room.users.push(newUser);
+
+    if (room.isHalted) {
+      room.isHalted = false;
+      io.to(room.hostId).emit("room_resumed", {
+        roomId,
+        createdAt: room.createdAt,
+        users: room.users,
+        roomName: room.roomName || "",
+        capacity: room.capacity,
+        isLocked: room.isLocked,
+        silencedUserIds: room.silencedUserIds,
+      });
+    }
 
     targetSocket.emit("joined_room_success", {
       roomId,
@@ -332,6 +442,20 @@ io.on("connection", (socket) => {
         // Notify room
         io.to(roomId).emit("receive_message", { system: true, message: `${targetUser.username} was removed from the session.` });
         io.to(roomId).emit("update_users", room.users);
+
+        const activeAgents = room.users.filter((u) => !u.isHost);
+        if (activeAgents.length === 0 && room.users.length > 0) {
+          room.isHalted = true;
+          io.to(room.hostId).emit("room_halted", {
+            roomId,
+            createdAt: room.createdAt,
+            users: room.users,
+            roomName: room.roomName || "",
+            capacity: room.capacity,
+            isLocked: room.isLocked,
+            silencedUserIds: room.silencedUserIds,
+          });
+        }
       }
     }
   });
@@ -449,6 +573,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Clean up pending rooms if host disconnects
+    for (const roomId in pendingRooms) {
+      if (pendingRooms[roomId].hostId === socket.id) {
+        delete pendingRooms[roomId];
+      }
+    }
+
     for (const roomId in rooms) {
       const room = rooms[roomId];
       // Clean up any pending join requests for this socket
@@ -467,6 +598,22 @@ io.on("connection", (socket) => {
           message: `${username} has left.`,
         });
         io.to(roomId).emit("update_users", room.users);
+
+        if (room.hostId !== socket.id) {
+          const activeAgents = room.users.filter((u) => !u.isHost);
+          if (activeAgents.length === 0 && room.users.length > 0) {
+            room.isHalted = true;
+            io.to(room.hostId).emit("room_halted", {
+              roomId,
+              createdAt: room.createdAt,
+              users: room.users,
+              roomName: room.roomName || "",
+              capacity: room.capacity,
+              isLocked: room.isLocked,
+              silencedUserIds: room.silencedUserIds,
+            });
+          }
+        }
 
         if (room.hostId === socket.id) {
           if (room.users.length === 0) {

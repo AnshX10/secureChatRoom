@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuFingerprint, LuShieldCheck, LuZap } from 'react-icons/lu';
+import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuFingerprint, LuShieldCheck, LuZap, LuCopy, LuLink } from 'react-icons/lu';
 import Logo from './Logo';
-import { decryptMagicLinkPayload } from '../utils/magicLink';
+import { decryptMagicLinkPayload, encryptMagicLinkPayload } from '../utils/magicLink';
 
 const MIN_ENCRYPTION_KEY_LENGTH = 6;
 const MAX_ENCRYPTION_KEY_LENGTH = 64;
@@ -11,15 +11,16 @@ const MAX_ROOM_CAPACITY = 50;
 const DEFAULT_ROOM_CAPACITY = 50;
 const ROOM_ID_BOX_COUNT = 8;
 
-const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
+const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent, roomId, hostRoomPassword, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
   const [view, setView] = useState("menu"); 
   const [username, setUsername] = useState("");
-  const [roomId, setRoomId] = useState("");
+  const [sharedRoomId, setSharedRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
   const [roomName, setRoomName] = useState("");
   const [isMagicLink, setIsMagicLink] = useState(false);
   const [requireApproval, setRequireApproval] = useState(false);
   const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
+  const [magicLinkUrl, setMagicLinkUrl] = useState(""); // Store generated magic link
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
@@ -32,7 +33,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
         const data = decryptMagicLinkPayload(invitePayload);
         if (data) {
           // Auto-fill from decrypted magic link
-          setRoomId(data.room.toUpperCase());
+          setSharedRoomId(data.room.toUpperCase());
           setRoomPassword(data.key);
           setIsMagicLink(true);
           setView("join");
@@ -44,6 +45,22 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
     }
   }, []);
 
+  // Update local state when waiting for first agent
+  useEffect(() => {
+    if (isWaitingForFirstAgent) {
+      setSharedRoomId(roomId || "");
+      setView("waiting");
+      
+      // Generate magic link with room ID and password
+      const passwordForInvite = roomPassword || hostRoomPassword;
+      if (roomId && passwordForInvite) {
+        const encrypted = encryptMagicLinkPayload(roomId, passwordForInvite);
+        const magicUrl = `${window.location.origin}#invite=${encrypted}`;
+        setMagicLinkUrl(magicUrl);
+      }
+    }
+  }, [isWaitingForFirstAgent, roomId, roomPassword, hostRoomPassword]);
+
   const validateEncryptionKey = (key) => {
     const len = (key || "").length;
     if (len < MIN_ENCRYPTION_KEY_LENGTH || len > MAX_ENCRYPTION_KEY_LENGTH) {
@@ -54,9 +71,9 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
   };
 
   const handleJoin = () => {
-    if (!username || !roomId || !roomPassword) return;
+    if (!username || !sharedRoomId || !roomPassword) return;
     if (!validateEncryptionKey(roomPassword)) return;
-    joinRoom(username, roomId, roomPassword);
+    joinRoom(username, sharedRoomId, roomPassword);
   };
 
   const handleCreate = () => {
@@ -75,7 +92,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
     exit: { opacity: 0, x: -20, filter: "blur(10px)" },
   };
 
-  const roomIdDisplay = (roomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
+  const roomIdDisplay = (sharedRoomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
 
   return (
     <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
@@ -313,8 +330,8 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                           <input
                             type="text"
                             maxLength={ROOM_ID_BOX_COUNT}
-                            onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                            value={roomId}
+                            onChange={(e) => setSharedRoomId(e.target.value.toUpperCase())}
+                            value={sharedRoomId}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-text"
                             aria-label="Room ID"
                           />
@@ -373,9 +390,98 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   <button 
                     onClick={handleJoin} 
                     className="w-full mt-5 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 font-bold py-4 uppercase tracking-[0.15em] text-sm rounded-xl transition-all hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                    disabled={isWaitingApproval || !username || (!isMagicLink && (!roomId || !roomPassword))}
+                    disabled={isWaitingApproval || !username || (!isMagicLink && (!sharedRoomId || !roomPassword))}
                   >
                     {isWaitingApproval ? "Waiting For Host..." : "Connect"}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* === WAITING FOR AGENTS === */}
+            {view === "waiting" && (
+              <motion.div key="waiting" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10">
+                <div className="text-center space-y-6">
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold uppercase tracking-[0.15em] mb-2">Frequency Initialized</h2>
+                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em]">Waiting for agents to join...</p>
+                  </div>
+
+                  {/* Animated Loading Indicator */}
+                  <div className="flex justify-center py-3">
+                    <div className="relative w-14 h-14">
+                      <div className="absolute inset-0 rounded-full border-2 border-zinc-800/30"></div>
+                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white border-r-white animate-spin"></div>
+                    </div>
+                  </div>
+
+                  {/* Room ID Display */}
+                  <div className="space-y-3">
+                    <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-zinc-500 flex items-center justify-center gap-2">
+                      <LuScanLine className="text-zinc-600 shrink-0" size={14} /> ROOM ID
+                    </p>
+                    <div className="grid grid-cols-8 gap-1.5 sm:gap-2 justify-center">
+                      {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
+                        const char = roomIdDisplay[index] || "";
+                        return (
+                          <div
+                            key={`waiting-room-id-box-${index}`}
+                            className="h-10 w-9 sm:h-11 sm:w-10 rounded-lg border border-zinc-700/60 bg-black/45 flex items-center justify-center text-[15px] sm:text-base font-black tracking-widest font-mono text-zinc-100"
+                          >
+                            {char || "•"}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Copy Room ID Button */}
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(sharedRoomId);
+                    }}
+                    className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
+                  >
+                    <LuCopy size={14} /> Copy Room ID
+                  </button>
+
+                  {/* Magic Link Display */}
+                  {magicLinkUrl && (
+                    <div className="space-y-3 pt-2">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-zinc-500 flex items-center justify-center gap-2">
+                        <LuLink className="text-zinc-600 shrink-0" size={14} /> MAGIC LINK
+                      </p>
+                      <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-3 py-2 text-[8px] text-zinc-300 font-mono break-all max-h-20 overflow-y-auto">
+                        {magicLinkUrl}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(magicLinkUrl);
+                        }}
+                        className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
+                      >
+                        <LuCopy size={14} /> Copy Magic Link
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Info Message */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/30 px-4 py-3 rounded-xl text-[10px] text-zinc-400 uppercase tracking-[0.2em] text-center space-y-1">
+                    <p>Share room ID or magic link with agents.</p>
+                    <p className="text-zinc-500">Room will be created when first agent joins.</p>
+                  </div>
+
+                  {/* Go Back Button */}
+                  <button
+                    onClick={() => { 
+                      clearError?.(); 
+                      setView("menu");
+                      setSharedRoomId("");
+                      setMagicLinkUrl("");
+                    }}
+                    className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
+                  >
+                    <LuArrowLeft size={14} /> Back to Menu
                   </button>
                 </div>
               </motion.div>
