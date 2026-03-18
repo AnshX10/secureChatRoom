@@ -9,6 +9,7 @@ const MAX_ENCRYPTION_KEY_LENGTH = 64;
 const MIN_ROOM_CAPACITY = 2;
 const MAX_ROOM_CAPACITY = 50;
 const DEFAULT_ROOM_CAPACITY = 50;
+const ROOM_ID_BOX_COUNT = 8;
 
 const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
   const [view, setView] = useState("menu"); 
@@ -73,6 +74,8 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
     animate: { opacity: 1, x: 0, filter: "blur(0px)" },
     exit: { opacity: 0, x: -20, filter: "blur(10px)" },
   };
+
+  const roomIdDisplay = (roomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
 
   return (
     <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
@@ -302,16 +305,33 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, errorMessage, setError
                   {/* Only show Room ID and Encryption Key if NOT from magic link */}
                   {!isMagicLink && (
                     <>
-                      <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
-                        <LuScanLine className="text-zinc-600 shrink-0" size={16} />
-                        <input 
-                          type="text" 
-                          placeholder="ROOM ID" 
-                          className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm font-mono" 
-                          maxLength={8} 
-                          onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                          value={roomId}
-                        />
+                      <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 focus-within:border-zinc-600 transition-colors">
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-zinc-500 mb-2 flex items-center gap-2">
+                          <LuScanLine className="text-zinc-600 shrink-0" size={14} /> ROOM ID
+                        </p>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            maxLength={ROOM_ID_BOX_COUNT}
+                            onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                            value={roomId}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+                            aria-label="Room ID"
+                          />
+                          <div className="grid grid-cols-8 gap-1.5 sm:gap-2">
+                            {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
+                              const char = roomIdDisplay[index] || "";
+                              return (
+                                <div
+                                  key={`join-room-id-box-${index}`}
+                                  className="h-10 w-9 sm:h-11 sm:w-10 rounded-lg border border-zinc-700/60 bg-black/45 flex items-center justify-center text-[15px] sm:text-base font-black tracking-widest font-mono text-zinc-100"
+                                >
+                                  {char || "•"}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">

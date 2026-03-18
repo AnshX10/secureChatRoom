@@ -79,6 +79,8 @@ const DecryptingName = ({ name }) => {
   return <span>{displayValue}</span>;
 };
 
+const ROOM_ID_BOX_COUNT = 8;
+
 const ChatRoom = ({
   socket,
   username,
@@ -225,6 +227,7 @@ const ChatRoom = ({
   const filteredPromotableUsers = promotableUsers.filter((user) =>
     user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
   );
+  const roomIdDisplay = (roomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
 
   useEffect(() => {
     setIsRoomLocked(!!roomLocked);
@@ -1248,6 +1251,8 @@ const ChatRoom = ({
     selectedCount > 0 && selectedMessages.every((m) => !!m.own);
   const selectionHasOthers =
     selectedCount > 0 && selectedMessages.some((m) => !m.own);
+  const canGlobalDeleteSelection =
+    selectedCount > 0 && (isCurrentHost || selectionAllOwn);
 
   // Simple fade + scale animated deletion helper
   const animateDelete = async (ids, mode = 'local') => {
@@ -1279,7 +1284,7 @@ const ChatRoom = ({
 
   const bulkGlobalDelete = () => {
     if (selectedCount === 0) return;
-    if (!selectionAllOwn) return;
+    if (!canGlobalDeleteSelection) return;
     selectedMessages.forEach((m) => {
       socket.emit("delete_message", { roomId, messageId: m.id });
     });
@@ -2041,24 +2046,45 @@ const ChatRoom = ({
                 </div>
 
                 <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
-              <div className="rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 relative overflow-hidden">
+              <div
+                className="group rounded-2xl p-4 mb-4 bg-gradient-to-br from-zinc-900/70 via-zinc-900/45 to-zinc-900/30 border border-zinc-800/50 hover:border-zinc-700/70 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] relative overflow-hidden cursor-pointer transition-all duration-200 active:scale-[0.995]"
+                role="button"
+                tabIndex={0}
+                title="Click to copy Room ID"
+                aria-label="Copy Room ID"
+                onClick={() => {
+                  navigator.clipboard.writeText(roomId);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigator.clipboard.writeText(roomId);
+                  }
+                }}
+              >
                 <div className="absolute inset-0 animate-shimmer pointer-events-none" />
-                <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2.5 tracking-[0.2em] flex items-center gap-1.5 relative">
-                  <LuHash size={11} className="text-zinc-500" /> Operation ID
-                </p>
-                <div className="flex items-center justify-between gap-2 relative">
-                  <span className="text-[13px] font-bold tracking-[0.18em] text-zinc-200 truncate font-mono">
-                    {roomId}
+                <div className="flex items-center justify-between mb-2.5 relative">
+                  <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
+                    <LuHash size={11} className="text-zinc-500" /> Operation ID
+                  </p>
+                  <span className="text-[8px] uppercase tracking-[0.16em] font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors inline-flex items-center gap-1">
+                    <LuCopy size={10} /> Tap to copy
                   </span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(roomId);
-                    }}
-                    className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-zinc-600 hover:text-white shrink-0 active:scale-90"
-                    title="Copy Room ID"
-                  >
-                    <LuCopy size={13} />
-                  </button>
+                </div>
+                <div className="flex items-center justify-center relative">
+                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+                    {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
+                      const char = roomIdDisplay[index] || "";
+                      return (
+                        <div
+                          key={`room-id-box-${index}`}
+                          className="h-10 w-8 rounded-lg border border-zinc-700/70 bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center text-[15px] font-black tracking-[0.08em] font-mono text-zinc-100 shrink-0"
+                        >
+                          {char || "•"}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -3197,7 +3223,7 @@ const ChatRoom = ({
                             </button>
                           </>
                         )}
-                        {msg.own && !msg.poll && (
+                        {(msg.own || isCurrentHost) && !msg.system && (
                           <>
                             <div className="border-t border-zinc-800/30 mx-3" />
                             <button
@@ -3210,24 +3236,10 @@ const ChatRoom = ({
                               }}
                               className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
                             >
-                              <LuTrash2 size={13} /> Expunge Global
-                            </button>
-                          </>
-                        )}
-                        {msg.own && msg.poll && (
-                          <>
-                            <div className="border-t border-zinc-800/30 mx-3" />
-                            <button
-                              onClick={() => {
-                                socket.emit("delete_message", {
-                                  roomId,
-                                  messageId: msg.id,
-                                });
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
-                            >
-                              <LuTrash2 size={13} /> Expunge Global
+                              <LuTrash2 size={13} />
+                              {isCurrentHost && !msg.own
+                                ? "Expunge Global (Host)"
+                                : "Expunge Global"}
                             </button>
                           </>
                         )}
@@ -3318,7 +3330,7 @@ const ChatRoom = ({
                 </p>
                 <p className="text-[9px] sm:text-[10px] text-zinc-300 font-bold truncate">
                   {selectedCount} selected
-                  {selectionHasOthers
+                  {!isCurrentHost && selectionHasOthers
                     ? " • global delete disabled (includes others)"
                     : ""}
                 </p>
@@ -3336,11 +3348,11 @@ const ChatRoom = ({
                 <button
                   type="button"
                   onClick={bulkGlobalDelete}
-                  disabled={selectedCount === 0 || !selectionAllOwn}
+                  disabled={!canGlobalDeleteSelection}
                   className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border border-red-900/30 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all rounded-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                   title={
-                    selectionAllOwn
-                      ? "Delete for everyone (your messages only)"
+                    canGlobalDeleteSelection
+                      ? "Delete for everyone"
                       : "Global delete only works when all selected messages are yours"
                   }
                 >

@@ -107,6 +107,7 @@ io.on("connection", (socket) => {
       capacity: roomCapacity,
       isLocked: false,
       silencedUserIds: [],
+      messageOwners: {},
       requireApproval: !!requireApproval,
       pendingRequests: []
     };
@@ -377,6 +378,10 @@ io.on("connection", (socket) => {
       senderIsHost: room.hostId === socket.id,
     };
 
+    if (payload?.id) {
+      room.messageOwners[payload.id] = socket.id;
+    }
+
     // Broadcast message to others immediately
     socket.to(roomId).emit("receive_message", payload);
 
@@ -385,6 +390,9 @@ io.on("connection", (socket) => {
       setTimeout(() => {
         // Trigger the delete event for everyone in the room (including sender)
         io.to(roomId).emit("message_deleted", payload.id);
+        if (payload?.id && room.messageOwners) {
+          delete room.messageOwners[payload.id];
+        }
       }, timer);
     }
   });
@@ -396,7 +404,20 @@ io.on("connection", (socket) => {
   });
 
   socket.on("delete_message", ({ roomId, messageId }) => {
+    const room = rooms[roomId];
+    if (!room || !messageId) return;
+
+    const senderInRoom = room.users.some((user) => user.id === socket.id);
+    if (!senderInRoom) return;
+
+    const ownerId = room.messageOwners?.[messageId];
+    const canDelete = room.hostId === socket.id || (ownerId && ownerId === socket.id);
+    if (!canDelete) return;
+
     io.to(roomId).emit("message_deleted", messageId);
+    if (room.messageOwners) {
+      delete room.messageOwners[messageId];
+    }
   });
 
   socket.on("edit_message", ({ roomId, messageId, newEncryptedMessage }) => {
