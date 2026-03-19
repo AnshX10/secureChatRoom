@@ -16,7 +16,7 @@ Disallow: /*?*
 Crawl-delay: 1
 
 # Sitemap location
-Sitemap: https://securechatroom.vercel.app/sitemap.xml
+Sitemap: https://ghosttunnel.vercel.app/sitemap.xml
 
 # Google-specific rules
 User-agent: Googlebot

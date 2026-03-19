@@ -37,7 +37,7 @@ const SocialBanner = () => {
           {/* Top Badge (URL) */}
           <div className="absolute top-12 left-12">
             <span className="bg-zinc-900 border border-zinc-700 text-zinc-400 px-4 py-1.5 rounded-full text-sm font-bold tracking-wider">
-              securechatroom.vercel.app
+              ghosttunnel.vercel.app
             </span>
           </div>
 

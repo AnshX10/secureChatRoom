@@ -13,7 +13,7 @@ const server = http.createServer(app);
 // --- 1. DEFINE ALLOWED ORIGINS ---
 const allowedOrigins = [
   "http://localhost:5173",             // Localhost
-  "https://securechatroom.vercel.app"  // Your Vercel Domain (No trailing slash)
+  "https://ghosttunnel.vercel.app"  // Your Vercel Domain (No trailing slash)
 ];
 
 // --- 2. DEFINE CORS OPTIONS (Must come BEFORE app.use) ---
