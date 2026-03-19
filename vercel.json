@@ -2,9 +2,6 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [
-        { "type": "host", "value": "securechatroom.vercel.app" }
-      ],
       "destination": "https://ghosttunnel.vercel.app/$1",
       "permanent": true
     }

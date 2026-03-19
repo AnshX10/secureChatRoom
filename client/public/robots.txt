@@ -1,4 +1,4 @@
-# robots.txt for Secure Chatroom
+# robots.txt for Ghost Tunnel
 # Comprehensive robots.txt for optimal SEO crawling
 # Last updated: 2026-02-20
 

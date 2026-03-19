@@ -27,7 +27,7 @@ const SocialBanner = () => {
             <div className="w-40 h-40 bg-black border-2 border-white rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]">
                <Logo variant="shield" className="w-24 h-24 text-white" />
             </div>
-            <h2 className="mt-6 text-4xl font-black text-white tracking-tighter">SECURE<br/>CHATROOM</h2>
+            <h2 className="mt-6 text-4xl font-black text-white tracking-tighter">GHOST<br/>TUNNEL</h2>
           </div>
         </div>
 

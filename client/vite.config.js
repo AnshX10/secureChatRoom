@@ -9,7 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon-180.png', 'og-image.png'],
       manifest: {
-        name: 'Secure HUD Chatroom',
+        name: 'Ghost Tunnel',
         short_name: 'GhostTunnel',
         description: 'Military-grade encrypted stealth chatroom',
         theme_color: '#000000',
