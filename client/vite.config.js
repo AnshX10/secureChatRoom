@@ -8,6 +8,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon-180.png', 'og-image.png'],
+      workbox: {
+        navigateFallbackDenylist: [/^\/sitemap\.xml$/, /^\/robots\.txt$/]
+      },
       manifest: {
         name: 'Ghost Tunnel',
         short_name: 'GhostTunnel',
