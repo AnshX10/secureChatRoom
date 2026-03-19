@@ -80,6 +80,7 @@ const DecryptingName = ({ name }) => {
 };
 
 const ROOM_ID_BOX_COUNT = 8;
+const QUICK_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 const ChatRoom = ({
   socket,
@@ -475,6 +476,8 @@ const ChatRoom = ({
   };
 
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
+  const [messageReactions, setMessageReactions] = useState({});
+  const [reactionSheetMessageId, setReactionSheetMessageId] = useState(null);
 
   const [showPollModal, setShowPollModal] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
@@ -929,6 +932,41 @@ const ChatRoom = ({
   const togglePinMessage = (messageId) => {
     if (!messageId) return;
     setPinnedMessageId((prev) => (prev === messageId ? null : messageId));
+    setActiveMenuId(null);
+  };
+
+  const reactToMessage = (messageId, emoji) => {
+    if (!messageId || !emoji) return;
+    socket.emit("react_to_message", { roomId, messageId, emoji });
+    setActiveMenuId(null);
+  };
+
+  const getMessageReactionList = (messageId) => {
+    if (!messageId) return [];
+    const raw = messageReactions[messageId];
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((entry) => entry && entry.username && entry.emoji)
+      .sort((a, b) => a.username.localeCompare(b.username));
+  };
+
+  const getMessageReactionSummary = (messageId) => {
+    const reactions = getMessageReactionList(messageId);
+    const grouped = reactions.reduce((acc, reaction) => {
+      const existing = acc.get(reaction.emoji) || 0;
+      acc.set(reaction.emoji, existing + 1);
+      return acc;
+    }, new Map());
+
+    return Array.from(grouped.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count);
+  };
+
+  const openReactionSheet = (messageId) => {
+    if (!messageId) return;
+    if (getMessageReactionList(messageId).length === 0) return;
+    setReactionSheetMessageId(messageId);
     setActiveMenuId(null);
   };
 
@@ -1893,6 +1931,9 @@ const ChatRoom = ({
   };
 
   useEffect(() => {
+    setMessageReactions({});
+    socket.emit("get_message_reactions", { roomId });
+
     socket.on("receive_message", (data) => {
       let messageToAdd;
 
@@ -2012,6 +2053,12 @@ const ChatRoom = ({
             : msg,
         ),
       );
+      setMessageReactions((prev) => {
+        if (!prev[deletedId]) return prev;
+        const { [deletedId]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setReactionSheetMessageId((prev) => (prev === deletedId ? null : prev));
     });
     socket.on("message_updated", ({ messageId, newEncryptedMessage }) => {
       setMessageList((list) =>
@@ -2102,6 +2149,26 @@ const ChatRoom = ({
       ]);
     });
 
+    socket.on("message_reactions_sync", ({ roomId: incomingRoomId, reactions }) => {
+      if (incomingRoomId !== roomId) return;
+      setMessageReactions(reactions && typeof reactions === "object" ? reactions : {});
+    });
+
+    socket.on("message_reaction_update", ({ roomId: incomingRoomId, messageId, reactions }) => {
+      if (incomingRoomId !== roomId || !messageId) return;
+      setMessageReactions((prev) => {
+        if (!Array.isArray(reactions) || reactions.length === 0) {
+          if (!prev[messageId]) return prev;
+          const { [messageId]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return {
+          ...prev,
+          [messageId]: reactions,
+        };
+      });
+    });
+
     return () => {
       socket.off("receive_message");
       socket.off("update_users");
@@ -2118,6 +2185,8 @@ const ChatRoom = ({
       socket.off("context_request");
       socket.off("context_request_sent");
       socket.off("context_request_rejected");
+      socket.off("message_reactions_sync");
+      socket.off("message_reaction_update");
       if (intrusionHudTimeoutRef.current) {
         clearTimeout(intrusionHudTimeoutRef.current);
       }
@@ -2511,9 +2580,9 @@ const ChatRoom = ({
                     Join Requests
                   </p>
                   <div className="space-y-3">
-                    {joinRequests.map((req) => (
+                    {joinRequests.map((req, reqIndex) => (
                       <div
-                        key={req.socketId}
+                        key={req.socketId || `join-request-${reqIndex}`}
                         className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <span className="text-xs uppercase tracking-wide text-white break-all">
@@ -3046,10 +3115,17 @@ const ChatRoom = ({
             })()}
 
           <AnimatePresence initial={false}>
-          {messageList.map((msg) => {
+          {messageList.map((msg, msgIndex) => {
             const isDeleting = deletingIds.has(msg.id);
             const isCommanderMessage =
               !msg.system && !msg.deleted && !!msg.senderIsHost;
+            const messageReactionList = getMessageReactionList(msg?.id);
+            const messageReactionSummary = getMessageReactionSummary(msg?.id);
+            const myReactionEmoji =
+              messageReactionList.find(
+                (reaction) =>
+                  reaction.username?.toLowerCase() === username?.toLowerCase(),
+              )?.emoji || null;
             const isMediaPayload =
               msg.type === "image" ||
               msg.type === "image-batch" ||
@@ -3069,7 +3145,7 @@ const ChatRoom = ({
               }}
               data-message-id={msg?.id}
               layout={!isDeleting ? "position" : false}
-              key={msg.id}
+              key={msg.id || `msg-${msgIndex}`}
               initial={
                 msg.system
                   ? { opacity: 0, scale: 0.85 }
@@ -3229,7 +3305,7 @@ const ChatRoom = ({
                             const ended =
                               msg.poll.expiresAt &&
                               msg.poll.expiresAt <= Date.now();
-                            return options.map((opt) => {
+                            return options.map((opt, optIndex) => {
                               const votes = Array.isArray(opt.votes)
                                 ? opt.votes.length
                                 : 0;
@@ -3241,7 +3317,7 @@ const ChatRoom = ({
                                 : false;
                               return (
                                 <button
-                                  key={opt.id}
+                                  key={`${msg.id || "poll"}-opt-${opt.id || optIndex}`}
                                   type="button"
                                   disabled={ended}
                                   onClick={() => voteOnPoll(msg, opt.id)}
@@ -3690,8 +3766,33 @@ const ChatRoom = ({
                     </div>
                   )}
                   <AnimatePresence>
+                    {activeMenuId === msg.id && !msg.deleted && (
+                      <motion.div
+                        key={`quick-reaction-bar-${msg.id || msgIndex}`}
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.14 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`absolute -top-10 ${msg.own ? "right-0" : "left-0"} z-[55] bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_8px_30px_rgba(0,0,0,0.45)] rounded-full px-1.5 py-1 inline-flex items-center gap-1`}
+                      >
+                        {QUICK_REACTION_EMOJIS.map((emoji) => (
+                          <button
+                            key={`${msg.id}-${emoji}`}
+                            type="button"
+                            onClick={() => reactToMessage(msg.id, emoji)}
+                            className={`h-8 w-8 rounded-full flex items-center justify-center text-sm transition-all active:scale-90 ${myReactionEmoji === emoji ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
+                            title={`React with ${emoji}`}
+                            aria-label={`React with ${emoji}`}
+                          >
+                            <span>{emoji}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
                     {activeMenuId === msg.id && (
                       <motion.div
+                        key={`message-action-menu-${msg.id || msgIndex}`}
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -3752,6 +3853,29 @@ const ChatRoom = ({
                       </motion.div>
                     )}
                   </AnimatePresence>
+                  {messageReactionList.length > 0 && !msg.deleted && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openReactionSheet(msg.id);
+                      }}
+                      className={`absolute -bottom-3 ${msg.own ? "right-2" : "left-2"} z-20`}
+                    >
+                      <span className="inline-flex h-6 min-w-6 px-1.5 items-center gap-1 rounded-full bg-[#0f0f11]/95 border border-zinc-700/50 shadow-[0_4px_18px_rgba(0,0,0,0.45)] text-sm leading-none">
+                        <span className="flex items-center -space-x-0.5">
+                          {messageReactionSummary.slice(0, 3).map((reaction) => (
+                            <span key={`${msg.id}-summary-${reaction.emoji}`} className="inline-flex h-4 w-4 items-center justify-center text-[11px]">
+                              {reaction.emoji}
+                            </span>
+                          ))}
+                        </span>
+                        <span className="text-[9px] font-bold text-zinc-300 tabular-nums">
+                          {messageReactionList.length}
+                        </span>
+                      </span>
+                    </button>
+                  )}
                 </div>
                 </div>
               )}
@@ -3781,7 +3905,7 @@ const ChatRoom = ({
                       <div className="text-[9px] text-white font-bold flex flex-wrap gap-x-1 uppercase truncate font-mono">
                         <span>[</span>
                         {typingUsers.map((u, i) => (
-                          <span key={u} className="text-white">
+                          <span key={`typing-${u || "unknown"}-${i}`} className="text-white">
                             <DecryptingName name={u} />
                             {i < typingUsers.length - 1 ? "," : ""}
                           </span>
@@ -4344,9 +4468,9 @@ const ChatRoom = ({
                   {selectedAttachments.length} attachment{selectedAttachments.length > 1 ? "s" : ""} ready
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selectedAttachments.map((attachment) => (
+                  {selectedAttachments.map((attachment, attachmentIndex) => (
                     attachment.type === "image" ? (
-                      <div key={attachment.id} className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
+                      <div key={attachment.id || `attachment-image-${attachmentIndex}`} className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
                         <img
                           src={attachment.data}
                           alt={attachment.name}
@@ -4365,7 +4489,7 @@ const ChatRoom = ({
                         </div>
                       </div>
                     ) : (
-                      <div key={attachment.id} className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9">
+                      <div key={attachment.id || `attachment-file-${attachmentIndex}`} className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9">
                         <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
                           {React.createElement(getFileIcon(attachment.mimeType), { size: 18, className: "text-zinc-300" })}
                         </div>
@@ -4546,6 +4670,99 @@ const ChatRoom = ({
         </AnimatePresence>
 
         <AnimatePresence>
+          {reactionSheetMessageId && (() => {
+            const targetMessage = messageList.find((message) => message.id === reactionSheetMessageId);
+            const reactions = getMessageReactionList(reactionSheetMessageId);
+            const groupedSummary = getMessageReactionSummary(reactionSheetMessageId);
+
+            if (!targetMessage || reactions.length === 0) {
+              return null;
+            }
+
+            return (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9997] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+                onClick={() => setReactionSheetMessageId(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                  transition={{ type: "spring", damping: 24, stiffness: 260 }}
+                  className="w-full max-w-md bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-4 sm:p-5 border-b border-zinc-800/30 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-500 font-black">Reactions</p>
+                      <p className="text-sm text-white font-bold mt-0.5">All {reactions.length}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReactionSheetMessageId(null)}
+                      className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/5 transition-all"
+                      aria-label="Close reactions"
+                    >
+                      <LuX size={16} />
+                    </button>
+                  </div>
+
+                  <div className="px-4 sm:px-5 py-3 border-b border-zinc-800/30 flex items-center gap-2 overflow-x-auto">
+                    {groupedSummary.map((entry) => (
+                      <span
+                        key={`${reactionSheetMessageId}-tab-${entry.emoji}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-700/40 text-xs text-zinc-200 whitespace-nowrap"
+                      >
+                        <span>{entry.emoji}</span>
+                        <span className="font-bold">{entry.count}</span>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="max-h-[52vh] overflow-y-auto">
+                    {reactions.map((reaction, index) => {
+                      const isOwnReaction = reaction.username?.toLowerCase() === username?.toLowerCase();
+                      const initials = (reaction.username || "?").slice(0, 1).toUpperCase();
+                      const codenameLabel = (isOwnReaction ? "You" : reaction.username || "").toUpperCase();
+                      return (
+                        <button
+                          key={`${reactionSheetMessageId}-${reaction.username}-${reaction.emoji}-${index}`}
+                          type="button"
+                          onClick={() => {
+                            if (isOwnReaction) {
+                              reactToMessage(reactionSheetMessageId, reaction.emoji);
+                            }
+                          }}
+                          className={`w-full px-4 sm:px-5 py-3.5 border-b border-zinc-800/20 flex items-center justify-between gap-3 text-left ${isOwnReaction ? "hover:bg-white/[0.04]" : ""}`}
+                        >
+                          <div className="min-w-0 flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-full bg-zinc-800/80 border border-zinc-700/40 text-zinc-200 text-xs font-black uppercase flex items-center justify-center shrink-0">
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-zinc-100 truncate">
+                                {codenameLabel}
+                              </p>
+                              {isOwnReaction && (
+                                <p className="text-[11px] text-zinc-500">Click to remove</p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-2xl leading-none">{reaction.emoji}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {showSlideConfirm && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -4599,9 +4816,9 @@ const ChatRoom = ({
                           No matching codename found
                         </p>
                       ) : (
-                        filteredPromotableUsers.map((user) => (
+                        filteredPromotableUsers.map((user, userIndex) => (
                           <div
-                            key={user.id}
+                            key={user.id || `promotable-user-${userIndex}`}
                             className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 bg-black/20 px-2.5 py-2"
                           >
                             <span className="text-xs text-zinc-200 uppercase tracking-wide truncate">

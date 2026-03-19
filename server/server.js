@@ -51,6 +51,17 @@ const destroyedRooms = new Map();
 
 // Context message tracking: roomId -> { messages: [] }
 const contextMessages = {};
+const ALLOWED_REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🙏"]);
+
+function serializeRoomMessageReactions(messageReactions = {}) {
+  return Object.entries(messageReactions).reduce((acc, [messageId, perUser]) => {
+    const reactions = Object.values(perUser || {});
+    if (reactions.length > 0) {
+      acc[messageId] = reactions;
+    }
+    return acc;
+  }, {});
+}
 
 function ensureContextData(roomId) {
   if (!contextMessages[roomId]) {
@@ -158,6 +169,7 @@ io.on("connection", (socket) => {
       isLocked: false,
       silencedUserIds: [],
       messageOwners: {},
+      messageReactions: {},
       requireApproval: !!requireApproval,
       pendingRequests: []
     };
@@ -213,6 +225,7 @@ io.on("connection", (socket) => {
         isHalted: false,
         silencedUserIds: pendingRoom.silencedUserIds,
         messageOwners: pendingRoom.messageOwners,
+        messageReactions: pendingRoom.messageReactions || {},
         requireApproval: pendingRoom.requireApproval,
         pendingRequests: pendingRoom.pendingRequests
       };
@@ -617,6 +630,14 @@ io.on("connection", (socket) => {
         if (payload?.id && room.messageOwners) {
           delete room.messageOwners[payload.id];
         }
+        if (payload?.id && room.messageReactions) {
+          delete room.messageReactions[payload.id];
+          io.to(roomId).emit("message_reaction_update", {
+            roomId,
+            messageId: payload.id,
+            reactions: [],
+          });
+        }
       }, timer);
     }
   });
@@ -681,6 +702,53 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("poll_vote_update", { roomId, messageId, optionId, action, username });
   });
 
+  socket.on("get_message_reactions", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const senderInRoom = room.users.some((user) => user.id === socket.id);
+    if (!senderInRoom) return;
+
+    socket.emit("message_reactions_sync", {
+      roomId,
+      reactions: serializeRoomMessageReactions(room.messageReactions || {}),
+    });
+  });
+
+  socket.on("react_to_message", ({ roomId, messageId, emoji }) => {
+    const room = rooms[roomId];
+    if (!room || !messageId || !emoji || !ALLOWED_REACTIONS.has(emoji)) return;
+
+    const sender = room.users.find((user) => user.id === socket.id);
+    if (!sender) return;
+
+    room.messageReactions = room.messageReactions || {};
+    room.messageReactions[messageId] = room.messageReactions[messageId] || {};
+
+    const reactorKey = sender.username.toLowerCase();
+    const existing = room.messageReactions[messageId][reactorKey];
+
+    if (existing && existing.emoji === emoji) {
+      delete room.messageReactions[messageId][reactorKey];
+    } else {
+      room.messageReactions[messageId][reactorKey] = {
+        username: sender.username,
+        emoji,
+      };
+    }
+
+    const nextReactions = Object.values(room.messageReactions[messageId]);
+    if (nextReactions.length === 0) {
+      delete room.messageReactions[messageId];
+    }
+
+    io.to(roomId).emit("message_reaction_update", {
+      roomId,
+      messageId,
+      reactions: Object.values(room.messageReactions[messageId] || {}),
+    });
+  });
+
   socket.on("delete_message", ({ roomId, messageId }) => {
     const room = rooms[roomId];
     if (!room || !messageId) return;
@@ -696,6 +764,14 @@ io.on("connection", (socket) => {
     if (room.messageOwners) {
       delete room.messageOwners[messageId];
     }
+    if (room.messageReactions) {
+      delete room.messageReactions[messageId];
+    }
+    io.to(roomId).emit("message_reaction_update", {
+      roomId,
+      messageId,
+      reactions: [],
+    });
   });
 
   socket.on("edit_message", ({ roomId, messageId, newEncryptedMessage }) => {
