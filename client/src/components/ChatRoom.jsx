@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LuSend,
@@ -97,6 +97,9 @@ const ChatRoom = ({
 }) => {
   const hostChatStorageKey = isHost && roomId ? `host_chat_history_${roomId}` : null;
   const [currentMessage, setCurrentMessage] = useState("");
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const [mentionContext, setMentionContext] = useState(null);
   const [messageList, setMessageList] = useState([]);
   const [deletingIds, setDeletingIds] = useState(new Set());
   const [users, setUsers] = useState(initialUsers || []);
@@ -174,6 +177,8 @@ const ChatRoom = ({
       ? `${message.username}: [POLL] ${decrypt(message.poll.question).substring(0, 50)}`
       : message.type === "image"
         ? `${message.username}: [Classified Image]`
+        : message.type === "image-batch"
+          ? `${message.username}: [Classified Image Batch]`
         : message.type === "file"
           ? `${message.username}: [Classified File]`
           : message.type === "audio"
@@ -200,6 +205,26 @@ const ChatRoom = ({
   const typingTimeoutRef = useRef(null);
   const scrollRef = useRef(null);
   const messageRefs = useRef({});
+  const lightboxImages = useMemo(
+    () =>
+      messageList.flatMap((msg) => {
+        if (msg.type === "image" && msg.message) {
+          return [{ messageId: msg.id, src: msg.message, itemIndex: 0, username: msg.username }];
+        }
+        if (msg.type === "image-batch" && Array.isArray(msg.images)) {
+          return msg.images
+            .filter((image) => !!image)
+            .map((image, imageIndex) => ({
+              messageId: msg.id,
+              src: image,
+              itemIndex: imageIndex,
+              username: msg.username,
+            }));
+        }
+        return [];
+      }),
+    [messageList],
+  );
   const highlightTimeoutRef = useRef(null);
 
   const [highlightMessageId, setHighlightMessageId] = useState(null);
@@ -285,7 +310,34 @@ const ChatRoom = ({
     return parts.map((part, idx) => {
       const isUrl = part.startsWith("http://") || part.startsWith("https://");
       if (!isUrl) {
-        return <span key={`${keyPrefix}-part-${idx}`}>{part}</span>;
+        const mentionRegex = /(@everyone|@[a-zA-Z0-9_]+)/gi;
+        const mentionParts = part.split(mentionRegex);
+        return (
+          <React.Fragment key={`${keyPrefix}-part-${idx}`}>
+            {mentionParts.map((segment, segmentIndex) => {
+              if (!segment) return null;
+              const isMention = /^@(everyone|[a-zA-Z0-9_]+)$/i.test(segment);
+              if (!isMention) {
+                return (
+                  <span key={`${keyPrefix}-text-${idx}-${segmentIndex}`}>{segment}</span>
+                );
+              }
+              const isEveryone = /^@everyone$/i.test(segment);
+              return (
+                <span
+                  key={`${keyPrefix}-mention-${idx}-${segmentIndex}`}
+                  className={`px-1 py-0.5 rounded-md font-bold ${
+                    isEveryone
+                      ? "bg-blue-500/20 text-blue-200"
+                      : "bg-zinc-700/50 text-zinc-100"
+                  }`}
+                >
+                  {segment}
+                </span>
+              );
+            })}
+          </React.Fragment>
+        );
       }
       return (
         <a
@@ -299,6 +351,127 @@ const ChatRoom = ({
         </a>
       );
     });
+  };
+
+  const hasEveryoneMention = (messageText) =>
+    typeof messageText === "string" && /(^|\s)@everyone\b/i.test(messageText);
+
+  const normalizeMentionsForSend = (messageText) => {
+    if (typeof messageText !== "string") return messageText;
+    return messageText.replace(/(^|\s)@([a-zA-Z0-9_]+)/g, (match, prefix, mention) => {
+      return `${prefix}@${mention.toUpperCase()}`;
+    });
+  };
+
+  const clearMentionSuggestions = () => {
+    setMentionSuggestions([]);
+    setActiveMentionIndex(0);
+    setMentionContext(null);
+  };
+
+  const detectMentionContext = (value) => {
+    const match = value.match(/(^|\s)@([a-zA-Z0-9_]*)$/);
+    if (!match) return null;
+    const query = match[2] || "";
+    const atIndex = value.length - query.length - 1;
+    return {
+      query,
+      atIndex,
+      mentionLength: 1 + query.length,
+    };
+  };
+
+  const buildMentionSuggestions = (query) => {
+    const uniqueNames = Array.from(
+      new Set(
+        users
+          .map((user) => (typeof user.username === "string" ? user.username.toUpperCase() : ""))
+          .filter(Boolean),
+      ),
+    );
+    const pool = ["EVERYONE", ...uniqueNames];
+    const normalizedQuery = (query || "").toUpperCase();
+    return pool
+      .filter((name) => name.startsWith(normalizedQuery))
+      .slice(0, 7);
+  };
+
+  const updateMentionSuggestions = (value) => {
+    const nextContext = detectMentionContext(value);
+    if (!nextContext) {
+      clearMentionSuggestions();
+      return;
+    }
+    const nextSuggestions = buildMentionSuggestions(nextContext.query);
+    if (nextSuggestions.length === 0) {
+      clearMentionSuggestions();
+      return;
+    }
+    setMentionContext(nextContext);
+    setMentionSuggestions(nextSuggestions);
+    setActiveMentionIndex(0);
+  };
+
+  const applyMentionSuggestion = (targetName) => {
+    if (!mentionContext) return;
+    const normalizedTarget = (targetName || "").toUpperCase();
+    const before = currentMessage.slice(0, mentionContext.atIndex);
+    const afterRaw = currentMessage.slice(mentionContext.atIndex + mentionContext.mentionLength);
+    const after = afterRaw.replace(/^\s+/, "");
+    const nextValue = `${before}@${normalizedTarget}${after ? ` ${after}` : " "}`;
+    setCurrentMessage(nextValue);
+    clearMentionSuggestions();
+    setTimeout(() => {
+      if (inputRef.current) {
+        const caretPosition = before.length + normalizedTarget.length + 2;
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(caretPosition, caretPosition);
+      }
+    }, 0);
+  };
+
+  const handleComposerKeyDown = (e) => {
+    if (mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveMentionIndex((prev) => (prev + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveMentionIndex((prev) =>
+          prev === 0 ? mentionSuggestions.length - 1 : prev - 1,
+        );
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        applyMentionSuggestion(mentionSuggestions[activeMentionIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        clearMentionSuggestions();
+        return;
+      }
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (isRecording) {
+        stopRecording();
+        return;
+      }
+      if (audioBlob) {
+        sendAudioMessage();
+        return;
+      }
+      if (hasSelectedAttachments) {
+        sendSelectedAttachments();
+        return;
+      }
+      sendMessage();
+    }
   };
 
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
@@ -351,6 +524,10 @@ const ChatRoom = ({
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
   const mobileToolbarRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
+  const areAllSelectedAttachmentsImages =
+    hasSelectedAttachments && selectedAttachments.every((attachment) => attachment.type === "image");
+  const isMultiAttachmentCaptionLocked =
+    hasSelectedAttachments && selectedAttachments.length > 1 && !areAllSelectedAttachmentsImages;
 
   // Context message states
   const [showContextModal, setShowContextModal] = useState(false);
@@ -534,8 +711,7 @@ const ChatRoom = ({
   // Lightbox keyboard navigation
   useEffect(() => {
     if (!lightboxOpen) return;
-    const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
-    const total = imageMessages.length;
+    const total = lightboxImages.length;
     const handleKey = (e) => {
       if (e.key === "Escape") setLightboxOpen(false);
       if (e.key === "ArrowLeft" && total > 1) setLightboxIndex((i) => (i - 1 + total) % total);
@@ -543,7 +719,7 @@ const ChatRoom = ({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [lightboxOpen, messageList]);
+  }, [lightboxOpen, lightboxImages]);
 
   useEffect(() => {
     if (isMobile) return;
@@ -761,6 +937,7 @@ const ChatRoom = ({
     if (msg.poll) return `[POLL] ${decrypt(msg.poll.question)}`;
     if (msg.system) return msg.message || "";
     if (msg.type === "image") return "📷 Image";
+    if (msg.type === "image-batch") return `📷 ${msg.images?.length || 0} Images`;
     if (msg.type === "audio") return `🎙️ Voice message${msg.audioDuration ? ` (${formatDuration(msg.audioDuration)})` : ""}`;
     if (msg.type === "file") return `📎 ${msg.fileName || "File"}`;
     if (msg.type === "high-clearance") return "🔒 High Clearance Message";
@@ -960,11 +1137,61 @@ const ChatRoom = ({
     if (!selectedAttachments.length) return;
 
     const attachmentsToSend = [...selectedAttachments];
+    const canUseCaption =
+      attachmentsToSend.length === 1 || attachmentsToSend.every((attachment) => attachment.type === "image");
+    const normalizedCaption = canUseCaption && currentMessage.trim()
+      ? normalizeMentionsForSend(currentMessage.trim())
+      : "";
+    const encryptedCaption = normalizedCaption ? encrypt(normalizedCaption) : null;
     const replyPayload = replyingTo ? {
       messageId: replyingTo.id,
       username: replyingTo.username,
       message: encrypt(getReplyPreviewText(replyingTo)),
     } : null;
+
+    const allImages = attachmentsToSend.every((attachment) => attachment.type === "image");
+    if (allImages && attachmentsToSend.length > 1) {
+      const messageId = uuidv4();
+      const time = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const encryptedImages = attachmentsToSend.map((attachment) => encrypt(attachment.data));
+
+      const messageData = {
+        id: messageId,
+        roomId,
+        username,
+        senderIsHost: isCurrentHost,
+        message: "",
+        images: encryptedImages,
+        time,
+        edited: false,
+        deleted: false,
+        timer: selfDestructTime,
+        replyTo: replyPayload,
+        caption: encryptedCaption,
+        type: "image-batch",
+      };
+
+      await socket.emit("send_message", messageData);
+      setMessageList((list) => [
+        ...list,
+        {
+          ...messageData,
+          images: attachmentsToSend.map((attachment) => attachment.data),
+          caption: normalizedCaption || null,
+          own: true,
+          sentAt: Date.now(),
+        },
+      ]);
+
+      clearAttachment();
+      setCurrentMessage("");
+      setReplyingTo(null);
+      clearMentionSuggestions();
+      return;
+    }
 
     for (const attachment of attachmentsToSend) {
       const messageId = uuidv4();
@@ -986,10 +1213,11 @@ const ChatRoom = ({
           deleted: false,
           timer: selfDestructTime,
           replyTo: replyPayload,
+          caption: encryptedCaption,
           type: "image",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, own: true, sentAt: Date.now() }]);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, caption: normalizedCaption || null, own: true, sentAt: Date.now() }]);
       } else {
         const encryptedData = encrypt(attachment.data);
         const encryptedName = encrypt(attachment.name);
@@ -1007,15 +1235,18 @@ const ChatRoom = ({
           deleted: false,
           timer: selfDestructTime,
           replyTo: replyPayload,
+          caption: encryptedCaption,
           type: "file",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, own: true, sentAt: Date.now() }]);
+        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, caption: normalizedCaption || null, own: true, sentAt: Date.now() }]);
       }
     }
 
     clearAttachment();
+    setCurrentMessage("");
     setReplyingTo(null);
+    clearMentionSuggestions();
   };
 
   const downloadFile = (fileData, fileName) => {
@@ -1138,6 +1369,11 @@ const ChatRoom = ({
     if (isRadioSilenceEnforced) return;
     if (!audioBlob) return;
 
+    const normalizedCaption = currentMessage.trim()
+      ? normalizeMentionsForSend(currentMessage.trim())
+      : "";
+    const encryptedCaption = normalizedCaption ? encrypt(normalizedCaption) : null;
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target.result;
@@ -1161,13 +1397,14 @@ const ChatRoom = ({
           username: replyingTo.username,
           message: encrypt(getReplyPreviewText(replyingTo)),
         } : null,
+        caption: encryptedCaption,
         type: "audio",
       };
 
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: base64, own: true, sentAt: Date.now() },
+        { ...messageData, message: base64, caption: normalizedCaption || null, own: true, sentAt: Date.now() },
       ]);
 
       // Cleanup
@@ -1176,7 +1413,9 @@ const ChatRoom = ({
       setAudioPreviewUrl(null);
       setRecordingDuration(0);
       setIsPlayingPreview(false);
+      setCurrentMessage("");
       setReplyingTo(null);
+      clearMentionSuggestions();
     };
     reader.readAsDataURL(audioBlob);
   };
@@ -1332,7 +1571,10 @@ const ChatRoom = ({
   // Typing & Input Logic
   const handleInputChange = (e) => {
     if (isRadioSilenceEnforced) return;
-    setCurrentMessage(e.target.value);
+    if (isMultiAttachmentCaptionLocked) return;
+    const nextValue = e.target.value;
+    setCurrentMessage(nextValue);
+    updateMentionSuggestions(nextValue);
     if (!isLocalTyping) {
       setIsLocalTyping(true);
       socket.emit("typing_status", { roomId, username, isTyping: true });
@@ -1343,6 +1585,16 @@ const ChatRoom = ({
       socket.emit("typing_status", { roomId, username, isTyping: false });
     }, 2000);
   };
+
+  useEffect(() => {
+    if (!isMultiAttachmentCaptionLocked) return;
+    if (!currentMessage.trim()) {
+      clearMentionSuggestions();
+      return;
+    }
+    setCurrentMessage("");
+    clearMentionSuggestions();
+  }, [isMultiAttachmentCaptionLocked]);
 
   const kickAgent = (userId, agentName) => {
     socket.emit("kick_user", { roomId, userId });
@@ -1529,11 +1781,12 @@ const ChatRoom = ({
   const sendMessage = async () => {
     if (isRadioSilenceEnforced) return;
     if (!currentMessage.trim()) return;
+    const normalizedMessage = normalizeMentionsForSend(currentMessage);
     setIsLocalTyping(false);
     socket.emit("typing_status", { roomId, username, isTyping: false });
 
     if (editingMessageId) {
-      const encrypted = encrypt(currentMessage);
+      const encrypted = encrypt(normalizedMessage);
       socket.emit("edit_message", {
         roomId,
         messageId: editingMessageId,
@@ -1542,15 +1795,16 @@ const ChatRoom = ({
       setMessageList((list) =>
         list.map((msg) =>
           msg.id === editingMessageId
-            ? { ...msg, message: currentMessage, edited: true }
+            ? { ...msg, message: normalizedMessage, edited: true }
             : msg,
         ),
       );
       setEditingMessageId(null);
       setCurrentMessage("");
+      clearMentionSuggestions();
     } else {
       const messageId = uuidv4();
-      const encrypted = encrypt(currentMessage);
+      const encrypted = encrypt(normalizedMessage);
       const time = new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -1580,10 +1834,11 @@ const ChatRoom = ({
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: currentMessage, own: true, sentAt: Date.now() },
+        { ...messageData, message: normalizedMessage, own: true, sentAt: Date.now() },
       ]);
       setCurrentMessage("");
       setReplyingTo(null);
+      clearMentionSuggestions();
     }
   };
 
@@ -1651,6 +1906,15 @@ const ChatRoom = ({
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
+          caption: data.caption ? decrypt(data.caption) : null,
+          own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
+        };
+      } else if (data.type === "image-batch") {
+        messageToAdd = {
+          ...data,
+          images: (Array.isArray(data.images) ? data.images : []).map((image) => decrypt(image)),
+          caption: data.caption ? decrypt(data.caption) : null,
           own: isOwnMessage,
           isContextMessage: data.isContextMessage,
         };
@@ -1659,6 +1923,7 @@ const ChatRoom = ({
           ...data,
           message: decrypt(data.message),
           fileName: decrypt(data.fileName),
+          caption: data.caption ? decrypt(data.caption) : null,
           own: isOwnMessage,
           isContextMessage: data.isContextMessage,
         };
@@ -1666,6 +1931,7 @@ const ChatRoom = ({
         messageToAdd = {
           ...data,
           message: decrypt(data.message),
+          caption: data.caption ? decrypt(data.caption) : null,
           own: isOwnMessage,
           isContextMessage: data.isContextMessage,
         };
@@ -2784,6 +3050,17 @@ const ChatRoom = ({
             const isDeleting = deletingIds.has(msg.id);
             const isCommanderMessage =
               !msg.system && !msg.deleted && !!msg.senderIsHost;
+            const isMediaPayload =
+              msg.type === "image" ||
+              msg.type === "image-batch" ||
+              msg.type === "audio" ||
+              msg.type === "file";
+            const hasHeaderContent =
+              (!msg.own && !msg.deleted) ||
+              (hasEveryoneMention(msg.message) && !msg.deleted) ||
+              (msg.isContextMessage && !msg.deleted) ||
+              (pinnedMessageId === msg.id && !msg.deleted) ||
+              (msg.timer > 0 && !msg.deleted);
             return (
             <motion.div
               ref={(el) => {
@@ -2851,7 +3128,11 @@ const ChatRoom = ({
                   <div className={`flex flex-col max-w-[92%] sm:max-w-[80%] md:max-w-[70%] lg:max-w-[60%] relative ${isSelectMode ? "pointer-events-none" : ""}`}>
                   <div
                     data-bubble
-                    className={`px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5 relative transition-all rounded-2xl ${
+                    className={`${
+                      isMediaPayload
+                        ? "px-2 py-2 sm:px-2.5 sm:py-2.5 md:px-3 md:py-3"
+                        : "px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5"
+                    } relative transition-all rounded-2xl ${
                       msg.deleted
                         ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
                         : msg.poll
@@ -2861,13 +3142,18 @@ const ChatRoom = ({
                             : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
                     } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
                   >
-                    <div className="flex justify-between items-start gap-4 mb-2">
+                    <div className={`flex justify-between items-start gap-4 ${hasHeaderContent ? "mb-2" : "mb-0"}`}>
                       {!msg.own && !msg.deleted && (
                         <p className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-widest truncate">
                           {msg.username}
                         </p>
                       )}
                       <div className="flex items-center gap-2 ml-auto shrink-0">
+                        {hasEveryoneMention(msg.message) && !msg.deleted && (
+                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                            @EVERYONE
+                          </span>
+                        )}
                         {msg.isContextMessage && !msg.deleted && (
                           <span className="context-message-badge">CONTEXT</span>
                         )}
@@ -3023,8 +3309,9 @@ const ChatRoom = ({
                       </div>
                     ) : msg.type === "image" ? (
                       (() => {
-                        const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
-                        const imgIdx = imageMessages.findIndex((m) => m.id === msg.id);
+                        const imgIdx = lightboxImages.findIndex(
+                          (item) => item.messageId === msg.id && item.itemIndex === 0,
+                        );
                         return (
                         <div className="space-y-2">
                           <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
@@ -3067,9 +3354,99 @@ const ChatRoom = ({
                               </button>
                             </div>
                           </div>
+                          {msg.caption && !msg.deleted && (
+                            <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
+                              {renderMessageText(msg.caption, `${msg.id}-caption`)}
+                            </p>
+                          )}
                         </div>
                         );
                       })()
+                    ) : msg.type === "image-batch" ? (
+                      <div className="space-y-2">
+                        <div className={`relative overflow-hidden rounded-[14px] p-1 w-[248px] sm:w-[284px] md:w-[320px] ${msg.own ? "border border-zinc-300/45 bg-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]" : "border border-zinc-800/45 bg-zinc-900/75"}`}>
+                          {(() => {
+                            const previewImages = (msg.images || []).slice(0, 4);
+                            const previewCount = previewImages.length;
+                            const remainingCount = (msg.images?.length || 0) - 4;
+                            const gridClass =
+                              previewCount === 1
+                                ? "grid-cols-1"
+                                : previewCount === 3
+                                ? "grid-cols-2"
+                                : "grid-cols-2";
+
+                            return (
+                              <div className={`grid ${gridClass} gap-1`}>
+                                {previewImages.map((imageSrc, imageIndex) => {
+                                  const lightboxIndexForImage = lightboxImages.findIndex(
+                                    (item) => item.messageId === msg.id && item.itemIndex === imageIndex,
+                                  );
+                                  const isLastPreview = imageIndex === 3 && remainingCount > 0;
+                                  const cornerClass =
+                                    previewCount === 1
+                                      ? "rounded-[10px]"
+                                      : previewCount === 2
+                                      ? imageIndex === 0
+                                        ? "rounded-l-[10px] rounded-r-[6px]"
+                                        : "rounded-r-[10px] rounded-l-[6px]"
+                                      : previewCount === 3
+                                      ? imageIndex === 0
+                                        ? "rounded-t-[10px] rounded-b-[6px]"
+                                        : imageIndex === 1
+                                        ? "rounded-bl-[10px] rounded-tr-[6px]"
+                                        : "rounded-br-[10px] rounded-tl-[6px]"
+                                      : imageIndex === 0
+                                      ? "rounded-tl-[10px] rounded-br-[6px]"
+                                      : imageIndex === 1
+                                      ? "rounded-tr-[10px] rounded-bl-[6px]"
+                                      : imageIndex === 2
+                                      ? "rounded-bl-[10px] rounded-tr-[6px]"
+                                      : "rounded-br-[10px] rounded-tl-[6px]";
+                                  const tileClass =
+                                    previewCount === 1
+                                      ? "aspect-[5/4]"
+                                      : previewCount === 2
+                                      ? "aspect-[5/6]"
+                                      : previewCount === 3
+                                      ? imageIndex === 0
+                                        ? "col-span-2 aspect-[3/2]"
+                                        : "aspect-square"
+                                      : "aspect-square";
+
+                                  return (
+                                    <button
+                                      key={`${msg.id}-image-${imageIndex}`}
+                                      type="button"
+                                      className={`relative overflow-hidden group transition-transform duration-200 hover:scale-[1.01] ${tileClass} ${cornerClass}`}
+                                      onClick={() => {
+                                        setLightboxIndex(lightboxIndexForImage >= 0 ? lightboxIndexForImage : 0);
+                                        setLightboxOpen(true);
+                                      }}
+                                    >
+                                      <img
+                                        src={imageSrc}
+                                        alt={`Classified attachment ${imageIndex + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {isLastPreview && (
+                                        <div className="absolute inset-0 bg-black/62 backdrop-blur-[1.5px] flex items-center justify-center">
+                                          <span className="text-white text-[28px] font-black tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">+{remainingCount}</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        {msg.caption && !msg.deleted && (
+                          <p className={`text-[11px] sm:text-xs mt-1.5 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
+                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
+                          </p>
+                        )}
+                      </div>
                     ) : msg.type === "audio" ? (
                       <div className="space-y-2">
                         <div className={`relative overflow-hidden rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
@@ -3169,6 +3546,11 @@ const ChatRoom = ({
                             );
                           })()}
                         </div>
+                        {msg.caption && !msg.deleted && (
+                          <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
+                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
+                          </p>
+                        )}
                       </div>
                     ) : msg.type === "file" ? (
                       <div className="space-y-2">
@@ -3195,6 +3577,11 @@ const ChatRoom = ({
                             </button>
                           </div>
                         </div>
+                        {msg.caption && !msg.deleted && (
+                          <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
+                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
+                          </p>
+                        )}
                       </div>
                     ) : msg.type === "high-clearance" ? (
                       <div className="space-y-2">
@@ -3489,9 +3876,40 @@ const ChatRoom = ({
             </div>
           )}
 
+          {mentionSuggestions.length > 0 && !isRecording && !isMultiAttachmentCaptionLocked && (
+            <div className="mb-2 px-1 sm:px-2">
+              <div className="border border-zinc-700/40 bg-zinc-950/95 rounded-xl overflow-hidden">
+                <p className="px-3 py-1.5 text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold border-b border-zinc-800/40">
+                  Mention Suggestions
+                </p>
+                <div className="max-h-40 overflow-y-auto">
+                  {mentionSuggestions.map((name, index) => {
+                    const isActive = index === activeMentionIndex;
+                    return (
+                      <button
+                        key={`mention-${name}-${index}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => applyMentionSuggestion(name)}
+                        className={`w-full text-left px-3 py-2 text-xs font-mono transition-colors ${
+                          isActive
+                            ? "bg-white/10 text-white"
+                            : "text-zinc-300 hover:bg-white/5"
+                        }`}
+                      >
+                        @{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div
             className={`flex ${hasSelectedAttachments ? "flex-col" : "items-center"} p-1 sm:p-1.5 transition-all rounded-2xl ${isRadioSilenceEnforced ? "bg-zinc-900/70 border border-zinc-700/50 opacity-80" : editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
+
             <div className="flex items-center w-full">
               {/* ── Mobile: single + button with popup (hidden during recording/audio preview) ── */}
               {!isRecording && !audioBlob && (
@@ -3772,51 +4190,62 @@ const ChatRoom = ({
 
               ) : audioBlob && audioPreviewUrl ? (
                 /* Audio preview before sending */
-                <div className="flex-1 flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 md:px-3 min-w-0">
-                  <button
-                    onClick={() => {
-                      if (!audioPreviewRef.current) return;
-                      if (isPlayingPreview) {
-                        audioPreviewRef.current.pause();
-                        setIsPlayingPreview(false);
-                      } else {
-                        audioPreviewRef.current.play();
-                        setIsPlayingPreview(true);
-                      }
-                    }}
-                    className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
-                  >
-                    {isPlayingPreview ? <LuPause size={12} /> : <LuPlay size={12} />}
-                  </button>
-                  <audio
-                    ref={audioPreviewRef}
-                    src={audioPreviewUrl}
-                    onEnded={() => setIsPlayingPreview(false)}
-                    className="hidden"
-                  />
-                  <div className="flex-1 flex items-center gap-0.5 sm:gap-1 h-6 sm:h-7 min-w-0 overflow-hidden">
-                    {/* Static waveform bars for preview */}
-                    {Array.from({ length: 32 }).map((_, i) => {
-                      const h = Math.sin(i * 0.5) * 0.5 + Math.random() * 0.5;
-                      return (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-full bg-white/30"
-                          style={{ height: `${Math.max(3, h * 24)}px`, minWidth: 2, maxWidth: 5 }}
-                        />
-                      );
-                    })}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 md:px-3 min-w-0">
+                    <button
+                      onClick={() => {
+                        if (!audioPreviewRef.current) return;
+                        if (isPlayingPreview) {
+                          audioPreviewRef.current.pause();
+                          setIsPlayingPreview(false);
+                        } else {
+                          audioPreviewRef.current.play();
+                          setIsPlayingPreview(true);
+                        }
+                      }}
+                      className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
+                    >
+                      {isPlayingPreview ? <LuPause size={12} /> : <LuPlay size={12} />}
+                    </button>
+                    <audio
+                      ref={audioPreviewRef}
+                      src={audioPreviewUrl}
+                      onEnded={() => setIsPlayingPreview(false)}
+                      className="hidden"
+                    />
+                    <div className="flex-1 flex items-center gap-0.5 sm:gap-1 h-6 sm:h-7 min-w-0 overflow-hidden">
+                      {Array.from({ length: 32 }).map((_, i) => {
+                        const h = Math.sin(i * 0.5) * 0.5 + Math.random() * 0.5;
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 rounded-full bg-white/30"
+                            style={{ height: `${Math.max(3, h * 24)}px`, minWidth: 2, maxWidth: 5 }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <span className="text-zinc-400 text-[9px] sm:text-[10px] font-mono font-bold tabular-nums tracking-wider shrink-0">
+                      {formatDuration(recordingDuration)}
+                    </span>
+                    <button
+                      onClick={cancelRecording}
+                      className="h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
+                      title="Discard"
+                    >
+                      <LuTrash2 size={13} />
+                    </button>
                   </div>
-                  <span className="text-zinc-400 text-[9px] sm:text-[10px] font-mono font-bold tabular-nums tracking-wider shrink-0">
-                    {formatDuration(recordingDuration)}
-                  </span>
-                  <button
-                    onClick={cancelRecording}
-                    className="h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
-                    title="Discard"
-                  >
-                    <LuTrash2 size={13} />
-                  </button>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={currentMessage}
+                    placeholder={isRadioSilenceEnforced ? `Radio Silence Enforced By HOST...` : "Add caption for voice message..."}
+                    className={`w-full bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
+                    disabled={isRadioSilenceEnforced}
+                    onChange={handleInputChange}
+                    onKeyDown={handleComposerKeyDown}
+                  />
                 </div>
 
               ) : (
@@ -3837,24 +4266,26 @@ const ChatRoom = ({
                     </div>
                   )}
 
-                  {!hasSelectedAttachments && (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={currentMessage}
-                      placeholder={
-                        isRadioSilenceEnforced
-                          ? `Radio Silence Enforced By HOST...`
-                          : editingMessageId
-                          ? "Editing message..."
-                          : "Type your encrypted signal..."
-                      }
-                      className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
-                      disabled={isRadioSilenceEnforced}
-                      onChange={handleInputChange}
-                      onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                    />
-                  )}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={currentMessage}
+                    placeholder={
+                      isRadioSilenceEnforced
+                        ? `Radio Silence Enforced By HOST...`
+                        : isMultiAttachmentCaptionLocked
+                        ? "Caption available for single file or image batch"
+                        : editingMessageId
+                        ? "Editing message..."
+                        : hasSelectedAttachments
+                        ? "Add caption for attachment..."
+                        : "Type your encrypted signal..."
+                    }
+                    className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${(isRadioSilenceEnforced || isMultiAttachmentCaptionLocked) ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
+                    disabled={isRadioSilenceEnforced || isMultiAttachmentCaptionLocked}
+                    onChange={handleInputChange}
+                    onKeyDown={handleComposerKeyDown}
+                  />
                 </>
               )}
 
@@ -3870,7 +4301,21 @@ const ChatRoom = ({
               )}
 
               <button
-                onClick={isRecording ? stopRecording : audioBlob ? sendAudioMessage : hasSelectedAttachments ? sendSelectedAttachments : sendMessage}
+                onClick={() => {
+                  if (isRecording) {
+                    stopRecording();
+                    return;
+                  }
+                  if (audioBlob) {
+                    sendAudioMessage();
+                    return;
+                  }
+                  if (hasSelectedAttachments) {
+                    sendSelectedAttachments();
+                    return;
+                  }
+                  sendMessage();
+                }}
                 className={`p-2.5 sm:p-3 transition-all rounded-xl disabled:opacity-20 disabled:cursor-not-allowed active:scale-90 flex items-center justify-center gap-1.5 ${isRecording ? "bg-red-500 text-white hover:bg-red-400" : editingMessageId ? "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10" : "bg-white text-zinc-900 hover:bg-zinc-100 hover:shadow-lg hover:shadow-white/10 disabled:hover:shadow-none"}`}
                 disabled={isRadioSilenceEnforced || (isRecording ? false : !audioBlob && !hasSelectedAttachments && !currentMessage.trim())}
                 title={isRecording ? "Stop recording" : audioBlob ? "Send audio message" : "Send message"}
@@ -4238,9 +4683,8 @@ const ChatRoom = ({
         {/* Image Lightbox */}
         <AnimatePresence>
           {lightboxOpen && (() => {
-            const imageMessages = messageList.filter((m) => m.type === "image" && m.message);
-            const total = imageMessages.length;
-            const current = imageMessages[lightboxIndex];
+            const total = lightboxImages.length;
+            const current = lightboxImages[lightboxIndex];
             const handlePrev = () => setLightboxIndex((i) => (i - 1 + total) % total);
             const handleNext = () => setLightboxIndex((i) => (i + 1) % total);
             return (
@@ -4300,7 +4744,7 @@ const ChatRoom = ({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <img
-                      src={current?.message}
+                      src={current?.src}
                       alt="Full preview"
                       className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60 max-h-[70dvh] sm:max-h-[80dvh] w-auto object-contain"
                     />
@@ -4311,7 +4755,7 @@ const ChatRoom = ({
                         {current?.username}
                       </span>
                       <button
-                        onClick={() => downloadImage(current?.message, current?.id)}
+                        onClick={() => downloadImage(current?.src, current?.messageId)}
                         className="bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 hover:border-white text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
                       >
                         <LuDownload size={12} />
@@ -4327,9 +4771,9 @@ const ChatRoom = ({
                     className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-sm border border-zinc-700/30 rounded-2xl max-w-[90vw] overflow-x-auto"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {imageMessages.map((im, i) => (
+                    {lightboxImages.map((im, i) => (
                       <button
-                        key={im.id}
+                        key={`${im.messageId}-${im.itemIndex}`}
                         onClick={() => setLightboxIndex(i)}
                         className={`relative flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
                           i === lightboxIndex
@@ -4338,7 +4782,7 @@ const ChatRoom = ({
                         }`}
                       >
                         <img
-                          src={im.message}
+                          src={im.src}
                           alt={`thumb-${i}`}
                           className="w-full h-full object-cover"
                         />
