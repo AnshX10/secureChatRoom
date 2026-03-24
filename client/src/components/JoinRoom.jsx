@@ -94,6 +94,23 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
 
   const roomIdDisplay = (sharedRoomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
 
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
+  const [copiedMagicLink, setCopiedMagicLink] = useState(false);
+
+  const copyRoomId = () => {
+    navigator.clipboard.writeText(sharedRoomId);
+    setCopiedRoomId(true);
+    setTimeout(() => setCopiedRoomId(false), 2000);
+  };
+
+  const copyMagicLink = () => {
+    navigator.clipboard.writeText(magicLinkUrl);
+    setCopiedMagicLink(true);
+    setTimeout(() => setCopiedMagicLink(false), 2000);
+  };
+
+  const isWaiting = view === "waiting";
+
   return (
     <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
       
@@ -105,19 +122,24 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
       <div className="w-full max-w-md relative z-10">
         
         {/* Header */}
-        <div className="text-center mb-8 sm:mb-12">
-          <div className="flex justify-center mb-3 sm:mb-4">
-            <div className="p-2.5 sm:p-3 bg-white/5 rounded-2xl border border-zinc-700/20">
+        <div className={`text-center ${isWaiting ? "mb-6" : "mb-8 sm:mb-12"}`}>
+          <div className={`flex justify-center ${isWaiting ? "mb-3" : "mb-3 sm:mb-4"}`}>
+            <div className="p-3 bg-white/5 rounded-2xl border border-zinc-700/20">
               <Logo variant="shield" className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
             </div>
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight mb-2">
             <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">CHATROOM</span>
           </h1>
-          <p className="text-zinc-600 text-[9px] sm:text-[10px] uppercase tracking-[0.3em] sm:tracking-[0.35em] font-medium">End-to-End Encrypted Signal</p>
+          {!isWaiting && (
+            <p className="text-zinc-600 text-[9px] sm:text-[10px] uppercase tracking-[0.3em] sm:tracking-[0.35em] font-medium">End-to-End Encrypted Signal</p>
+          )}
+          {isWaiting && (
+            <p className="text-zinc-500 text-xs tracking-widest uppercase">End-to-End Encrypted</p>
+          )}
         </div>
 
-        <div className="bg-[#0f0f11] border border-zinc-800/40 p-5 sm:p-7 md:p-8 rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.6)] relative overflow-hidden">
+        <div className="bg-[#0f0f11] border border-zinc-800/40 rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.6)] relative overflow-hidden p-5 sm:p-7 md:p-8">
           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.01] via-transparent to-white/[0.01]" />
           {/* Error banner – show at top for menu/create; join view shows error inline above Connect */}
           {errorMessage && view !== "join" && (
@@ -400,90 +422,102 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
 
             {/* === WAITING FOR AGENTS === */}
             {view === "waiting" && (
-              <motion.div key="waiting" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10">
-                <div className="text-center space-y-6">
+              <motion.div key="waiting" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10 space-y-5">
+
+                {/* Status row */}
+                <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg sm:text-xl font-bold uppercase tracking-[0.15em] mb-2">Frequency Initialized</h2>
-                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em]">Waiting for agents to join...</p>
+                    <h2 className="text-xl font-bold text-white tracking-tight">Room is live</h2>
+                    <p className="text-zinc-500 text-sm mt-0.5">Waiting for agents to join</p>
                   </div>
-
-                  {/* Animated Loading Indicator */}
-                  <div className="flex justify-center py-3">
-                    <div className="relative w-14 h-14">
-                      <div className="absolute inset-0 rounded-full border-2 border-zinc-800/30"></div>
-                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white border-r-white animate-spin"></div>
-                    </div>
+                  <div className="relative flex items-center justify-center w-11 h-11 shrink-0">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-white/10 animate-ping" style={{ animationDuration: '2s' }} />
+                    <span className="absolute inline-flex h-7 w-7 rounded-full bg-white/5 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)]" />
                   </div>
-
-                  {/* Room ID Display */}
-                  <div className="space-y-3">
-                    <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-zinc-500 flex items-center justify-center gap-2">
-                      <LuScanLine className="text-zinc-600 shrink-0" size={14} /> ROOM ID
-                    </p>
-                    <div className="grid grid-cols-8 gap-1.5 sm:gap-2 justify-center">
-                      {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
-                        const char = roomIdDisplay[index] || "";
-                        return (
-                          <div
-                            key={`waiting-room-id-box-${index}`}
-                            className="h-10 w-9 sm:h-11 sm:w-10 rounded-lg border border-zinc-700/60 bg-black/45 flex items-center justify-center text-[15px] sm:text-base font-black tracking-widest font-mono text-zinc-100"
-                          >
-                            {char || "•"}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Copy Room ID Button */}
-                  <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(sharedRoomId);
-                    }}
-                    className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
-                  >
-                    <LuCopy size={14} /> Copy Room ID
-                  </button>
-
-                  {/* Magic Link Display */}
-                  {magicLinkUrl && (
-                    <div className="space-y-3 pt-2">
-                      <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-zinc-500 flex items-center justify-center gap-2">
-                        <LuLink className="text-zinc-600 shrink-0" size={14} /> MAGIC LINK
-                      </p>
-                      <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-3 py-2 text-[8px] text-zinc-300 font-mono break-all max-h-20 overflow-y-auto">
-                        {magicLinkUrl}
-                      </div>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(magicLinkUrl);
-                        }}
-                        className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
-                      >
-                        <LuCopy size={14} /> Copy Magic Link
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Info Message */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/30 px-4 py-3 rounded-xl text-[10px] text-zinc-400 uppercase tracking-[0.2em] text-center space-y-1">
-                    <p>Share room ID or magic link with agents.</p>
-                    <p className="text-zinc-500">Room will be created when first agent joins.</p>
-                  </div>
-
-                  {/* Go Back Button */}
-                  <button
-                    onClick={() => { 
-                      clearError?.(); 
-                      setView("menu");
-                      setSharedRoomId("");
-                      setMagicLinkUrl("");
-                    }}
-                    className="w-full bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-3 sm:p-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-[10px] uppercase tracking-[0.15em]"
-                  >
-                    <LuArrowLeft size={14} /> Back to Menu
-                  </button>
                 </div>
+
+                <div className="h-px bg-zinc-800/60" />
+
+                {/* Room ID card */}
+                <button
+                  onClick={copyRoomId}
+                  className="w-full text-left group bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/50 hover:border-zinc-700 rounded-2xl p-4 transition-all duration-200 active:scale-[0.99]"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-zinc-800 rounded-lg">
+                        <LuScanLine size={13} className="text-zinc-400" />
+                      </div>
+                      <span className="text-sm font-semibold text-white tracking-wide">Room ID</span>
+                    </div>
+                    <span className={`text-xs flex items-center gap-1.5 transition-colors ${copiedRoomId ? "text-green-400" : "text-zinc-600 group-hover:text-zinc-400"}`}>
+                      <LuCopy size={11} />
+                      {copiedRoomId ? "Copied!" : "Click to copy"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-8 gap-2 mb-3">
+                    {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
+                      const char = roomIdDisplay[index] || "";
+                      return (
+                        <div
+                          key={`waiting-room-id-box-${index}`}
+                          className="h-10 rounded-xl border border-zinc-700/60 bg-black/50 flex items-center justify-center text-base font-black font-mono text-white"
+                        >
+                          {char || <span className="text-zinc-700">·</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    Share this code with agents. They'll also need the encryption key you set when creating the room.
+                  </p>
+                </button>
+
+                {/* Magic Link card */}
+                {magicLinkUrl && (
+                  <button
+                    onClick={copyMagicLink}
+                    className="w-full text-left group bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/50 hover:border-zinc-700 rounded-2xl p-4 transition-all duration-200 active:scale-[0.99]"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-zinc-800 rounded-lg">
+                          <LuLink size={13} className="text-zinc-400" />
+                        </div>
+                        <span className="text-sm font-semibold text-white tracking-wide">Magic Link</span>
+                      </div>
+                      <span className={`text-xs flex items-center gap-1.5 transition-colors ${copiedMagicLink ? "text-green-400" : "text-zinc-600 group-hover:text-zinc-400"}`}>
+                        <LuCopy size={11} />
+                        {copiedMagicLink ? "Copied!" : "Click to copy"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      One-tap invite link — bundles the room ID and encryption key together. No manual entry needed on the agent's side.
+                    </p>
+                  </button>
+                )}
+
+                {/* Footer note */}
+                <p className="text-center text-xs text-zinc-600">
+                  The room activates as soon as the first agent joins.
+                </p>
+
+                {/* Back */}
+                <button
+                  onClick={() => {
+                    clearError?.();
+                    setView("menu");
+                    setSharedRoomId("");
+                    setMagicLinkUrl("");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-zinc-800/50 hover:border-zinc-700 text-zinc-500 hover:text-white text-sm font-medium transition-all active:scale-[0.98]"
+                >
+                  <LuArrowLeft size={15} /> Back to Menu
+                </button>
+
               </motion.div>
             )}
 
