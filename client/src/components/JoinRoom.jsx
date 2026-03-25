@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuFingerprint, LuShieldCheck, LuZap, LuCopy, LuLink } from 'react-icons/lu';
+import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuFingerprint, LuShieldCheck, LuZap, LuCopy, LuLink, LuEye, LuEyeOff } from 'react-icons/lu';
 import Logo from './Logo';
 import { decryptMagicLinkPayload, encryptMagicLinkPayload } from '../utils/magicLink';
 
@@ -11,8 +11,8 @@ const MAX_ROOM_CAPACITY = 50;
 const DEFAULT_ROOM_CAPACITY = 50;
 const ROOM_ID_BOX_COUNT = 8;
 
-const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent, roomId, hostRoomPassword, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
-  const [view, setView] = useState("menu"); 
+const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaitingForFirstAgent, roomId, hostRoomPassword, errorMessage, setErrorMessage, clearError, isWaitingApproval }) => {
+  const [view, setView] = useState("menu");
   const [username, setUsername] = useState("");
   const [sharedRoomId, setSharedRoomId] = useState("");
   const [roomPassword, setRoomPassword] = useState("");
@@ -21,6 +21,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
   const [requireApproval, setRequireApproval] = useState(false);
   const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
   const [magicLinkUrl, setMagicLinkUrl] = useState(""); // Store generated magic link
+  const [showEncryptionKey, setShowEncryptionKey] = useState(false);
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
@@ -28,7 +29,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
     if (hash) {
       const params = new URLSearchParams(hash);
       const invitePayload = params.get('invite');
-      
+
       if (invitePayload) {
         const data = decryptMagicLinkPayload(invitePayload);
         if (data) {
@@ -37,7 +38,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
           setRoomPassword(data.key);
           setIsMagicLink(true);
           setView("join");
-          
+
           // Clear hash from URL for security/privacy
           window.history.replaceState(null, '', window.location.pathname);
         }
@@ -50,7 +51,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
     if (isWaitingForFirstAgent) {
       setSharedRoomId(roomId || "");
       setView("waiting");
-      
+
       // Generate magic link with room ID and password
       const passwordForInvite = roomPassword || hostRoomPassword;
       if (roomId && passwordForInvite) {
@@ -60,6 +61,27 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
       }
     }
   }, [isWaitingForFirstAgent, roomId, roomPassword, hostRoomPassword]);
+
+  const handleBackToMenu = () => {
+    clearError?.();
+    setUsername("");
+    setSharedRoomId("");
+    setRoomPassword("");
+    setRoomName("");
+    setRequireApproval(false);
+    setRoomCapacity(DEFAULT_ROOM_CAPACITY);
+    setMagicLinkUrl("");
+    setShowEncryptionKey(false);
+    setIsMagicLink(false);
+    setView("menu");
+  };
+
+  useEffect(() => {
+    if (!isWaitingForFirstAgent && view === "waiting") {
+      handleBackToMenu();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWaitingForFirstAgent, view]);
 
   const validateEncryptionKey = (key) => {
     const len = (key || "").length;
@@ -113,14 +135,14 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
 
   return (
     <div className="min-h-[100dvh] bg-[#09090b] text-white flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-zinc-700 selection:text-white">
-      
+
       {/* Background Grid Noise */}
-      <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)', backgroundSize: '28px 28px' }}>
+      <div className="absolute inset-0 z-0 opacity-10 pointer-events-none"
+        style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)', backgroundSize: '28px 28px' }}>
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        
+
         {/* Header */}
         <div className={`text-center ${isWaiting ? "mb-6" : "mb-8 sm:mb-12"}`}>
           <div className={`flex justify-center ${isWaiting ? "mb-3" : "mb-3 sm:mb-4"}`}>
@@ -156,7 +178,7 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
             </div>
           )}
           <AnimatePresence mode="wait">
-            
+
             {/* === MAIN MENU === */}
             {view === "menu" && (
               <motion.div
@@ -218,27 +240,30 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
             {view === "create" && (
               <motion.div key="create" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10">
                 <div className="flex items-center gap-3 sm:gap-3.5 mb-6 sm:mb-8">
-                  <button onClick={() => { clearError?.(); setView("menu"); }} className="p-2 hover:bg-white/5 rounded-xl transition-all active:scale-90"><LuArrowLeft size={20} /></button>
+                  <button onClick={handleBackToMenu} disabled={isCreatingRoom} className="p-2 hover:bg-white/5 rounded-xl transition-all active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed"><LuArrowLeft size={20} /></button>
                   <h2 className="text-base sm:text-lg font-bold uppercase tracking-[0.15em]">Init Host</h2>
                 </div>
 
                 <div className="space-y-5">
-                  <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
+                  <div className={`bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${isCreatingRoom ? 'opacity-50 pointer-events-none' : 'focus-within:border-zinc-600'}`}>
                     <LuUser className="text-zinc-600 shrink-0" size={16} />
-                    <input type="text" placeholder="CODENAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm" onChange={(e) => setUsername(e.target.value)} />
+                    <input type="text" placeholder="CODENAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm" onChange={(e) => setUsername(e.target.value)} disabled={isCreatingRoom} />
                   </div>
 
-                  <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
+                  <div className={`bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${isCreatingRoom ? 'opacity-50 pointer-events-none' : 'focus-within:border-zinc-600'}`}>
                     <LuZap className="text-zinc-600 shrink-0" size={16} />
-                    <input type="text" placeholder="ROOM NAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm" onChange={(e) => setRoomName(e.target.value)} maxLength={32} />
+                    <input type="text" placeholder="ROOM NAME" className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm" onChange={(e) => setRoomName(e.target.value)} maxLength={32} disabled={isCreatingRoom} />
                   </div>
 
-                  <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
+                  <div className={`bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${isCreatingRoom ? 'opacity-50 pointer-events-none' : 'focus-within:border-zinc-600'}`}>
                     <LuKeyRound className="text-zinc-600 shrink-0" size={16} />
-                    <input type="text" placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} />
+                    <input type={showEncryptionKey ? "text" : "password"} placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono" onChange={(e) => setRoomPassword(e.target.value)} maxLength={MAX_ENCRYPTION_KEY_LENGTH} disabled={isCreatingRoom} />
+                    <button type="button" onClick={() => setShowEncryptionKey(!showEncryptionKey)} className="text-zinc-500 hover:text-white transition-colors p-1" tabIndex="-1">
+                      {showEncryptionKey ? <LuEyeOff size={16} /> : <LuEye size={16} />}
+                    </button>
                   </div>
 
-                  <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
+                  <div className={`bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${isCreatingRoom ? 'opacity-50 pointer-events-none' : 'focus-within:border-zinc-600'}`}>
                     <LuUser className="text-zinc-600 shrink-0" size={16} />
                     <input
                       type="number"
@@ -248,13 +273,14 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
                       className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm"
                       value={roomCapacity}
                       onChange={(e) => setRoomCapacity(e.target.value)}
+                      disabled={isCreatingRoom}
                     />
                     <span className="text-[9px] uppercase tracking-wider text-zinc-600">
                       max {MAX_ROOM_CAPACITY}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 pt-2 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] text-zinc-400">
+                  <div className={`flex items-center justify-between gap-3 pt-2 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] text-zinc-400 ${isCreatingRoom ? 'opacity-50 pointer-events-none' : ''}`}>
                     <div className="flex flex-col gap-1">
                       <span className="text-[10px] font-medium">Require Host Approval</span>
                       <span className="text-[8px] text-zinc-600 normal-case tracking-normal">New agents must be accepted by you</span>
@@ -262,28 +288,26 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
                     <button
                       type="button"
                       onClick={() => setRequireApproval((v) => !v)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
-                        requireApproval
-                          ? "bg-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
-                          : "bg-zinc-800 border border-zinc-700/50"
-                      }`}
+                      disabled={isCreatingRoom}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${requireApproval
+                        ? "bg-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
+                        : "bg-zinc-800 border border-zinc-700/50"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4.5 w-4.5 transform rounded-full bg-black transition-transform duration-200 shadow-sm ${
-                          requireApproval ? "translate-x-[22px]" : "translate-x-[3px]"
-                        }`}
+                        className={`inline-block h-4.5 w-4.5 transform rounded-full bg-black transition-transform duration-200 shadow-sm ${requireApproval ? "translate-x-[22px]" : "translate-x-[3px]"
+                          }`}
                       />
                     </button>
                   </div>
 
                   <button
                     onClick={handleCreate}
-                    disabled={isCreatingRoom}
-                    className={`w-full mt-5 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 font-bold py-4 uppercase tracking-[0.15em] text-sm rounded-xl transition-all active:scale-[0.98] ${
-                      isCreatingRoom
-                        ? "opacity-70 cursor-not-allowed"
-                        : "hover:shadow-lg hover:shadow-white/10"
-                    }`}
+                    disabled={isCreatingRoom || !username || !roomName || roomPassword.length < MIN_ENCRYPTION_KEY_LENGTH}
+                    className={`w-full mt-5 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 font-bold py-4 uppercase tracking-[0.15em] text-sm rounded-xl transition-all active:scale-[0.98] ${(isCreatingRoom || !username || !roomName || roomPassword.length < MIN_ENCRYPTION_KEY_LENGTH)
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:shadow-lg hover:shadow-white/10"
+                      }`}
                   >
                     {isCreatingRoom ? (
                       <div className="flex items-center justify-center gap-2">
@@ -302,14 +326,8 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
             {view === "join" && (
               <motion.div key="join" variants={variants} initial="initial" animate="animate" exit="exit" className="relative z-10">
                 <div className="flex items-center gap-3.5 mb-8">
-                  <button 
-                    onClick={() => {
-                      clearError?.();
-                      setIsMagicLink(false);
-                      setRoomId("");
-                      setRoomPassword("");
-                      setView("menu");
-                    }} 
+                  <button
+                    onClick={handleBackToMenu}
                     className="p-2 hover:bg-white/5 rounded-xl transition-all active:scale-90"
                   >
                     <LuArrowLeft size={20} />
@@ -331,10 +349,10 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
 
                   <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
                     <LuUser className="text-zinc-600 shrink-0" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="CODENAME" 
-                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm" 
+                    <input
+                      type="text"
+                      placeholder="CODENAME"
+                      className="bg-transparent w-full outline-none placeholder:text-zinc-700 uppercase text-sm"
                       onChange={(e) => setUsername(e.target.value)}
                       value={username}
                       autoFocus={isMagicLink}
@@ -375,14 +393,17 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
 
                       <div className="bg-zinc-900/40 border border-zinc-800/30 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-zinc-600 transition-colors">
                         <LuKeyRound className="text-zinc-600 shrink-0" size={16} />
-                        <input 
-                          type="text" 
-                          placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`} 
-                          className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono" 
+                        <input
+                          type={showEncryptionKey ? "text" : "password"}
+                          placeholder={`ENCRYPTION KEY (${MIN_ENCRYPTION_KEY_LENGTH}-${MAX_ENCRYPTION_KEY_LENGTH} chars)`}
+                          className="bg-transparent w-full outline-none placeholder:text-zinc-700 text-sm font-mono"
                           onChange={(e) => setRoomPassword(e.target.value)}
                           value={roomPassword}
                           maxLength={MAX_ENCRYPTION_KEY_LENGTH}
                         />
+                        <button type="button" onClick={() => setShowEncryptionKey(!showEncryptionKey)} className="text-zinc-500 hover:text-white transition-colors p-1" tabIndex="-1">
+                          {showEncryptionKey ? <LuEyeOff size={16} /> : <LuEye size={16} />}
+                        </button>
                       </div>
                     </>
                   )}
@@ -409,8 +430,8 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleJoin} 
+                  <button
+                    onClick={handleJoin}
                     className="w-full mt-5 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 font-bold py-4 uppercase tracking-[0.15em] text-sm rounded-xl transition-all hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                     disabled={isWaitingApproval || !username || (!isMagicLink && (!sharedRoomId || !roomPassword))}
                   >
@@ -505,17 +526,14 @@ const JoinRoom = ({ joinRoom, createRoom, isCreatingRoom, isWaitingForFirstAgent
                   The room activates as soon as the first agent joins.
                 </p>
 
-                {/* Back */}
+                {/* Terminate */}
                 <button
                   onClick={() => {
-                    clearError?.();
-                    setView("menu");
-                    setSharedRoomId("");
-                    setMagicLinkUrl("");
+                    if (terminateRoom) terminateRoom();
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-zinc-800/50 hover:border-zinc-700 text-zinc-500 hover:text-white text-sm font-medium transition-all active:scale-[0.98]"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-900/30 bg-red-950/20 text-red-500 text-sm font-bold uppercase tracking-wider transition-all active:scale-[0.98]"
                 >
-                  <LuArrowLeft size={15} /> Back to Menu
+                  Terminate Room
                 </button>
 
               </motion.div>

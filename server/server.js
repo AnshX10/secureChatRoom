@@ -794,6 +794,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("close_room", ({ roomId }) => {
+    if (pendingRooms[roomId] && pendingRooms[roomId].hostId === socket.id) {
+      delete pendingRooms[roomId];
+      socket.emit("room_closed");
+      return;
+    }
+    
     if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
       io.to(roomId).emit("room_closed");
       io.in(roomId).socketsLeave(roomId);

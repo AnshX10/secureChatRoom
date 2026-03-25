@@ -190,6 +190,12 @@ function App() {
     window.location.reload(); 
   };
 
+  const terminateRoom = () => {
+    if (roomId) {
+      socket.emit("close_room", { roomId });
+    }
+  };
+
   // Show demo if on demo route
   if (isDemoRoute) {
     return <BiometricDemo />;
@@ -201,6 +207,7 @@ function App() {
         <JoinRoom 
           createRoom={createRoom} 
           joinRoom={joinRoom} 
+          terminateRoom={terminateRoom}
           isCreatingRoom={isCreatingRoom}
           isWaitingForFirstAgent={isWaitingForFirstAgent}
           roomId={roomId}
