@@ -52,6 +52,14 @@ const destroyedRooms = new Map();
 // Context message tracking: roomId -> { messages: [] }
 const contextMessages = {};
 const ALLOWED_REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🙏"]);
+const IMAGE_PIN_SEPARATOR = "::img::";
+
+function extractPinnedMessageId(pinKey) {
+  if (!pinKey || typeof pinKey !== "string") return null;
+  const splitIndex = pinKey.indexOf(IMAGE_PIN_SEPARATOR);
+  if (splitIndex === -1) return pinKey;
+  return pinKey.slice(0, splitIndex);
+}
 
 function serializeRoomMessageReactions(messageReactions = {}) {
   return Object.entries(messageReactions).reduce((acc, [messageId, perUser]) => {
@@ -168,6 +176,7 @@ io.on("connection", (socket) => {
       capacity: roomCapacity,
       isLocked: false,
       silencedUserIds: [],
+      pinnedMessageIds: [],
       messageOwners: {},
       messageReactions: {},
       requireApproval: !!requireApproval,
@@ -224,6 +233,7 @@ io.on("connection", (socket) => {
         isLocked: pendingRoom.isLocked,
         isHalted: false,
         silencedUserIds: pendingRoom.silencedUserIds,
+        pinnedMessageIds: pendingRoom.pinnedMessageIds || [],
         messageOwners: pendingRoom.messageOwners,
         messageReactions: pendingRoom.messageReactions || {},
         requireApproval: pendingRoom.requireApproval,
@@ -611,6 +621,7 @@ io.on("connection", (socket) => {
         fileName: data.fileName || null,
         fileSize: data.fileSize || null,
         fileType: data.fileType || null,
+        filePageCount: data.filePageCount || 1,
         audioDuration: data.audioDuration || null,
         caption: data.caption || null,
         poll: data.poll || null,
@@ -629,6 +640,15 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("message_deleted", payload.id);
         if (payload?.id && room.messageOwners) {
           delete room.messageOwners[payload.id];
+        }
+        if (payload?.id) {
+          room.pinnedMessageIds = (room.pinnedMessageIds || []).filter(
+            (pinKey) => extractPinnedMessageId(pinKey) !== payload.id,
+          );
+          io.to(roomId).emit("pinned_messages_update", {
+            roomId,
+            pinnedMessageIds: room.pinnedMessageIds,
+          });
         }
         if (payload?.id && room.messageReactions) {
           delete room.messageReactions[payload.id];
@@ -702,6 +722,48 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("poll_vote_update", { roomId, messageId, optionId, action, username });
   });
 
+  socket.on("get_pinned_messages", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const senderInRoom = room.users.some((user) => user.id === socket.id);
+    if (!senderInRoom) return;
+
+    socket.emit("pinned_messages_sync", {
+      roomId,
+      pinnedMessageIds: room.pinnedMessageIds || [],
+    });
+  });
+
+  socket.on("toggle_pin_message", ({ roomId, messageId, pinKey }) => {
+    const room = rooms[roomId];
+    const resolvedPinKey =
+      typeof pinKey === "string" && pinKey.trim()
+        ? pinKey.trim()
+        : typeof messageId === "string"
+          ? messageId
+          : null;
+    if (!room || !resolvedPinKey) return;
+
+    const senderInRoom = room.users.some((user) => user.id === socket.id);
+    if (!senderInRoom) return;
+
+    const currentPinnedIds = new Set(room.pinnedMessageIds || []);
+    if (currentPinnedIds.has(resolvedPinKey)) {
+      currentPinnedIds.delete(resolvedPinKey);
+    } else {
+      currentPinnedIds.add(resolvedPinKey);
+    }
+
+    room.pinnedMessageIds = Array.from(currentPinnedIds);
+
+    io.to(roomId).emit("pinned_messages_update", {
+      roomId,
+      pinnedMessageIds: room.pinnedMessageIds,
+      updatedBy: socket.id,
+    });
+  });
+
   socket.on("get_message_reactions", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -764,6 +826,14 @@ io.on("connection", (socket) => {
     if (room.messageOwners) {
       delete room.messageOwners[messageId];
     }
+    room.pinnedMessageIds = (room.pinnedMessageIds || []).filter(
+      (pinKey) => extractPinnedMessageId(pinKey) !== messageId,
+    );
+    io.to(roomId).emit("pinned_messages_update", {
+      roomId,
+      pinnedMessageIds: room.pinnedMessageIds,
+      updatedBy: socket.id,
+    });
     if (room.messageReactions) {
       delete room.messageReactions[messageId];
     }
