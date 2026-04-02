@@ -53,7 +53,7 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
       const passwordForInvite = roomPassword || hostRoomPassword;
       if (roomId && passwordForInvite) {
         const encrypted = encryptMagicLinkPayload(roomId, passwordForInvite);
-        const magicUrl = `${window.location.origin}/chatroom#invite=${encrypted}`;
+        const magicUrl = `${window.location.origin}/?invite=${encrypted}`;
         setMagicLinkUrl(magicUrl);
       }
     }

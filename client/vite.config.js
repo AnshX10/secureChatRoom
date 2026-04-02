@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // server: {
+  //   allowedHosts: ["sequence-discretion-humor-salt.trycloudflare.com"],
+  // },
   plugins: [
     react(),
     VitePWA({
@@ -45,4 +48,39 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-vendor';
+            }
+
+            if (id.includes('/react/')) {
+              return 'react-vendor';
+            }
+
+            if (id.includes('socket.io-client')) {
+              return 'socket-vendor';
+            }
+
+            if (id.includes('framer-motion') || id.includes('gsap') || id.includes('lenis')) {
+              return 'motion-vendor';
+            }
+
+            if (id.includes('react-icons')) {
+              return 'icons-vendor';
+            }
+
+            if (id.includes('date-fns') || id.includes('crypto-js') || id.includes('uuid') || id.includes('react-toastify')) {
+              return 'utility-vendor';
+            }
+
+            return 'vendor';
+          }
+        },
+      },
+    },
+  },
 });
