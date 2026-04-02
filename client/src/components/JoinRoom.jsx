@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuFingerprint, LuShieldCheck, LuZap, LuCopy, LuLink, LuEye, LuEyeOff } from 'react-icons/lu';
+import { LuRocket, LuLogIn, LuArrowLeft, LuKeyRound, LuUser, LuScanLine, LuShieldCheck, LuZap, LuCopy, LuLink, LuEye, LuEyeOff } from 'react-icons/lu';
 import Logo from './Logo';
 import { decryptMagicLinkPayload, encryptMagicLinkPayload } from '../utils/magicLink';
 
@@ -25,23 +25,20 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
 
   // Parse URL hash for Magic Invite Link (encrypted payload)
   useEffect(() => {
-    const hash = window.location.hash.substring(1); // Remove the #
-    if (hash) {
-      const params = new URLSearchParams(hash);
-      const invitePayload = params.get('invite');
+    const hash = window.location.hash.substring(1);
+    const hashParams = new URLSearchParams(hash);
+    const queryParams = new URLSearchParams(window.location.search);
+    const invitePayload = hashParams.get('invite') || queryParams.get('invite');
 
-      if (invitePayload) {
-        const data = decryptMagicLinkPayload(invitePayload);
-        if (data) {
-          // Auto-fill from decrypted magic link
-          setSharedRoomId(data.room.toUpperCase());
-          setRoomPassword(data.key);
-          setIsMagicLink(true);
-          setView("join");
+    if (invitePayload) {
+      const data = decryptMagicLinkPayload(invitePayload);
+      if (data) {
+        setSharedRoomId(data.room.toUpperCase());
+        setRoomPassword(data.key);
+        setIsMagicLink(true);
+        setView("join");
 
-          // Clear hash from URL for security/privacy
-          window.history.replaceState(null, '', window.location.pathname);
-        }
+        window.history.replaceState(null, '', window.location.pathname);
       }
     }
   }, []);
@@ -56,7 +53,7 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
       const passwordForInvite = roomPassword || hostRoomPassword;
       if (roomId && passwordForInvite) {
         const encrypted = encryptMagicLinkPayload(roomId, passwordForInvite);
-        const magicUrl = `${window.location.origin}#invite=${encrypted}`;
+        const magicUrl = `${window.location.origin}/chatroom#invite=${encrypted}`;
         setMagicLinkUrl(magicUrl);
       }
     }
@@ -151,7 +148,7 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
             </div>
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight mb-2">
-            <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">CHATROOM</span>
+            <span className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">GHOST TUNNEL</span>
           </h1>
           {!isWaiting && (
             <p className="text-zinc-600 text-[9px] sm:text-[10px] uppercase tracking-[0.3em] sm:tracking-[0.35em] font-medium">End-to-End Encrypted Signal</p>
@@ -216,21 +213,6 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
                   </div>
                   <div className="p-2 bg-white/5 rounded-xl">
                     <LuLogIn className="text-xl text-zinc-500 group-hover:text-white transition-colors" />
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => {
-                    window.location.hash = '#demo';
-                  }}
-                  className="w-full group bg-zinc-900/50 text-white border border-zinc-800/40 hover:border-zinc-700 p-4 sm:p-5 md:p-6 rounded-xl transition-all flex items-center justify-between active:scale-[0.98]"
-                >
-                  <div className="text-left">
-                    <span className="block font-bold text-base sm:text-lg tracking-wide">BIOMETRIC DEMO</span>
-                    <span className="text-zinc-600 text-[10px] uppercase tracking-[0.2em]">Security test</span>
-                  </div>
-                  <div className="p-2 bg-white/5 rounded-xl">
-                    <LuFingerprint className="text-xl text-zinc-500 group-hover:text-white transition-colors" />
                   </div>
                 </button>
               </motion.div>
@@ -333,7 +315,7 @@ const JoinRoom = ({ joinRoom, createRoom, terminateRoom, isCreatingRoom, isWaiti
                     <LuArrowLeft size={20} />
                   </button>
                   <h2 className="text-lg font-bold uppercase tracking-[0.15em]">
-                    {isMagicLink ? "Magic Link Detected" : "Uplink"}
+                    {isMagicLink ? "Magic Link" : "Uplink"}
                   </h2>
                 </div>
 

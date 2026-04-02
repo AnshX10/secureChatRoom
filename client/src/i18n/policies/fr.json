@@ -1,0 +1,159 @@
+{
+  "language": "Français",
+  "terms": {
+    "title": "Conditions d’Utilisation",
+    "lastUpdated": "2 avril 2026",
+    "sections": [
+      {
+        "heading": "1. Acceptation et Portée",
+        "paragraph": "En utilisant Ghost Tunnel, vous acceptez ces Conditions et les politiques associées.",
+        "bullets": [
+          "S’applique aux visiteurs, hôtes et participants.",
+          "Vous devez avoir la capacité légale d’accepter ces Conditions.",
+          "Si vous n’êtes pas d’accord, arrêtez d’utiliser le service."
+        ]
+      },
+      {
+        "heading": "2. Utilisation Responsable",
+        "paragraph": "Vous devez utiliser le service légalement et de manière responsable.",
+        "bullets": [
+          "Ne pas harceler, menacer ou abuser d’autrui.",
+          "Ne pas diffuser de malware ni lancer d’attaques.",
+          "Ne pas contourner les contrôles de sécurité."
+        ]
+      },
+      {
+        "heading": "3. Sécurité et Chiffrement",
+        "paragraph": "Le service est conçu pour des communications chiffrées, mais aucun système n’est parfait.",
+        "bullets": [
+          "Gardez privés les identifiants de salle et les clés.",
+          "Un appareil compromis peut exposer du contenu.",
+          "La sécurité des terminaux relève de l’utilisateur."
+        ]
+      },
+      {
+        "heading": "4. Contenu et Droits",
+        "paragraph": "Vous êtes responsable du contenu envoyé ou téléversé.",
+        "bullets": [
+          "Vous devez détenir les droits nécessaires sur le contenu partagé.",
+          "Le contenu illégal ou contrefaisant est interdit.",
+          "La marque et le code de la plateforme restent protégés."
+        ]
+      },
+      {
+        "heading": "5. Contrôles de l’Hôte",
+        "paragraph": "Les hôtes peuvent modérer la salle pour des raisons de sécurité et de gouvernance.",
+        "bullets": [
+          "Les hôtes peuvent accepter ou refuser des demandes.",
+          "Ils peuvent verrouiller des salles ou couper le micro d’utilisateurs.",
+          "L’abus de ces contrôles peut être restreint."
+        ]
+      },
+      {
+        "heading": "6. Disponibilité du Service",
+        "paragraph": "Les fonctionnalités peuvent changer ou être interrompues pour maintenance ou sécurité.",
+        "bullets": [
+          "Des interruptions peuvent survenir sans préavis.",
+          "Les fonctionnalités varient selon navigateur et appareil.",
+          "Nous pouvons modifier ou arrêter des fonctionnalités."
+        ]
+      },
+      {
+        "heading": "7. Responsabilité et Exclusions",
+        "paragraph": "Le service est fourni \"en l’état\" et \"selon disponibilité\".",
+        "bullets": [
+          "Aucune garantie de fonctionnement ininterrompu.",
+          "Aucune garantie de sécurité absolue dans tous les scénarios.",
+          "Les dommages indirects sont exclus dans la mesure permise par la loi."
+        ]
+      },
+      {
+        "heading": "8. Mise à Jour des Conditions",
+        "paragraph": "Ces Conditions peuvent être révisées selon l’évolution légale, technique ou produit.",
+        "bullets": [
+          "Les versions mises à jour prennent effet à la publication.",
+          "L’usage continu vaut acceptation.",
+          "Consultez régulièrement cette page."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Politique de Confidentialité",
+    "lastUpdated": "2 avril 2026",
+    "sections": [
+      {
+        "heading": "1. Portée",
+        "paragraph": "Cette politique décrit la gestion des données sur les pages landing, politiques et chat.",
+        "bullets": [
+          "S’applique aux hôtes et participants.",
+          "S’applique aux navigateurs desktop et mobile.",
+          "Couvre les fonctions de sécurité du produit."
+        ]
+      },
+      {
+        "heading": "2. Catégories de Données",
+        "paragraph": "Nous traitons les données techniques et opérationnelles nécessaires au service.",
+        "bullets": [
+          "Métadonnées de session et de connexion.",
+          "Événements de contrôle de salle.",
+          "Messages et médias chiffrés."
+        ]
+      },
+      {
+        "heading": "3. Finalités du Traitement",
+        "paragraph": "Les données sont traitées pour une communication sécurisée et une meilleure fiabilité.",
+        "bullets": [
+          "Fournir les fonctionnalités de salle et de messagerie.",
+          "Soutenir la modération et les contrôles de sécurité.",
+          "Détecter les abus et résoudre les incidents."
+        ]
+      },
+      {
+        "heading": "4. Modèle de Chiffrement",
+        "paragraph": "Le contenu est destiné à être chiffré côté client avant transmission.",
+        "bullets": [
+          "Le traitement en clair est minimisé.",
+          "La confidentialité des clés dépend de l’utilisateur.",
+          "Un terminal compromis reste un risque."
+        ]
+      },
+      {
+        "heading": "5. Conservation",
+        "paragraph": "La conservation est limitée aux besoins opérationnels et de sécurité.",
+        "bullets": [
+          "L’état temporaire des salles peut être purgé.",
+          "Les actions de l’hôte peuvent affecter le cycle de vie des données.",
+          "Les diagnostics de sécurité peuvent être conservés brièvement."
+        ]
+      },
+      {
+        "heading": "6. Mesures de Sécurité",
+        "paragraph": "Nous appliquons des mesures techniques et organisationnelles pour réduire les risques.",
+        "bullets": [
+          "Flux de chiffrement côté client.",
+          "Modération de salle et contrôle d’accès.",
+          "Surveillance des comportements suspects."
+        ]
+      },
+      {
+        "heading": "7. Droits et Choix des Utilisateurs",
+        "paragraph": "Selon votre juridiction, vous pouvez disposer de droits légaux sur vos données.",
+        "bullets": [
+          "Des droits d’accès, de rectification et d’effacement peuvent s’appliquer.",
+          "Vous pouvez supprimer les données locales du navigateur à tout moment.",
+          "Vous pouvez cesser d’utiliser le service à tout moment."
+        ]
+      },
+      {
+        "heading": "8. Mise à Jour de la Politique",
+        "paragraph": "Cette politique peut évoluer selon les exigences légales ou produit.",
+        "bullets": [
+          "Les mises à jour prennent effet à la publication.",
+          "Veuillez consulter cette page régulièrement.",
+          "L’usage continu vaut acceptation des mises à jour."
+        ]
+      }
+    ]
+  }
+}

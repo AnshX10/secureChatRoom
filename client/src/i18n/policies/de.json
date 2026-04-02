@@ -1,0 +1,159 @@
+{
+  "language": "Deutsch",
+  "terms": {
+    "title": "Nutzungsbedingungen",
+    "lastUpdated": "2. April 2026",
+    "sections": [
+      {
+        "heading": "1. Annahme und Geltungsbereich",
+        "paragraph": "Durch die Nutzung von Ghost Tunnel stimmen Sie diesen Bedingungen und den zugehörigen Richtlinien zu.",
+        "bullets": [
+          "Gilt für Besucher, Gastgeber und Teilnehmer.",
+          "Sie müssen rechtlich berechtigt sein, diese Bedingungen zu akzeptieren.",
+          "Wenn Sie nicht zustimmen, stellen Sie die Nutzung ein."
+        ]
+      },
+      {
+        "heading": "2. Verantwortungsvolle Nutzung",
+        "paragraph": "Sie müssen den Dienst legal und verantwortungsvoll nutzen.",
+        "bullets": [
+          "Belästigen, bedrohen oder missbrauchen Sie andere nicht.",
+          "Verbreiten Sie keine Malware und führen Sie keine Angriffe aus.",
+          "Umgehen Sie keine Sicherheitskontrollen."
+        ]
+      },
+      {
+        "heading": "3. Sicherheit und Verschlüsselung",
+        "paragraph": "Der Dienst ist für verschlüsselte Kommunikation konzipiert, aber kein System ist vollkommen sicher.",
+        "bullets": [
+          "Bewahren Sie Raumdaten und Schlüssel vertraulich auf.",
+          "Ein kompromittiertes Gerät kann Inhalte offenlegen.",
+          "Die Endgerätesicherheit liegt in Ihrer Verantwortung."
+        ]
+      },
+      {
+        "heading": "4. Inhalte und Rechte",
+        "paragraph": "Sie sind für die von Ihnen gesendeten oder hochgeladenen Inhalte verantwortlich.",
+        "bullets": [
+          "Sie müssen die Rechte an gemeinsam genutzten Inhalten besitzen.",
+          "Illegale oder rechtsverletzende Inhalte sind verboten.",
+          "Marke und Code der Plattform sind geschützt."
+        ]
+      },
+      {
+        "heading": "5. Gastgeber-Steuerung",
+        "paragraph": "Gastgeber können das Raumverhalten aus Sicherheits- und Verwaltungsgründen steuern.",
+        "bullets": [
+          "Anfragen können angenommen oder abgelehnt werden.",
+          "Räume können gesperrt oder Nutzer stummgeschaltet werden.",
+          "Missbrauch von Steuerungen kann eingeschränkt werden."
+        ]
+      },
+      {
+        "heading": "6. Dienstverfügbarkeit",
+        "paragraph": "Funktionen können sich ändern oder unterbrochen werden, z. B. für Wartung oder Sicherheit.",
+        "bullets": [
+          "Ausfallzeiten können ohne Vorankündigung auftreten.",
+          "Funktionen können je nach Browser und Gerät variieren.",
+          "Wir dürfen Funktionen ändern oder einstellen."
+        ]
+      },
+      {
+        "heading": "7. Haftung und Gewährleistungsausschluss",
+        "paragraph": "Der Dienst wird \"wie besehen\" und \"wie verfügbar\" bereitgestellt.",
+        "bullets": [
+          "Kein Anspruch auf unterbrechungsfreien Betrieb.",
+          "Keine Garantie absoluter Sicherheit in jedem Szenario.",
+          "Indirekte Schäden sind soweit gesetzlich zulässig ausgeschlossen."
+        ]
+      },
+      {
+        "heading": "8. Änderungen dieser Bedingungen",
+        "paragraph": "Wir können diese Bedingungen bei rechtlichen, technischen oder produktbezogenen Änderungen aktualisieren.",
+        "bullets": [
+          "Aktualisierte Versionen gelten ab Veröffentlichung.",
+          "Fortgesetzte Nutzung bedeutet Zustimmung.",
+          "Bitte prüfen Sie diese Seite regelmäßig."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Datenschutzerklärung",
+    "lastUpdated": "2. April 2026",
+    "sections": [
+      {
+        "heading": "1. Geltungsbereich",
+        "paragraph": "Diese Erklärung beschreibt den Umgang mit Daten auf Landing-, Richtlinien- und Chat-Seiten.",
+        "bullets": [
+          "Gilt für Gastgeber und Teilnehmer.",
+          "Gilt für Desktop- und mobile Browser.",
+          "Umfasst Sicherheitsfunktionen des Produkts."
+        ]
+      },
+      {
+        "heading": "2. Datenkategorien",
+        "paragraph": "Wir verarbeiten technische und betriebliche Daten, die für den Dienstbetrieb nötig sind.",
+        "bullets": [
+          "Sitzungs- und Verbindungsmetadaten.",
+          "Raumbezogene Steuerungsereignisse.",
+          "Verschlüsselte Nachrichten- und Mediennutzdaten."
+        ]
+      },
+      {
+        "heading": "3. Zweck der Verarbeitung",
+        "paragraph": "Daten werden für sichere Kommunikation und Zuverlässigkeit verarbeitet.",
+        "bullets": [
+          "Bereitstellung von Raum- und Nachrichtenfunktionen.",
+          "Unterstützung von Moderation und Sicherheitskontrollen.",
+          "Erkennung von Missbrauch und Fehlerbehebung."
+        ]
+      },
+      {
+        "heading": "4. Verschlüsselungsmodell",
+        "paragraph": "Inhalte sollen vor der Übertragung clientseitig verschlüsselt werden.",
+        "bullets": [
+          "Die Verarbeitung von Klartext wird minimiert.",
+          "Die Geheimhaltung von Schlüsseln liegt beim Nutzer.",
+          "Ein kompromittierter Endpunkt bleibt ein Risiko."
+        ]
+      },
+      {
+        "heading": "5. Aufbewahrung",
+        "paragraph": "Die Aufbewahrung ist auf betriebliche und sicherheitsrelevante Anforderungen beschränkt.",
+        "bullets": [
+          "Temporäre Raumzustände können bereinigt werden.",
+          "Host-Aktionen können den Lebenszyklus von Daten beeinflussen.",
+          "Sicherheitsdiagnosen können kurzfristig aufbewahrt werden."
+        ]
+      },
+      {
+        "heading": "6. Sicherheitsmaßnahmen",
+        "paragraph": "Wir setzen technische und organisatorische Maßnahmen zur Risikominimierung ein.",
+        "bullets": [
+          "Clientseitige Verschlüsselungsabläufe.",
+          "Moderation und Zugriffskontrolle für Räume.",
+          "Überwachung verdächtiger Verhaltensmuster."
+        ]
+      },
+      {
+        "heading": "7. Nutzerrechte und Optionen",
+        "paragraph": "Je nach Rechtsordnung haben Sie möglicherweise gesetzliche Rechte.",
+        "bullets": [
+          "Zugriffs-, Berichtigungs- und Löschrechte können gelten.",
+          "Sie können lokale Browserdaten jederzeit löschen.",
+          "Sie können die Nutzung des Dienstes jederzeit beenden."
+        ]
+      },
+      {
+        "heading": "8. Aktualisierungen der Richtlinie",
+        "paragraph": "Diese Richtlinie kann an rechtliche oder produktbezogene Änderungen angepasst werden.",
+        "bullets": [
+          "Aktualisierungen gelten ab Veröffentlichung.",
+          "Bitte prüfen Sie diese Seite regelmäßig.",
+          "Fortgesetzte Nutzung bedeutet Zustimmung."
+        ]
+      }
+    ]
+  }
+}

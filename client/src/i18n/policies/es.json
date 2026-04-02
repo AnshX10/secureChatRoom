@@ -1,0 +1,159 @@
+{
+  "language": "Español",
+  "terms": {
+    "title": "Términos de Uso",
+    "lastUpdated": "2 de abril de 2026",
+    "sections": [
+      {
+        "heading": "1. Aceptación y Alcance",
+        "paragraph": "Al usar Ghost Tunnel, aceptas estos Términos y políticas relacionadas.",
+        "bullets": [
+          "Aplica a visitantes, hosts y participantes.",
+          "Debes tener capacidad legal para aceptar estos Términos.",
+          "Si no estás de acuerdo, deja de usar el servicio."
+        ]
+      },
+      {
+        "heading": "2. Uso Responsable",
+        "paragraph": "Debes usar el servicio de forma legal y responsable.",
+        "bullets": [
+          "No abuses, acoses ni amenaces a otros.",
+          "No distribuyas malware ni realices ataques.",
+          "No intentes evadir controles de seguridad."
+        ]
+      },
+      {
+        "heading": "3. Seguridad y Cifrado",
+        "paragraph": "El servicio está diseñado para comunicaciones cifradas, pero ningún sistema es perfecto.",
+        "bullets": [
+          "Mantén privadas las credenciales y claves de sala.",
+          "Un dispositivo comprometido puede exponer contenido.",
+          "La seguridad del endpoint es responsabilidad del usuario."
+        ]
+      },
+      {
+        "heading": "4. Contenido y Derechos",
+        "paragraph": "Eres responsable del contenido que envías o cargas.",
+        "bullets": [
+          "Debes tener derechos sobre el contenido compartido.",
+          "Está prohibido el contenido ilegal o infractor.",
+          "La marca y el código de la plataforma están protegidos."
+        ]
+      },
+      {
+        "heading": "5. Controles del Host",
+        "paragraph": "Los hosts pueden moderar el comportamiento de la sala por seguridad y gobernanza.",
+        "bullets": [
+          "Pueden aprobar o rechazar solicitudes.",
+          "Pueden bloquear salas o silenciar usuarios.",
+          "El mal uso de controles puede ser restringido."
+        ]
+      },
+      {
+        "heading": "6. Disponibilidad del Servicio",
+        "paragraph": "Las funciones pueden cambiar o interrumpirse por mantenimiento o seguridad.",
+        "bullets": [
+          "Puede haber inactividad sin aviso previo.",
+          "Las funciones pueden variar por navegador o dispositivo.",
+          "Podemos modificar o descontinuar funciones."
+        ]
+      },
+      {
+        "heading": "7. Responsabilidad y Exenciones",
+        "paragraph": "El servicio se ofrece \"tal cual\" y \"según disponibilidad\".",
+        "bullets": [
+          "No se garantiza operación ininterrumpida.",
+          "No se garantiza seguridad total en todos los escenarios.",
+          "Se excluyen daños indirectos donde la ley lo permita."
+        ]
+      },
+      {
+        "heading": "8. Actualizaciones de Términos",
+        "paragraph": "Podemos revisar estos Términos por cambios legales, técnicos o de producto.",
+        "bullets": [
+          "Las versiones actualizadas rigen al publicarse.",
+          "El uso continuo implica aceptación.",
+          "Revisa esta página regularmente."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Política de Privacidad",
+    "lastUpdated": "2 de abril de 2026",
+    "sections": [
+      {
+        "heading": "1. Alcance",
+        "paragraph": "Esta política explica cómo se gestionan los datos en rutas de landing, políticas y chat.",
+        "bullets": [
+          "Aplica a hosts y participantes.",
+          "Aplica en navegadores de escritorio y móvil.",
+          "Cubre funciones de seguridad del producto."
+        ]
+      },
+      {
+        "heading": "2. Categorías de Datos",
+        "paragraph": "Procesamos datos técnicos y operativos necesarios para prestar el servicio.",
+        "bullets": [
+          "Metadatos de sesión y conexión.",
+          "Eventos de control de sala.",
+          "Mensajes y medios cifrados."
+        ]
+      },
+      {
+        "heading": "3. Finalidad del Tratamiento",
+        "paragraph": "Los datos se procesan para comunicación segura y confiabilidad del servicio.",
+        "bullets": [
+          "Habilitar funciones de sala y mensajería.",
+          "Soportar controles de moderación y seguridad.",
+          "Detectar abuso y solucionar fallos."
+        ]
+      },
+      {
+        "heading": "4. Modelo de Cifrado",
+        "paragraph": "El contenido está diseñado para cifrarse en el cliente antes de transmitirse.",
+        "bullets": [
+          "Se minimiza el manejo de texto plano.",
+          "La confidencialidad de claves depende del usuario.",
+          "Un endpoint comprometido sigue siendo un riesgo."
+        ]
+      },
+      {
+        "heading": "5. Retención",
+        "paragraph": "La retención se limita a necesidades operativas y de seguridad.",
+        "bullets": [
+          "El estado temporal de sala puede purgarse.",
+          "Las acciones del host pueden afectar el ciclo de vida de datos.",
+          "Diagnósticos de seguridad pueden retenerse por corto plazo."
+        ]
+      },
+      {
+        "heading": "6. Salvaguardas de Seguridad",
+        "paragraph": "Aplicamos medidas técnicas y organizativas para reducir riesgos.",
+        "bullets": [
+          "Flujos de cifrado del lado cliente.",
+          "Moderación y control de acceso a salas.",
+          "Monitoreo de patrones sospechosos."
+        ]
+      },
+      {
+        "heading": "7. Derechos y Opciones del Usuario",
+        "paragraph": "Dependiendo de tu jurisdicción, puedes tener derechos legales sobre tus datos.",
+        "bullets": [
+          "Pueden aplicar derechos de acceso, corrección y eliminación.",
+          "Puedes borrar datos locales del navegador en cualquier momento.",
+          "Puedes dejar de usar el servicio en cualquier momento."
+        ]
+      },
+      {
+        "heading": "8. Actualizaciones de la Política",
+        "paragraph": "Esta política puede actualizarse según requisitos legales o del producto.",
+        "bullets": [
+          "Las actualizaciones rigen al publicarse.",
+          "Revisa esta página periódicamente.",
+          "El uso continuo implica aceptación."
+        ]
+      }
+    ]
+  }
+}

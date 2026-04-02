@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
-import BiometricDemo from './components/BiometricDemo';
 
 // Connect to backend
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
@@ -25,30 +24,6 @@ function App() {
   const [roomSilencedUserIds, setRoomSilencedUserIds] = useState([]);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isWaitingForFirstAgent, setIsWaitingForFirstAgent] = useState(false); // Host waiting for first agent to join
-
-  // Check if we're on the demo route
-  const [isDemoRoute, setIsDemoRoute] = useState(false);
-
-  useEffect(() => {
-    const checkRoute = () => {
-      const hash = window.location.hash;
-      const pathname = window.location.pathname;
-      const shouldShowDemo = hash === '#demo' || pathname === '/demo';
-      setIsDemoRoute(shouldShowDemo);
-    };
-
-    // Check initially
-    checkRoute();
-
-    // Listen for hash changes and popstate (back/forward buttons)
-    window.addEventListener('hashchange', checkRoute);
-    window.addEventListener('popstate', checkRoute);
-    
-    return () => {
-      window.removeEventListener('hashchange', checkRoute);
-      window.removeEventListener('popstate', checkRoute);
-    };
-  }, []);
 
   useEffect(() => {
     socket.on("room_created_pending", ({ roomId, createdAt, roomName: serverRoomName, capacity, isWaitingForFirstAgent }) => {
@@ -195,11 +170,6 @@ function App() {
       socket.emit("close_room", { roomId });
     }
   };
-
-  // Show demo if on demo route
-  if (isDemoRoute) {
-    return <BiometricDemo />;
-  }
 
   return (
     <div>

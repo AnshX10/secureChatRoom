@@ -1,0 +1,159 @@
+{
+  "language": "English",
+  "terms": {
+    "title": "Terms of Use",
+    "lastUpdated": "April 2, 2026",
+    "sections": [
+      {
+        "heading": "1. Acceptance and Scope",
+        "paragraph": "By using Ghost Tunnel, you agree to these Terms and related policies.",
+        "bullets": [
+          "Applies to visitors, hosts, and participants.",
+          "You must have legal authority to accept these Terms.",
+          "Stop using the service if you do not agree."
+        ]
+      },
+      {
+        "heading": "2. Responsible Use",
+        "paragraph": "You must use the service lawfully and responsibly.",
+        "bullets": [
+          "Do not abuse, harass, or threaten others.",
+          "Do not distribute malware or perform attacks.",
+          "Do not attempt to bypass security controls."
+        ]
+      },
+      {
+        "heading": "3. Security and Encryption",
+        "paragraph": "The service is designed for encrypted communication, but no system is perfect.",
+        "bullets": [
+          "Keep room credentials and keys private.",
+          "Compromised devices can expose content.",
+          "Users are responsible for endpoint security."
+        ]
+      },
+      {
+        "heading": "4. Content and Rights",
+        "paragraph": "You are responsible for the content you send or upload.",
+        "bullets": [
+          "You must own or have rights to shared content.",
+          "Illegal or infringing content is prohibited.",
+          "Platform branding and code remain protected."
+        ]
+      },
+      {
+        "heading": "5. Host Controls",
+        "paragraph": "Hosts can moderate room behavior for safety and governance.",
+        "bullets": [
+          "Hosts may approve or reject requests.",
+          "Hosts may lock rooms or mute users.",
+          "Misuse of controls may be restricted."
+        ]
+      },
+      {
+        "heading": "6. Service Availability",
+        "paragraph": "Features may change or be interrupted for maintenance or security.",
+        "bullets": [
+          "Downtime may occur without prior notice.",
+          "Features may vary by browser and device.",
+          "We may modify or discontinue features."
+        ]
+      },
+      {
+        "heading": "7. Liability and Disclaimers",
+        "paragraph": "The service is provided \"as is\" and \"as available\".",
+        "bullets": [
+          "No guarantee of uninterrupted operation.",
+          "No guarantee of complete security in all scenarios.",
+          "Indirect or consequential damages are disclaimed where allowed by law."
+        ]
+      },
+      {
+        "heading": "8. Updates to Terms",
+        "paragraph": "We may revise these Terms to reflect legal, technical, or product changes.",
+        "bullets": [
+          "Updated versions become effective when posted.",
+          "Continued use means acceptance of updates.",
+          "Review this page regularly."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "lastUpdated": "April 2, 2026",
+    "sections": [
+      {
+        "heading": "1. Scope",
+        "paragraph": "This policy explains how data is handled across landing, policy, and chat paths.",
+        "bullets": [
+          "Applies to hosts and participants.",
+          "Applies to desktop and mobile browsers.",
+          "Covers product security features."
+        ]
+      },
+      {
+        "heading": "2. Data Categories",
+        "paragraph": "We process technical and operational data needed to run the service.",
+        "bullets": [
+          "Session and connection metadata.",
+          "Room-level control events.",
+          "Encrypted message and media payloads."
+        ]
+      },
+      {
+        "heading": "3. Processing Purpose",
+        "paragraph": "Data is processed to provide secure communication and product reliability.",
+        "bullets": [
+          "Deliver room and messaging functionality.",
+          "Support moderation and safety controls.",
+          "Detect abuse and troubleshoot failures."
+        ]
+      },
+      {
+        "heading": "4. Encryption Model",
+        "paragraph": "Content is intended to be encrypted client-side before transmission.",
+        "bullets": [
+          "Plaintext handling is minimized.",
+          "Key secrecy remains user responsibility.",
+          "Endpoint compromise can still create risk."
+        ]
+      },
+      {
+        "heading": "5. Retention",
+        "paragraph": "Retention is limited to operational and security requirements.",
+        "bullets": [
+          "Temporary room state may be purged.",
+          "Host actions may affect data lifecycle.",
+          "Security diagnostics may be retained briefly."
+        ]
+      },
+      {
+        "heading": "6. Security Safeguards",
+        "paragraph": "We use technical and organizational safeguards to reduce risk.",
+        "bullets": [
+          "Client-side encryption workflows.",
+          "Room moderation and access controls.",
+          "Monitoring for suspicious behavior patterns."
+        ]
+      },
+      {
+        "heading": "7. User Rights and Choices",
+        "paragraph": "You may have legal rights depending on your jurisdiction.",
+        "bullets": [
+          "Access, correction, and deletion rights may apply.",
+          "You can clear local browser data at any time.",
+          "You may stop using the service at any time."
+        ]
+      },
+      {
+        "heading": "8. Policy Updates",
+        "paragraph": "This policy may be updated as legal or product requirements evolve.",
+        "bullets": [
+          "Updates are effective when posted.",
+          "Please review this page periodically.",
+          "Continued use means acceptance of updates."
+        ]
+      }
+    ]
+  }
+}
