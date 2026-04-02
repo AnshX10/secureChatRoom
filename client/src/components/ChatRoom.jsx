@@ -55,7 +55,6 @@ import { encryptMagicLinkPayload } from "../utils/magicLink";
 import BiometricVault from "./BiometricVault";
 import HighClearanceComposer from "./HighClearanceComposer";
 
-
 const DecryptingName = ({ name }) => {
   const [displayValue, setDisplayValue] = useState(name);
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&";
@@ -96,7 +95,8 @@ const ChatRoom = ({
   roomLocked,
   roomSilencedUserIds,
 }) => {
-  const hostChatStorageKey = isHost && roomId ? `host_chat_history_${roomId}` : null;
+  const hostChatStorageKey =
+    isHost && roomId ? `host_chat_history_${roomId}` : null;
   const [currentMessage, setCurrentMessage] = useState("");
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -148,8 +148,6 @@ const ChatRoom = ({
     typeof Notification !== "undefined" ? Notification.permission : "denied",
   );
 
-
-
   useEffect(() => {
     if (
       typeof Notification !== "undefined" &&
@@ -180,11 +178,11 @@ const ChatRoom = ({
         ? `${message.username}: [Classified Image]`
         : message.type === "image-batch"
           ? `${message.username}: [Classified Image Batch]`
-        : message.type === "file"
-          ? `${message.username}: [Classified File]`
-          : message.type === "audio"
-            ? `${message.username}: [Voice Message]`
-            : `${message.username}: ${message.message.substring(0, 100)}`;
+          : message.type === "file"
+            ? `${message.username}: [Classified File]`
+            : message.type === "audio"
+              ? `${message.username}: [Voice Message]`
+              : `${message.username}: ${message.message.substring(0, 100)}`;
 
     const notification = new Notification(title, {
       body,
@@ -210,7 +208,14 @@ const ChatRoom = ({
     () =>
       messageList.flatMap((msg) => {
         if (msg.type === "image" && msg.message) {
-          return [{ messageId: msg.id, src: msg.message, itemIndex: 0, username: msg.username }];
+          return [
+            {
+              messageId: msg.id,
+              src: msg.message,
+              itemIndex: 0,
+              username: msg.username,
+            },
+          ];
         }
         if (msg.type === "image-batch" && Array.isArray(msg.images)) {
           return msg.images
@@ -242,12 +247,17 @@ const ChatRoom = ({
     user.username.toLowerCase().includes(agentSearchQuery.trim().toLowerCase()),
   );
   const filteredPromotableUsers = promotableUsers.filter((user) =>
-    user.username.toLowerCase().includes(hostTransferSearch.trim().toLowerCase()),
+    user.username
+      .toLowerCase()
+      .includes(hostTransferSearch.trim().toLowerCase()),
   );
   const allAgents = users.filter((user) => !user.isHost);
   const agentsNeedingContext = allAgents.filter((user) => !user.hasFullHistory);
-  const contextSyncedAgentsCount = allAgents.length - agentsNeedingContext.length;
-  const roomIdDisplay = (roomId || "").toUpperCase().slice(0, ROOM_ID_BOX_COUNT);
+  const contextSyncedAgentsCount =
+    allAgents.length - agentsNeedingContext.length;
+  const roomIdDisplay = (roomId || "")
+    .toUpperCase()
+    .slice(0, ROOM_ID_BOX_COUNT);
 
   useEffect(() => {
     if (currentUser?.hasFullHistory) {
@@ -259,7 +269,8 @@ const ChatRoom = ({
     setContextRequests((prev) =>
       prev.filter((request) =>
         users.some(
-          (u) => u.id === request.requesterUserId && !u.isHost && !u.hasFullHistory,
+          (u) =>
+            u.id === request.requesterUserId && !u.isHost && !u.hasFullHistory,
         ),
       ),
     );
@@ -273,7 +284,8 @@ const ChatRoom = ({
     setSilencedUserIds(new Set(roomSilencedUserIds || []));
   }, [roomSilencedUserIds]);
 
-  const isRadioSilenceEnforced = silencedUserIds.has(socket.id) && !isCurrentHost;
+  const isRadioSilenceEnforced =
+    silencedUserIds.has(socket.id) && !isCurrentHost;
 
   const toggleRoomLock = () => {
     if (!isCurrentHost) return;
@@ -320,7 +332,9 @@ const ChatRoom = ({
               const isMention = /^@(everyone|[a-zA-Z0-9_]+)$/i.test(segment);
               if (!isMention) {
                 return (
-                  <span key={`${keyPrefix}-text-${idx}-${segmentIndex}`}>{segment}</span>
+                  <span key={`${keyPrefix}-text-${idx}-${segmentIndex}`}>
+                    {segment}
+                  </span>
                 );
               }
               const isEveryone = /^@everyone$/i.test(segment);
@@ -359,9 +373,12 @@ const ChatRoom = ({
 
   const normalizeMentionsForSend = (messageText) => {
     if (typeof messageText !== "string") return messageText;
-    return messageText.replace(/(^|\s)@([a-zA-Z0-9_]+)/g, (match, prefix, mention) => {
-      return `${prefix}@${mention.toUpperCase()}`;
-    });
+    return messageText.replace(
+      /(^|\s)@([a-zA-Z0-9_]+)/g,
+      (match, prefix, mention) => {
+        return `${prefix}@${mention.toUpperCase()}`;
+      },
+    );
   };
 
   const clearMentionSuggestions = () => {
@@ -386,15 +403,17 @@ const ChatRoom = ({
     const uniqueNames = Array.from(
       new Set(
         users
-          .map((user) => (typeof user.username === "string" ? user.username.toUpperCase() : ""))
+          .map((user) =>
+            typeof user.username === "string"
+              ? user.username.toUpperCase()
+              : "",
+          )
           .filter(Boolean),
       ),
     );
     const pool = ["EVERYONE", ...uniqueNames];
     const normalizedQuery = (query || "").toUpperCase();
-    return pool
-      .filter((name) => name.startsWith(normalizedQuery))
-      .slice(0, 7);
+    return pool.filter((name) => name.startsWith(normalizedQuery)).slice(0, 7);
   };
 
   const updateMentionSuggestions = (value) => {
@@ -417,7 +436,9 @@ const ChatRoom = ({
     if (!mentionContext) return;
     const normalizedTarget = (targetName || "").toUpperCase();
     const before = currentMessage.slice(0, mentionContext.atIndex);
-    const afterRaw = currentMessage.slice(mentionContext.atIndex + mentionContext.mentionLength);
+    const afterRaw = currentMessage.slice(
+      mentionContext.atIndex + mentionContext.mentionLength,
+    );
     const after = afterRaw.replace(/^\s+/, "");
     const nextValue = `${before}@${normalizedTarget}${after ? ` ${after}` : " "}`;
     setCurrentMessage(nextValue);
@@ -523,16 +544,20 @@ const ChatRoom = ({
   // Biometric vault states
   const [showBiometricVault, setShowBiometricVault] = useState(false);
   const [vaultMessage, setVaultMessage] = useState(null);
-  const [showHighClearanceComposer, setShowHighClearanceComposer] = useState(false);
+  const [showHighClearanceComposer, setShowHighClearanceComposer] =
+    useState(false);
 
   // Mobile toolbar toggle
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
   const mobileToolbarRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
   const areAllSelectedAttachmentsImages =
-    hasSelectedAttachments && selectedAttachments.every((attachment) => attachment.type === "image");
+    hasSelectedAttachments &&
+    selectedAttachments.every((attachment) => attachment.type === "image");
   const isMultiAttachmentCaptionLocked =
-    hasSelectedAttachments && selectedAttachments.length > 1 && !areAllSelectedAttachmentsImages;
+    hasSelectedAttachments &&
+    selectedAttachments.length > 1 &&
+    !areAllSelectedAttachmentsImages;
 
   // Context message states
   const [showContextModal, setShowContextModal] = useState(false);
@@ -551,8 +576,10 @@ const ChatRoom = ({
 
   useEffect(() => {
     const checkMobile = () => {
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-                           window.innerWidth <= 768;
+      const isMobileDevice =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent,
+        ) || window.innerWidth <= 768;
       setIsMobile((prevIsMobile) => {
         if (prevIsMobile !== isMobileDevice) {
           setShowUsers(!isMobileDevice);
@@ -560,11 +587,11 @@ const ChatRoom = ({
         return isMobileDevice;
       });
     };
-    
+
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   useEffect(() => {
@@ -719,8 +746,10 @@ const ChatRoom = ({
     const total = lightboxImages.length;
     const handleKey = (e) => {
       if (e.key === "Escape") setLightboxOpen(false);
-      if (e.key === "ArrowLeft" && total > 1) setLightboxIndex((i) => (i - 1 + total) % total);
-      if (e.key === "ArrowRight" && total > 1) setLightboxIndex((i) => (i + 1) % total);
+      if (e.key === "ArrowLeft" && total > 1)
+        setLightboxIndex((i) => (i - 1 + total) % total);
+      if (e.key === "ArrowRight" && total > 1)
+        setLightboxIndex((i) => (i + 1) % total);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -728,7 +757,7 @@ const ChatRoom = ({
 
   useEffect(() => {
     if (isMobile) return;
-    
+
     const handleKeyDown = (e) => {
       if (isPanicMode) {
         if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
@@ -980,7 +1009,9 @@ const ChatRoom = ({
 
   const isMessagePinned = (messageId) =>
     !!messageId &&
-    pinnedMessageIds.some((pinKey) => parsePinKey(pinKey).messageId === messageId);
+    pinnedMessageIds.some(
+      (pinKey) => parsePinKey(pinKey).messageId === messageId,
+    );
 
   const isImagePinnedFromBatch = (messageId, imageIndex) =>
     pinnedMessageIds.includes(buildPinKey(messageId, imageIndex));
@@ -990,7 +1021,9 @@ const ChatRoom = ({
       pinnedMessageIds
         .map((pinKey) => {
           const parsedPin = parsePinKey(pinKey);
-          const message = messageList.find((msg) => msg?.id === parsedPin.messageId);
+          const message = messageList.find(
+            (msg) => msg?.id === parsedPin.messageId,
+          );
           if (!message) return null;
           return {
             pinKey,
@@ -1005,7 +1038,8 @@ const ChatRoom = ({
 
   const getFilePageCountLabel = (pageCount) => {
     const parsed = Number(pageCount);
-    const totalPages = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+    const totalPages =
+      Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
     return `${totalPages} page${totalPages === 1 ? "" : "s"}`;
   };
 
@@ -1158,8 +1192,10 @@ const ChatRoom = ({
     if (msg.poll) return `[POLL] ${decrypt(msg.poll.question)}`;
     if (msg.system) return msg.message || "";
     if (msg.type === "image") return "📷 Image";
-    if (msg.type === "image-batch") return `📷 ${msg.images?.length || 0} Images`;
-    if (msg.type === "audio") return `🎙️ Voice message${msg.audioDuration ? ` (${formatDuration(msg.audioDuration)})` : ""}`;
+    if (msg.type === "image-batch")
+      return `📷 ${msg.images?.length || 0} Images`;
+    if (msg.type === "audio")
+      return `🎙️ Voice message${msg.audioDuration ? ` (${formatDuration(msg.audioDuration)})` : ""}`;
     if (msg.type === "file") return `📎 ${msg.fileName || "File"}`;
     if (msg.type === "high-clearance") return "🔒 High Clearance Message";
     return msg.message || "";
@@ -1267,19 +1303,26 @@ const ChatRoom = ({
     };
 
     await socket.emit("send_message", messageData);
-    setMessageList((list) => [...list, { ...messageData, own: true, sentAt: Date.now() }]);
+    setMessageList((list) => [
+      ...list,
+      { ...messageData, own: true, sentAt: Date.now() },
+    ]);
     setShowPollModal(false);
     resetPollDraft();
   };
 
   const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
   const estimatePdfPageCount = (dataUrl) => {
-    if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:application/pdf")) {
+    if (
+      !dataUrl ||
+      typeof dataUrl !== "string" ||
+      !dataUrl.startsWith("data:application/pdf")
+    ) {
       return null;
     }
 
@@ -1327,7 +1370,7 @@ const ChatRoom = ({
       });
 
     try {
-        const newAttachments = await Promise.all(
+      const newAttachments = await Promise.all(
         validFiles.map(async (file) => {
           const base64 = await readAsDataUrl(file);
           // determine type and for audio files attempt to get duration
@@ -1338,12 +1381,12 @@ const ChatRoom = ({
             // try to get duration from the audio data URL
             audioDuration = await new Promise((resolve) => {
               try {
-                const audio = document.createElement('audio');
-                audio.preload = 'metadata';
+                const audio = document.createElement("audio");
+                audio.preload = "metadata";
                 audio.src = base64;
                 const clear = () => {
-                  audio.removeEventListener('loadedmetadata', onLoaded);
-                  audio.removeEventListener('error', onError);
+                  audio.removeEventListener("loadedmetadata", onLoaded);
+                  audio.removeEventListener("error", onError);
                 };
                 const onLoaded = () => {
                   const d = Math.floor(audio.duration || 0);
@@ -1354,8 +1397,8 @@ const ChatRoom = ({
                   clear();
                   resolve(null);
                 };
-                audio.addEventListener('loadedmetadata', onLoaded);
-                audio.addEventListener('error', onError);
+                audio.addEventListener("loadedmetadata", onLoaded);
+                audio.addEventListener("error", onError);
                 // in some browsers loadedmetadata may never fire for data urls; set a fallback timeout
                 setTimeout(() => resolve(null), 1500);
               } catch (e) {
@@ -1393,7 +1436,9 @@ const ChatRoom = ({
   };
 
   const removeAttachment = (attachmentId) => {
-    setSelectedAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
+    setSelectedAttachments((prev) =>
+      prev.filter((attachment) => attachment.id !== attachmentId),
+    );
   };
 
   const downloadImage = (imageData, messageId) => {
@@ -1415,25 +1460,35 @@ const ChatRoom = ({
 
     const attachmentsToSend = [...selectedAttachments];
     const canUseCaption =
-      attachmentsToSend.length === 1 || attachmentsToSend.every((attachment) => attachment.type === "image");
-    const normalizedCaption = canUseCaption && currentMessage.trim()
-      ? normalizeMentionsForSend(currentMessage.trim())
-      : "";
-    const encryptedCaption = normalizedCaption ? encrypt(normalizedCaption) : null;
-    const replyPayload = replyingTo ? {
-      messageId: replyingTo.id,
-      username: replyingTo.username,
-      message: encrypt(getReplyPreviewText(replyingTo)),
-    } : null;
+      attachmentsToSend.length === 1 ||
+      attachmentsToSend.every((attachment) => attachment.type === "image");
+    const normalizedCaption =
+      canUseCaption && currentMessage.trim()
+        ? normalizeMentionsForSend(currentMessage.trim())
+        : "";
+    const encryptedCaption = normalizedCaption
+      ? encrypt(normalizedCaption)
+      : null;
+    const replyPayload = replyingTo
+      ? {
+          messageId: replyingTo.id,
+          username: replyingTo.username,
+          message: encrypt(getReplyPreviewText(replyingTo)),
+        }
+      : null;
 
-    const allImages = attachmentsToSend.every((attachment) => attachment.type === "image");
+    const allImages = attachmentsToSend.every(
+      (attachment) => attachment.type === "image",
+    );
     if (allImages && attachmentsToSend.length > 1) {
       const messageId = uuidv4();
       const time = new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
-      const encryptedImages = attachmentsToSend.map((attachment) => encrypt(attachment.data));
+      const encryptedImages = attachmentsToSend.map((attachment) =>
+        encrypt(attachment.data),
+      );
 
       const messageData = {
         id: messageId,
@@ -1470,7 +1525,7 @@ const ChatRoom = ({
       return;
     }
 
-      for (const attachment of attachmentsToSend) {
+    for (const attachment of attachmentsToSend) {
       const messageId = uuidv4();
       const time = new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -1494,7 +1549,16 @@ const ChatRoom = ({
           type: "image",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, caption: normalizedCaption || null, own: true, sentAt: Date.now() }]);
+        setMessageList((list) => [
+          ...list,
+          {
+            ...messageData,
+            message: attachment.data,
+            caption: normalizedCaption || null,
+            own: true,
+            sentAt: Date.now(),
+          },
+        ]);
       } else if (attachment.type === "audio") {
         const encryptedAudio = encrypt(attachment.data);
         const messageData = {
@@ -1513,7 +1577,17 @@ const ChatRoom = ({
           type: "audio",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, audioDuration: attachment.audioDuration || 0, caption: normalizedCaption || null, own: true, sentAt: Date.now() }]);
+        setMessageList((list) => [
+          ...list,
+          {
+            ...messageData,
+            message: attachment.data,
+            audioDuration: attachment.audioDuration || 0,
+            caption: normalizedCaption || null,
+            own: true,
+            sentAt: Date.now(),
+          },
+        ]);
       } else {
         const encryptedData = encrypt(attachment.data);
         const encryptedName = encrypt(attachment.name);
@@ -1536,9 +1610,18 @@ const ChatRoom = ({
           type: "file",
         };
         await socket.emit("send_message", messageData);
-        setMessageList((list) => [...list, { ...messageData, message: attachment.data, fileName: attachment.name, caption: normalizedCaption || null, own: true, sentAt: Date.now() }]);
+        setMessageList((list) => [
+          ...list,
+          {
+            ...messageData,
+            message: attachment.data,
+            fileName: attachment.name,
+            caption: normalizedCaption || null,
+            own: true,
+            sentAt: Date.now(),
+          },
+        ]);
       }
-
     }
 
     clearAttachment();
@@ -1562,13 +1645,23 @@ const ChatRoom = ({
 
   const getFileIcon = (fileType) => {
     if (!fileType) return LuFile;
-    if (fileType.includes('pdf') || fileType.includes('text') || fileType.includes('document') || fileType.includes('word') || fileType.includes('sheet') || fileType.includes('presentation')) return LuFileText;
+    if (
+      fileType.includes("pdf") ||
+      fileType.includes("text") ||
+      fileType.includes("document") ||
+      fileType.includes("word") ||
+      fileType.includes("sheet") ||
+      fileType.includes("presentation")
+    )
+      return LuFileText;
     return LuFile;
   };
 
   const formatDuration = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
 
@@ -1588,19 +1681,21 @@ const ChatRoom = ({
       const tick = () => {
         const data = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(data);
-        const levels = Array.from(data).slice(0, 24).map(v => v / 255);
+        const levels = Array.from(data)
+          .slice(0, 24)
+          .map((v) => v / 255);
         setAudioLevels(levels);
         animFrameRef.current = requestAnimationFrame(tick);
       };
       tick();
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-        ? 'audio/mp4'
-        : 'audio/ogg';
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+            ? "audio/mp4"
+            : "audio/ogg";
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
@@ -1614,7 +1709,7 @@ const ChatRoom = ({
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(blob);
         setAudioPreviewUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach((t) => t.stop());
         if (analyserRef.current) {
           analyserRef.current.audioCtx.close();
           analyserRef.current = null;
@@ -1627,11 +1722,11 @@ const ChatRoom = ({
       setIsRecording(true);
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration(d => d + 1);
+        setRecordingDuration((d) => d + 1);
       }, 1000);
     } catch (err) {
-      console.error('Mic access denied:', err);
-      alert('Microphone access is required to record audio.');
+      console.error("Mic access denied:", err);
+      alert("Microphone access is required to record audio.");
     }
   };
 
@@ -1645,7 +1740,7 @@ const ChatRoom = ({
 
   const cancelRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+      mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
       mediaRecorderRef.current = null;
       setIsRecording(false);
       clearInterval(recordingIntervalRef.current);
@@ -1670,13 +1765,18 @@ const ChatRoom = ({
     const normalizedCaption = currentMessage.trim()
       ? normalizeMentionsForSend(currentMessage.trim())
       : "";
-    const encryptedCaption = normalizedCaption ? encrypt(normalizedCaption) : null;
+    const encryptedCaption = normalizedCaption
+      ? encrypt(normalizedCaption)
+      : null;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target.result;
       const messageId = uuidv4();
-      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const time = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
       const encryptedAudio = encrypt(base64);
 
       const messageData = {
@@ -1690,11 +1790,13 @@ const ChatRoom = ({
         edited: false,
         deleted: false,
         timer: selfDestructTime,
-        replyTo: replyingTo ? {
-          messageId: replyingTo.id,
-          username: replyingTo.username,
-          message: encrypt(getReplyPreviewText(replyingTo)),
-        } : null,
+        replyTo: replyingTo
+          ? {
+              messageId: replyingTo.id,
+              username: replyingTo.username,
+              message: encrypt(getReplyPreviewText(replyingTo)),
+            }
+          : null,
         caption: encryptedCaption,
         type: "audio",
       };
@@ -1702,7 +1804,13 @@ const ChatRoom = ({
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: base64, caption: normalizedCaption || null, own: true, sentAt: Date.now() },
+        {
+          ...messageData,
+          message: base64,
+          caption: normalizedCaption || null,
+          own: true,
+          sentAt: Date.now(),
+        },
       ]);
 
       // Cleanup
@@ -1830,30 +1938,30 @@ const ChatRoom = ({
     selectedCount > 0 && (isCurrentHost || selectionAllOwn);
 
   // Simple fade + scale animated deletion helper
-  const animateDelete = async (ids, mode = 'local') => {
+  const animateDelete = async (ids, mode = "local") => {
     const idArr = Array.isArray(ids) ? ids : [ids];
     const idSet = new Set(idArr);
 
     // Mark as deleting — framer-motion will animate opacity/height to 0
-    setDeletingIds(prev => new Set([...prev, ...idSet]));
+    setDeletingIds((prev) => new Set([...prev, ...idSet]));
 
     // Wait for framer-motion fade + height collapse to finish
     await new Promise((r) => setTimeout(r, 450));
 
     // Clean up
-    setDeletingIds(prev => {
+    setDeletingIds((prev) => {
       const next = new Set(prev);
-      idSet.forEach(id => next.delete(id));
+      idSet.forEach((id) => next.delete(id));
       return next;
     });
-    if (mode === 'local') {
-      setMessageList(list => list.filter(m => !idSet.has(m?.id)));
+    if (mode === "local") {
+      setMessageList((list) => list.filter((m) => !idSet.has(m?.id)));
     }
   };
 
   const bulkLocalDelete = () => {
     if (selectedCount === 0) return;
-    animateDelete([...selectedMessageIds], 'local');
+    animateDelete([...selectedMessageIds], "local");
     setSelectedMessageIds(new Set());
   };
 
@@ -1930,14 +2038,21 @@ const ChatRoom = ({
 
   const approveContextRequest = (requesterUserId) => {
     if (!isCurrentHost) return;
-    socket.emit("send_context_to_agent", { roomId, targetUserId: requesterUserId });
-    setContextRequests((prev) => prev.filter((r) => r.requesterUserId !== requesterUserId));
+    socket.emit("send_context_to_agent", {
+      roomId,
+      targetUserId: requesterUserId,
+    });
+    setContextRequests((prev) =>
+      prev.filter((r) => r.requesterUserId !== requesterUserId),
+    );
   };
 
   const rejectContextRequest = (requesterUserId) => {
     if (!isCurrentHost) return;
     socket.emit("reject_context_request", { roomId, requesterUserId });
-    setContextRequests((prev) => prev.filter((r) => r.requesterUserId !== requesterUserId));
+    setContextRequests((prev) =>
+      prev.filter((r) => r.requesterUserId !== requesterUserId),
+    );
   };
 
   const handleTerminateClick = () => {
@@ -2132,7 +2247,12 @@ const ChatRoom = ({
       await socket.emit("send_message", messageData);
       setMessageList((list) => [
         ...list,
-        { ...messageData, message: normalizedMessage, own: true, sentAt: Date.now() },
+        {
+          ...messageData,
+          message: normalizedMessage,
+          own: true,
+          sentAt: Date.now(),
+        },
       ]);
       setCurrentMessage("");
       setReplyingTo(null);
@@ -2151,7 +2271,7 @@ const ChatRoom = ({
     // Encrypt the high clearance content with additional AES-256 layer
     const highClearanceKey = `${roomPassword}_HIGH_CLEARANCE_${Date.now()}`;
     const encryptedContent = encrypt(JSON.stringify(messageData));
-    
+
     const highClearanceMessageData = {
       id: messageId,
       roomId,
@@ -2170,12 +2290,12 @@ const ChatRoom = ({
     await socket.emit("send_message", highClearanceMessageData);
     setMessageList((list) => [
       ...list,
-      { 
-        ...highClearanceMessageData, 
+      {
+        ...highClearanceMessageData,
         message: encryptedContent,
         highClearanceContent: messageData,
         own: true,
-        sentAt: Date.now()
+        sentAt: Date.now(),
       },
     ]);
   };
@@ -2187,7 +2307,7 @@ const ChatRoom = ({
 
   const handleVaultDecrypted = (message) => {
     // Message has been successfully decrypted and viewed
-    console.log('High clearance message accessed:', message);
+    console.log("High clearance message accessed:", message);
   };
 
   useEffect(() => {
@@ -2203,7 +2323,11 @@ const ChatRoom = ({
       if (data.system) {
         messageToAdd = { ...data, id: data.id || uuidv4() };
       } else if (data.type === "poll" || data.poll) {
-        messageToAdd = { ...data, own: isOwnMessage, isContextMessage: data.isContextMessage };
+        messageToAdd = {
+          ...data,
+          own: isOwnMessage,
+          isContextMessage: data.isContextMessage,
+        };
       } else if (data.type === "image") {
         messageToAdd = {
           ...data,
@@ -2215,7 +2339,9 @@ const ChatRoom = ({
       } else if (data.type === "image-batch") {
         messageToAdd = {
           ...data,
-          images: (Array.isArray(data.images) ? data.images : []).map((image) => decrypt(image)),
+          images: (Array.isArray(data.images) ? data.images : []).map((image) =>
+            decrypt(image),
+          ),
           caption: data.caption ? decrypt(data.caption) : null,
           own: isOwnMessage,
           isContextMessage: data.isContextMessage,
@@ -2243,7 +2369,9 @@ const ChatRoom = ({
           ...data,
           message: data.message, // Keep encrypted for non-owners
           own: isOwnMessage,
-          highClearanceContent: isOwnMessage ? JSON.parse(decrypt(data.message)) : null,
+          highClearanceContent: isOwnMessage
+            ? JSON.parse(decrypt(data.message))
+            : null,
           isContextMessage: data.isContextMessage,
         };
       } else {
@@ -2266,13 +2394,17 @@ const ChatRoom = ({
             // Insert before the first message sent after this context message
             return msg.sentAt > data.sentAt;
           });
-          
+
           if (insertIndex === -1) {
             // All messages with sentAt were sent before this one, or list is empty
             return [...l, messageToAdd];
           } else {
             // Insert at the correct chronological position
-            return [...l.slice(0, insertIndex), messageToAdd, ...l.slice(insertIndex)];
+            return [
+              ...l.slice(0, insertIndex),
+              messageToAdd,
+              ...l.slice(insertIndex),
+            ];
           }
         }
         // Regular messages always append at the end
@@ -2293,9 +2425,9 @@ const ChatRoom = ({
     });
     socket.on("message_deleted", async (deletedId) => {
       // Simple fade + height collapse animation
-      setDeletingIds(prev => new Set([...prev, deletedId]));
+      setDeletingIds((prev) => new Set([...prev, deletedId]));
       await new Promise((r) => setTimeout(r, 450));
-      setDeletingIds(prev => {
+      setDeletingIds((prev) => {
         const next = new Set(prev);
         next.delete(deletedId);
         return next;
@@ -2359,7 +2491,10 @@ const ChatRoom = ({
         }, 4600);
 
         if (attemptedCodename) {
-          console.warn("Unauthorized decryption attempt detected:", attemptedCodename);
+          console.warn(
+            "Unauthorized decryption attempt detected:",
+            attemptedCodename,
+          );
         }
       },
     );
@@ -2391,7 +2526,8 @@ const ChatRoom = ({
       ({ roomId: incomingRoomId, requesterUserId, requesterUsername }) => {
         if (incomingRoomId !== roomId || !isCurrentHost) return;
         setContextRequests((prev) => {
-          if (prev.some((r) => r.requesterUserId === requesterUserId)) return prev;
+          if (prev.some((r) => r.requesterUserId === requesterUserId))
+            return prev;
           return [...prev, { requesterUserId, requesterUsername }];
         });
       },
@@ -2414,35 +2550,49 @@ const ChatRoom = ({
       ]);
     });
 
-    socket.on("message_reactions_sync", ({ roomId: incomingRoomId, reactions }) => {
-      if (incomingRoomId !== roomId) return;
-      setMessageReactions(reactions && typeof reactions === "object" ? reactions : {});
-    });
+    socket.on(
+      "message_reactions_sync",
+      ({ roomId: incomingRoomId, reactions }) => {
+        if (incomingRoomId !== roomId) return;
+        setMessageReactions(
+          reactions && typeof reactions === "object" ? reactions : {},
+        );
+      },
+    );
 
-    socket.on("message_reaction_update", ({ roomId: incomingRoomId, messageId, reactions }) => {
-      if (incomingRoomId !== roomId || !messageId) return;
-      setMessageReactions((prev) => {
-        if (!Array.isArray(reactions) || reactions.length === 0) {
-          if (!prev[messageId]) return prev;
-          const { [messageId]: _removed, ...rest } = prev;
-          return rest;
-        }
-        return {
-          ...prev,
-          [messageId]: reactions,
-        };
-      });
-    });
+    socket.on(
+      "message_reaction_update",
+      ({ roomId: incomingRoomId, messageId, reactions }) => {
+        if (incomingRoomId !== roomId || !messageId) return;
+        setMessageReactions((prev) => {
+          if (!Array.isArray(reactions) || reactions.length === 0) {
+            if (!prev[messageId]) return prev;
+            const { [messageId]: _removed, ...rest } = prev;
+            return rest;
+          }
+          return {
+            ...prev,
+            [messageId]: reactions,
+          };
+        });
+      },
+    );
 
-    socket.on("pinned_messages_sync", ({ roomId: incomingRoomId, pinnedMessageIds: nextPinnedIds }) => {
-      if (incomingRoomId !== roomId) return;
-      setPinnedMessageIds(Array.isArray(nextPinnedIds) ? nextPinnedIds : []);
-    });
+    socket.on(
+      "pinned_messages_sync",
+      ({ roomId: incomingRoomId, pinnedMessageIds: nextPinnedIds }) => {
+        if (incomingRoomId !== roomId) return;
+        setPinnedMessageIds(Array.isArray(nextPinnedIds) ? nextPinnedIds : []);
+      },
+    );
 
-    socket.on("pinned_messages_update", ({ roomId: incomingRoomId, pinnedMessageIds: nextPinnedIds }) => {
-      if (incomingRoomId !== roomId) return;
-      setPinnedMessageIds(Array.isArray(nextPinnedIds) ? nextPinnedIds : []);
-    });
+    socket.on(
+      "pinned_messages_update",
+      ({ roomId: incomingRoomId, pinnedMessageIds: nextPinnedIds }) => {
+        if (incomingRoomId !== roomId) return;
+        setPinnedMessageIds(Array.isArray(nextPinnedIds) ? nextPinnedIds : []);
+      },
+    );
 
     return () => {
       socket.off("receive_message");
@@ -2515,7 +2665,10 @@ const ChatRoom = ({
   // Close mobile toolbar on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (mobileToolbarRef.current && !mobileToolbarRef.current.contains(e.target)) {
+      if (
+        mobileToolbarRef.current &&
+        !mobileToolbarRef.current.contains(e.target)
+      ) {
         setShowMobileToolbar(false);
       }
     };
@@ -2705,7 +2858,9 @@ const ChatRoom = ({
                 <div className="absolute inset-0 bg-red-500/10 rounded-full blur-xl" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-2xl mb-2 font-black tracking-[0.15em]">Security Protocol Engaged</h1>
+                <h1 className="text-2xl mb-2 font-black tracking-[0.15em]">
+                  Security Protocol Engaged
+                </h1>
                 <p className="text-xs text-zinc-500 tracking-wider">
                   Screenshot / Recording / Focus Loss Detected
                 </p>
@@ -2746,15 +2901,9 @@ const ChatRoom = ({
         {showUsers && (
           <motion.div
             initial={
-              isMobile
-                ? { x: "-100%" }
-                : { width: 0, opacity: 0, x: -24 }
+              isMobile ? { x: "-100%" } : { width: 0, opacity: 0, x: -24 }
             }
-            animate={
-              isMobile
-                ? { x: 0 }
-                : { width: "22rem", opacity: 1, x: 0 }
-            }
+            animate={isMobile ? { x: 0 } : { width: "22rem", opacity: 1, x: 0 }}
             exit={
               isMobile
                 ? {
@@ -2781,348 +2930,403 @@ const ChatRoom = ({
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-white/[0.01]" />
                   <h2 className="text-base font-black uppercase tracking-[0.2em] flex items-center gap-2.5 text-white relative z-10">
                     <div className="p-2 bg-white/5 rounded-xl border border-zinc-700/30 shadow-lg shadow-black/10">
-                      <LuShieldCheck size={16} strokeWidth={2.5} className="text-white" />
+                      <LuShieldCheck
+                        size={16}
+                        strokeWidth={2.5}
+                        className="text-white"
+                      />
                     </div>
                     CLASSIFIED
                   </h2>
                 </div>
 
                 <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden scrollbar-micro">
-              <div
-                className="group rounded-2xl p-4 mb-4 bg-gradient-to-br from-zinc-900/70 via-zinc-900/45 to-zinc-900/30 border border-zinc-800/50 hover:border-zinc-700/70 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] relative overflow-hidden cursor-pointer transition-all duration-200 active:scale-[0.995]"
-                role="button"
-                tabIndex={0}
-                title="Click to copy Room ID"
-                aria-label="Copy Room ID"
-                onClick={() => {
-                  navigator.clipboard.writeText(roomId);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    navigator.clipboard.writeText(roomId);
-                  }
-                }}
-              >
-                <div className="absolute inset-0 animate-shimmer pointer-events-none" />
-                <div className="flex items-center justify-between mb-2.5 relative">
-                  <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
-                    <LuHash size={11} className="text-zinc-500" /> Operation ID
-                  </p>
-                  <span className="text-[8px] uppercase tracking-[0.16em] font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors inline-flex items-center gap-1">
-                    <LuCopy size={10} /> Tap to copy
-                  </span>
-                </div>
-                <div className="flex items-center justify-center relative">
-                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
-                    {Array.from({ length: ROOM_ID_BOX_COUNT }).map((_, index) => {
-                      const char = roomIdDisplay[index] || "";
-                      return (
-                        <div
-                          key={`room-id-box-${index}`}
-                          className="h-10 w-8 rounded-lg border border-zinc-700/70 bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center text-[15px] font-black tracking-[0.08em] font-mono text-zinc-100 shrink-0"
-                        >
-                          {char || "•"}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {isCurrentHost && (() => {
-                const encryptedPayload = encryptMagicLinkPayload(roomId, roomPassword);
-                const magicLink = `${window.location.origin}/?invite=${encryptedPayload}`;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(magicLink)}
-                    className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 flex items-center justify-between gap-2 hover:border-zinc-700/60 hover:bg-zinc-900/50 active:scale-[0.99] transition-all group"
+                  <div
+                    className="group rounded-2xl p-4 mb-4 bg-gradient-to-br from-zinc-900/70 via-zinc-900/45 to-zinc-900/30 border border-zinc-800/50 hover:border-zinc-700/70 hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] relative overflow-hidden cursor-pointer transition-all duration-200 active:scale-[0.995]"
+                    role="button"
+                    tabIndex={0}
+                    title="Click to copy Room ID"
+                    aria-label="Copy Room ID"
+                    onClick={() => {
+                      navigator.clipboard.writeText(roomId);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigator.clipboard.writeText(roomId);
+                      }
+                    }}
                   >
-                    <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
-                      <LuKeyRound size={11} /> Magic Invite
-                    </p>
-                    <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
-                      <LuCopy size={11} /> Tap to Copy 
-                    </span>
-                  </button>
-                );
-              })()}
-
-              {isCurrentHost && joinRequests.length > 0 && (
-                <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/40 to-transparent" />
-                  <p className="text-[9px] uppercase font-black text-zinc-300 tracking-[0.25em] mb-3 flex items-center gap-2">
-                    <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span></span>
-                    Join Requests
-                  </p>
-                  <div className="space-y-3">
-                    {joinRequests.map((req, reqIndex) => (
-                      <div
-                        key={req.socketId || `join-request-${reqIndex}`}
-                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <span className="text-xs uppercase tracking-wide text-white break-all">
-                          {req.username}
-                        </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              decideJoinRequest(req.socketId, true)
-                            }
-                            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-zinc-600/50 text-white hover:bg-white hover:text-black rounded transition-all"
-                          >
-                            <LuCheck size={12} className="inline mr-1" />Accept
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              decideJoinRequest(req.socketId, false)
-                            }
-                            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-red-700/50 text-red-400 hover:bg-red-600 hover:text-white rounded transition-all"
-                          >
-                            <LuX size={12} className="inline mr-1" />Reject
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 mb-4 mt-1">
-                <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
-                  <LuUsers size={11} className="text-zinc-600" /> Agents Online
-                </h3>
-                <div className="min-w-0 flex-1 flex items-center gap-1.5 bg-zinc-900/70 border border-zinc-700/60 rounded-lg px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] focus-within:border-zinc-500/70 focus-within:bg-zinc-900/90">
-                  <input
-                    type="text"
-                    value={agentSearchQuery}
-                    onChange={(e) => setAgentSearchQuery(e.target.value)}
-                    placeholder="Search agent"
-                    className="min-w-0 flex-1 bg-transparent text-[10px] text-zinc-100 placeholder:text-zinc-500 outline-none"
-                  />
-                  {agentSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setAgentSearchQuery("")}
-                      className="shrink-0 text-zinc-500 hover:text-white transition-colors"
-                      title="Clear search"
-                      aria-label="Clear search"
-                    >
-                      <LuX size={12} />
-                    </button>
-                  )}
-                </div>
-                <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30 shrink-0">
-                  {users.length}/{roomCapacity || 50}
-                </span>
-              </div>
-
-              <AnimatePresence>
-                {isCurrentHost && showIntrusionHud && (
-                  <motion.div
-                    key={`intrusion-${intrusionCount}`}
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                    className="mb-3"
-                  >
-                    <div className="border border-red-500/40 bg-red-950/45 text-red-300 px-3.5 py-3 rounded-xl">
-                      <p className="text-[9px] uppercase tracking-[0.18em] font-black">
-                        Wrong Encryption Key Attempt
+                    <div className="absolute inset-0 animate-shimmer pointer-events-none" />
+                    <div className="flex items-center justify-between mb-2.5 relative">
+                      <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
+                        <LuHash size={11} className="text-zinc-500" /> Operation
+                        ID
                       </p>
-                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-red-200 break-all font-mono">
-                        {latestIntrusionCodename || "Unknown Agent"} tried to join.
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="space-y-1">
-                {users.length === 0 ? (
-                  <div className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-800/40 bg-zinc-900/40">
-                    <div className="flex items-center gap-3 truncate">
-                      <div className="w-9 h-9 bg-gradient-to-br from-white to-zinc-300 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 shadow-lg shadow-white/10 ring-2 ring-white/20">
-                        {username[0].toUpperCase()}
-                      </div>
-                      <span className="text-xs uppercase tracking-wide truncate">
-                        {username}{" "}
-                        <span className="text-zinc-600 ml-1">(YOU)</span>
-                        {isCurrentHost && (
-                          <span className="ml-2 text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
-                            <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
-                          </span>
-                        )}
+                      <span className="text-[8px] uppercase tracking-[0.16em] font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors inline-flex items-center gap-1">
+                        <LuCopy size={10} /> Tap to copy
                       </span>
                     </div>
-                  </div>
-                ) : filteredUsers.length === 0 ? (
-                  <div className="p-3 rounded-xl border border-zinc-800/40 bg-zinc-900/30 text-center">
-                    <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-zinc-500">
-                      No matching codename
-                    </p>
-                  </div>
-                ) : (
-                  filteredUsers.map((user, i) => {
-                    const isUserSilenced = silencedUserIds.has(user.id);
-                    const contextRequestForUser = contextRequests.find(
-                      (request) => request.requesterUserId === user.id,
-                    );
-                    const colors = [
-                      'from-zinc-300 to-zinc-500',
-                      'from-zinc-400 to-zinc-600',
-                      'from-zinc-200 to-zinc-400',
-                      'from-zinc-500 to-zinc-700',
-                      'from-zinc-300 to-zinc-600',
-                      'from-zinc-400 to-zinc-500',
-                    ];
-                    const colorClass = colors[i % colors.length];
-                    return (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/[0.03] group transition-all"
-                    >
-                      <div className="flex items-center gap-3 truncate">
-                        <div className={`w-9 h-9 bg-gradient-to-br ${user.username === username ? 'from-white to-zinc-300 shadow-lg shadow-white/10 ring-2 ring-white/20' : colorClass} rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 relative`}>
-                          {user.username[0].toUpperCase()}
-                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-white rounded-full border-2 border-[#0a0a0c] shadow-sm shadow-white/20" />
-                        </div>
-                        <span className="text-xs uppercase tracking-wide truncate flex items-center gap-1.5">
-                          {user.username}
-                          {user.username === username && (
-                            <span className="text-zinc-600 text-[10px] shrink-0">
-                              (YOU)
-                            </span>
-                          )}
-                          {user.isHost && (
-                            <span className="text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
-                              <LuCrown size={8} className="inline mr-0.5 -mt-px" /> HOST
-                            </span>
-                          )}
-                          {isUserSilenced && (
-                            <span className="text-[8px] px-1.5 py-0.5 bg-red-500/10 border border-red-500/30 text-red-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
-                              <LuMicOff size={8} /> SILENT
-                            </span>
-                          )}
-                          {isCurrentHost && contextRequestForUser && (
-                            <span className="text-[8px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
-                              <LuMessageSquarePlus size={8} /> CONTEXT REQ
-                            </span>
-                          )}
-                        </span>
+                    <div className="flex items-center justify-center relative">
+                      <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+                        {Array.from({ length: ROOM_ID_BOX_COUNT }).map(
+                          (_, index) => {
+                            const char = roomIdDisplay[index] || "";
+                            return (
+                              <div
+                                key={`room-id-box-${index}`}
+                                className="h-10 w-8 rounded-lg border border-zinc-700/70 bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center text-[15px] font-black tracking-[0.08em] font-mono text-zinc-100 shrink-0"
+                              >
+                                {char || "•"}
+                              </div>
+                            );
+                          },
+                        )}
                       </div>
-                      {isCurrentHost && user.id !== socket.id &&
-                        (contextRequestForUser ? (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              onClick={() => rejectContextRequest(user.id)}
-                              className="text-zinc-500 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded-lg"
-                              title={`Reject ${user.username}'s context request`}
-                            >
-                              <LuX size={14} />
-                            </button>
-                            <button
-                              onClick={() => approveContextRequest(user.id)}
-                              className="text-zinc-500 hover:text-blue-300 p-1.5 hover:bg-blue-500/10 rounded-lg"
-                              title={`Accept ${user.username}'s context request`}
-                            >
-                              <LuCheck size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                            <button
-                              onClick={() => toggleAgentRadioSilence(user.id)}
-                              className={`p-1.5 rounded-lg ${
-                                isUserSilenced
-                                  ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                  : "text-zinc-500 hover:text-white hover:bg-white/10"
-                              }`}
-                              title={
-                                isUserSilenced
-                                  ? `Restore ${user.username}'s channel`
-                                  : "Enforce Radio Silence"
-                              }
-                            >
-                              {isUserSilenced ? <LuMicOff size={14} /> : <LuMic size={14} />}
-                            </button>
-                            <button
-                              onClick={() => transferHostTo(user.id, user.username)}
-                              className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
-                              title={`Transfer host to ${user.username}`}
-                            >
-                              <LuCrown size={14} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedContextAgent(user);
-                                setContextModalMode("agent");
-                                setShowContextModal(true);
-                              }}
-                              className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={user.hasFullHistory ? `${user.username} already has context` : `Send context to ${user.username}`}
-                              disabled={!!user.hasFullHistory}
-                            >
-                              <LuMessageSquarePlus size={14} />
-                            </button>
-                            <button
-                              onClick={() => kickAgent(user.id, user.username)}
-                              className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
-                              title={`Remove ${user.username}`}
-                            >
-                              <LuUserMinus size={16} />
-                            </button>
+                    </div>
+                  </div>
+
+                  {isCurrentHost &&
+                    (() => {
+                      const encryptedPayload = encryptMagicLinkPayload(
+                        roomId,
+                        roomPassword,
+                      );
+                      const magicLink = `${window.location.origin}/chatroom/?invite=${encryptedPayload}`;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard.writeText(magicLink)
+                          }
+                          className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 flex items-center justify-between gap-2 hover:border-zinc-700/60 hover:bg-zinc-900/50 active:scale-[0.99] transition-all group"
+                        >
+                          <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
+                            <LuKeyRound size={11} /> Magic Invite
+                          </p>
+                          <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
+                            <LuCopy size={11} /> Tap to Copy
+                          </span>
+                        </button>
+                      );
+                    })()}
+
+                  {isCurrentHost && joinRequests.length > 0 && (
+                    <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/40 to-transparent" />
+                      <p className="text-[9px] uppercase font-black text-zinc-300 tracking-[0.25em] mb-3 flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                        </span>
+                        Join Requests
+                      </p>
+                      <div className="space-y-3">
+                        {joinRequests.map((req, reqIndex) => (
+                          <div
+                            key={req.socketId || `join-request-${reqIndex}`}
+                            className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <span className="text-xs uppercase tracking-wide text-white break-all">
+                              {req.username}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  decideJoinRequest(req.socketId, true)
+                                }
+                                className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-zinc-600/50 text-white hover:bg-white hover:text-black rounded transition-all"
+                              >
+                                <LuCheck size={12} className="inline mr-1" />
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  decideJoinRequest(req.socketId, false)
+                                }
+                                className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border border-red-700/50 text-red-400 hover:bg-red-600 hover:text-white rounded transition-all"
+                              >
+                                <LuX size={12} className="inline mr-1" />
+                                Reject
+                              </button>
+                            </div>
                           </div>
                         ))}
+                      </div>
                     </div>
-                  );
-                  })
-                )}
-              </div>
+                  )}
+
+                  <div className="flex items-center gap-2 mb-4 mt-1">
+                    <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
+                      <LuUsers size={11} className="text-zinc-600" /> Agents
+                      Online
+                    </h3>
+                    <div className="min-w-0 flex-1 flex items-center gap-1.5 bg-zinc-900/70 border border-zinc-700/60 rounded-lg px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] focus-within:border-zinc-500/70 focus-within:bg-zinc-900/90">
+                      <input
+                        type="text"
+                        value={agentSearchQuery}
+                        onChange={(e) => setAgentSearchQuery(e.target.value)}
+                        placeholder="Search agent"
+                        className="min-w-0 flex-1 bg-transparent text-[10px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+                      />
+                      {agentSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setAgentSearchQuery("")}
+                          className="shrink-0 text-zinc-500 hover:text-white transition-colors"
+                          title="Clear search"
+                          aria-label="Clear search"
+                        >
+                          <LuX size={12} />
+                        </button>
+                      )}
+                    </div>
+                    <span className="bg-white/10 text-white px-2 py-0.5 rounded-full text-[9px] tabular-nums font-bold border border-zinc-700/30 shrink-0">
+                      {users.length}/{roomCapacity || 50}
+                    </span>
+                  </div>
+
+                  <AnimatePresence>
+                    {isCurrentHost && showIntrusionHud && (
+                      <motion.div
+                        key={`intrusion-${intrusionCount}`}
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        className="mb-3"
+                      >
+                        <div className="border border-red-500/40 bg-red-950/45 text-red-300 px-3.5 py-3 rounded-xl">
+                          <p className="text-[9px] uppercase tracking-[0.18em] font-black">
+                            Wrong Encryption Key Attempt
+                          </p>
+                          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-red-200 break-all font-mono">
+                            {latestIntrusionCodename || "Unknown Agent"} tried
+                            to join.
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="space-y-1">
+                    {users.length === 0 ? (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-800/40 bg-zinc-900/40">
+                        <div className="flex items-center gap-3 truncate">
+                          <div className="w-9 h-9 bg-gradient-to-br from-white to-zinc-300 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 shadow-lg shadow-white/10 ring-2 ring-white/20">
+                            {username[0].toUpperCase()}
+                          </div>
+                          <span className="text-xs uppercase tracking-wide truncate">
+                            {username}{" "}
+                            <span className="text-zinc-600 ml-1">(YOU)</span>
+                            {isCurrentHost && (
+                              <span className="ml-2 text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
+                                <LuCrown
+                                  size={8}
+                                  className="inline mr-0.5 -mt-px"
+                                />{" "}
+                                HOST
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    ) : filteredUsers.length === 0 ? (
+                      <div className="p-3 rounded-xl border border-zinc-800/40 bg-zinc-900/30 text-center">
+                        <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-zinc-500">
+                          No matching codename
+                        </p>
+                      </div>
+                    ) : (
+                      filteredUsers.map((user, i) => {
+                        const isUserSilenced = silencedUserIds.has(user.id);
+                        const contextRequestForUser = contextRequests.find(
+                          (request) => request.requesterUserId === user.id,
+                        );
+                        const colors = [
+                          "from-zinc-300 to-zinc-500",
+                          "from-zinc-400 to-zinc-600",
+                          "from-zinc-200 to-zinc-400",
+                          "from-zinc-500 to-zinc-700",
+                          "from-zinc-300 to-zinc-600",
+                          "from-zinc-400 to-zinc-500",
+                        ];
+                        const colorClass = colors[i % colors.length];
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/[0.03] group transition-all"
+                          >
+                            <div className="flex items-center gap-3 truncate">
+                              <div
+                                className={`w-9 h-9 bg-gradient-to-br ${user.username === username ? "from-white to-zinc-300 shadow-lg shadow-white/10 ring-2 ring-white/20" : colorClass} rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-[11px] text-zinc-900 relative`}
+                              >
+                                {user.username[0].toUpperCase()}
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-white rounded-full border-2 border-[#0a0a0c] shadow-sm shadow-white/20" />
+                              </div>
+                              <span className="text-xs uppercase tracking-wide truncate flex items-center gap-1.5">
+                                {user.username}
+                                {user.username === username && (
+                                  <span className="text-zinc-600 text-[10px] shrink-0">
+                                    (YOU)
+                                  </span>
+                                )}
+                                {user.isHost && (
+                                  <span className="text-[8px] px-1.5 py-0.5 bg-white/10 border border-zinc-600/30 text-white font-black tracking-widest leading-none shrink-0 rounded">
+                                    <LuCrown
+                                      size={8}
+                                      className="inline mr-0.5 -mt-px"
+                                    />{" "}
+                                    HOST
+                                  </span>
+                                )}
+                                {isUserSilenced && (
+                                  <span className="text-[8px] px-1.5 py-0.5 bg-red-500/10 border border-red-500/30 text-red-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
+                                    <LuMicOff size={8} /> SILENT
+                                  </span>
+                                )}
+                                {isCurrentHost && contextRequestForUser && (
+                                  <span className="text-[8px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-300 font-black tracking-widest leading-none shrink-0 rounded inline-flex items-center gap-1">
+                                    <LuMessageSquarePlus size={8} /> CONTEXT REQ
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            {isCurrentHost &&
+                              user.id !== socket.id &&
+                              (contextRequestForUser ? (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() =>
+                                      rejectContextRequest(user.id)
+                                    }
+                                    className="text-zinc-500 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded-lg"
+                                    title={`Reject ${user.username}'s context request`}
+                                  >
+                                    <LuX size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      approveContextRequest(user.id)
+                                    }
+                                    className="text-zinc-500 hover:text-blue-300 p-1.5 hover:bg-blue-500/10 rounded-lg"
+                                    title={`Accept ${user.username}'s context request`}
+                                  >
+                                    <LuCheck size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                                  <button
+                                    onClick={() =>
+                                      toggleAgentRadioSilence(user.id)
+                                    }
+                                    className={`p-1.5 rounded-lg ${
+                                      isUserSilenced
+                                        ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        : "text-zinc-500 hover:text-white hover:bg-white/10"
+                                    }`}
+                                    title={
+                                      isUserSilenced
+                                        ? `Restore ${user.username}'s channel`
+                                        : "Enforce Radio Silence"
+                                    }
+                                  >
+                                    {isUserSilenced ? (
+                                      <LuMicOff size={14} />
+                                    ) : (
+                                      <LuMic size={14} />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      transferHostTo(user.id, user.username)
+                                    }
+                                    className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
+                                    title={`Transfer host to ${user.username}`}
+                                  >
+                                    <LuCrown size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedContextAgent(user);
+                                      setContextModalMode("agent");
+                                      setShowContextModal(true);
+                                    }}
+                                    className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={
+                                      user.hasFullHistory
+                                        ? `${user.username} already has context`
+                                        : `Send context to ${user.username}`
+                                    }
+                                    disabled={!!user.hasFullHistory}
+                                  >
+                                    <LuMessageSquarePlus size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      kickAgent(user.id, user.username)
+                                    }
+                                    className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
+                                    title={`Remove ${user.username}`}
+                                  >
+                                    <LuUserMinus size={16} />
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
 
                 <div className="p-4 flex-shrink-0 relative">
-              <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
-              <div className="pt-1">
-                {isCurrentHost ? (
-                  <>
-                    <button
-                      onClick={() => {
-                        setContextModalMode("all");
-                        setShowContextModal(true);
-                      }}
-                      className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2"
-                    >
-                      <LuMessageSquarePlus size={13} /> SEND CONTEXT TO ALL
-                    </button>
-                    <button
-                      onClick={handleTerminateClick}
-                      className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
-                    >
-                      <LuLogOut size={14} /> TERMINATE ROOM
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={requestContext}
-                      disabled={!!currentUser?.hasFullHistory || isContextRequestPending}
-                      className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <LuMessageSquarePlus size={13} /> {isContextRequestPending ? "CONTEXT REQUESTED" : "REQUEST CONTEXT"}
-                    </button>
-                    <button
-                      onClick={handleLeaveClick}
-                      className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
-                    >
-                      <LuLogOut size={14} /> LEAVE ROOM
-                    </button>
-                  </>
-                )}
-              </div>
+                  <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
+                  <div className="pt-1">
+                    {isCurrentHost ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setContextModalMode("all");
+                            setShowContextModal(true);
+                          }}
+                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2"
+                        >
+                          <LuMessageSquarePlus size={13} /> SEND CONTEXT TO ALL
+                        </button>
+                        <button
+                          onClick={handleTerminateClick}
+                          className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
+                        >
+                          <LuLogOut size={14} /> TERMINATE ROOM
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={requestContext}
+                          disabled={
+                            !!currentUser?.hasFullHistory ||
+                            isContextRequestPending
+                          }
+                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <LuMessageSquarePlus size={13} />{" "}
+                          {isContextRequestPending
+                            ? "CONTEXT REQUESTED"
+                            : "REQUEST CONTEXT"}
+                        </button>
+                        <button
+                          onClick={handleLeaveClick}
+                          className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
+                        >
+                          <LuLogOut size={14} /> LEAVE ROOM
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -3139,17 +3343,24 @@ const ChatRoom = ({
               aria-label="Collapse sidebar"
             >
               <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                <path d="M15 5 L9 12 L15 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M15 5 L9 12 L15 19"
+                  fill="none"
+                  stroke="#e4e4e7"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
-
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Open handle — edge line logic restored, fixed chevron shape preserved */}
-      {!showUsers && !isSidebarClosing && (
-        isMobile ? (
+      {!showUsers &&
+        !isSidebarClosing &&
+        (isMobile ? (
           <div className="fixed top-1/2 -translate-y-1/2 left-3 z-[60] h-[88px] w-8">
             <div
               onTouchStart={handleMobileEdgeTouchStart}
@@ -3169,7 +3380,14 @@ const ChatRoom = ({
                 aria-label="Expand sidebar"
               >
                 <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                  <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M9 5 L15 12 L9 19"
+                    fill="none"
+                    stroke="#e4e4e7"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </button>
             )}
@@ -3179,15 +3397,38 @@ const ChatRoom = ({
             {showSidebarHintLine ? (
               startSidebarHintMorph ? (
                 <motion.div
-                  initial={{ width: 22, height: 88, borderRadius: 999, opacity: 1, backgroundColor: "#27272a" }}
-                  animate={{ width: 2, height: 64, borderRadius: 999, opacity: 0.8, backgroundColor: "rgba(82,82,91,0.8)" }}
+                  initial={{
+                    width: 22,
+                    height: 88,
+                    borderRadius: 999,
+                    opacity: 1,
+                    backgroundColor: "#27272a",
+                  }}
+                  animate={{
+                    width: 2,
+                    height: 64,
+                    borderRadius: 999,
+                    opacity: 0.8,
+                    backgroundColor: "rgba(82,82,91,0.8)",
+                  }}
                   transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute left-0 top-1/2 -translate-y-1/2"
                 />
               ) : (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[22px] h-[88px] flex items-center justify-center rounded-r-[999px] bg-zinc-800 border-y border-r border-zinc-700/50 shadow-[4px_0_16px_rgba(0,0,0,0.4)] pointer-events-none">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                    <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-4 h-4"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M9 5 L15 12 L9 19"
+                      fill="none"
+                      stroke="#e4e4e7"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </div>
               )
@@ -3200,15 +3441,25 @@ const ChatRoom = ({
                   title="Expand sidebar"
                   aria-label="Expand sidebar"
                 >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                    <path d="M9 5 L15 12 L9 19" fill="none" stroke="#e4e4e7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-4 h-4"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M9 5 L15 12 L9 19"
+                      fill="none"
+                      stroke="#e4e4e7"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </button>
               </>
             )}
           </div>
-        )
-      )}
+        ))}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#09090b] relative">
         <header className="h-14 sm:h-16 md:h-20 flex items-center justify-between px-3 sm:px-4 md:px-6 z-30 bg-[#09090b]/80 backdrop-blur-xl flex-shrink-0 relative border-b border-zinc-800/30 pt-safe">
@@ -3220,7 +3471,10 @@ const ChatRoom = ({
             />
             <div className="hidden xs:flex flex-col truncate">
               <h1 className="font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
-                <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span></span>
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                </span>
                 Encrypted Session
               </h1>
               <p className="text-[11px] text-zinc-600 uppercase tracking-[0.15em] flex items-center gap-1.5 mt-0.5 font-mono tabular-nums">
@@ -3351,7 +3605,11 @@ const ChatRoom = ({
                   type="button"
                   onClick={() => setIsPinnedBannerExpanded((prev) => !prev)}
                   className="flex items-center gap-1.5 text-[9px] uppercase font-bold text-zinc-400 hover:text-white transition"
-                  title={isPinnedBannerExpanded ? "Collapse pinned list" : "Expand pinned list"}
+                  title={
+                    isPinnedBannerExpanded
+                      ? "Collapse pinned list"
+                      : "Expand pinned list"
+                  }
                 >
                   {isPinnedBannerExpanded ? "Collapse" : "Expand"}
                   <LuChevronRight
@@ -3363,7 +3621,10 @@ const ChatRoom = ({
             </div>
 
             <div className="px-2 py-2 space-y-1.5">
-              {(isPinnedBannerExpanded ? pinnedItems : pinnedItems.slice(0, 1)).map((pinnedItem) => {
+              {(isPinnedBannerExpanded
+                ? pinnedItems
+                : pinnedItems.slice(0, 1)
+              ).map((pinnedItem) => {
                 const preview = getPinnedItemPreview(pinnedItem);
                 const Icon = preview.icon || LuPin;
 
@@ -3385,7 +3646,10 @@ const ChatRoom = ({
                       <div className="p-1.5 bg-white/5 rounded-lg border border-zinc-700/30 shrink-0 relative">
                         <Icon className="text-white" size={13} />
                         {preview.isMultiImage && (
-                          <LuPlus size={8} className="text-zinc-300 absolute -right-1 -bottom-1 bg-[#0a0a0c] rounded-full" />
+                          <LuPlus
+                            size={8}
+                            className="text-zinc-300 absolute -right-1 -bottom-1 bg-[#0a0a0c] rounded-full"
+                          />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -3407,7 +3671,10 @@ const ChatRoom = ({
                     <button
                       type="button"
                       onClick={() =>
-                        togglePinMessage(pinnedItem.messageId, pinnedItem.imageIndex)
+                        togglePinMessage(
+                          pinnedItem.messageId,
+                          pinnedItem.imageIndex,
+                        )
                       }
                       className="p-1.5 text-zinc-600 hover:text-white hover:bg-white/5 transition-all rounded-lg active:scale-90 shrink-0"
                       title="Unpin"
@@ -3425,777 +3692,979 @@ const ChatRoom = ({
           <div className="pointer-events-none fixed top-20 left-72 right-0 h-24 bg-gradient-to-b from-[#09090b] to-transparent z-10 hidden lg:block" />
 
           <AnimatePresence initial={false}>
-          {messageList.map((msg, msgIndex) => {
-            const isDeleting = deletingIds.has(msg.id);
-            const isCommanderMessage =
-              !msg.system && !msg.deleted && !!msg.senderIsHost;
-            const messageReactionList = getMessageReactionList(msg?.id);
-            const messageReactionSummary = getMessageReactionSummary(msg?.id);
-            const myReactionEmoji =
-              messageReactionList.find(
-                (reaction) =>
-                  reaction.username?.toLowerCase() === username?.toLowerCase(),
-              )?.emoji || null;
-            const isMediaPayload =
-              msg.type === "image" ||
-              msg.type === "image-batch" ||
-              msg.type === "audio" ||
-              msg.type === "file";
-            const hasHeaderContent =
-              (!msg.own && !msg.deleted) ||
-              (hasEveryoneMention(msg.message) && !msg.deleted) ||
-              (msg.isContextMessage && !msg.deleted) ||
-              (isMessagePinned(msg.id) && !msg.deleted) ||
-              (msg.timer > 0 && !msg.deleted);
-            return (
-            <motion.div
-              ref={(el) => {
-                if (!el || !msg?.id) return;
-                messageRefs.current[msg.id] = el;
-              }}
-              data-message-id={msg?.id}
-              layout={!isDeleting ? "position" : false}
-              key={msg.id || `msg-${msgIndex}`}
-              initial={
-                msg.system
-                  ? { opacity: 0, scale: 0.85 }
-                  : msg.own
-                    ? { opacity: 0, y: 20, scale: 0.96 }
-                    : { opacity: 0, x: -20, scale: 0.97 }
-              }
-              animate={{
-                opacity: isDeleting ? 0 : 1,
-                y: 0,
-                x: 0,
-                scale: 1,
-                height: isDeleting ? 0 : "auto",
-                paddingTop: isDeleting ? 0 : undefined,
-                paddingBottom: isDeleting ? 0 : undefined,
-                marginTop: isDeleting ? 0 : undefined,
-                marginBottom: isDeleting ? 0 : undefined,
-                transition: isDeleting
-                  ? { duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: 0 }
-                  : {
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 26,
-                      mass: 0.75,
-                    },
-              }}
-              exit={{
-                opacity: 0,
-                height: 0,
-                marginTop: 0,
-                marginBottom: 0,
-                transition: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
-              }}
-              style={{ overflow: isDeleting ? "hidden" : undefined }}
-              className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"} ${isSelectMode && !msg.system ? "cursor-pointer" : ""} transition-colors duration-200 ${isSelectMode && !msg.system && selectedMessageIds.has(msg.id) ? "bg-white/[0.06] -mx-4 px-4 py-1 rounded-xl" : ""}`}
-              onClick={isSelectMode && !msg.system ? () => toggleSelectMessage(msg.id) : undefined}
-            >
-              {msg.system ? (
-                <span className="text-[8px] sm:text-[9px] text-zinc-600 px-4 py-1.5 uppercase tracking-[0.2em] rounded-full bg-zinc-900/30 border border-zinc-800/20 backdrop-blur-sm font-mono">
-                  {msg.message}
-                </span>
-              ) : (
-                <div className={`flex items-start gap-2.5 max-w-full w-full ${msg.own ? "justify-end" : "justify-start"}`}>
-                  {/* WhatsApp-style left checkmark */}
-                  {isSelectMode && (
-                    <div className="flex items-center self-center shrink-0">
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${selectedMessageIds.has(msg.id) ? "border-white bg-white shadow-lg shadow-white/20 scale-110" : "border-zinc-600 bg-transparent hover:border-zinc-400"}`}
-                      >
-                        {selectedMessageIds.has(msg.id) && (
-                          <LuCheck className="text-black" size={12} strokeWidth={3} />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className={`flex flex-col ${msg.type === "audio" ? "max-w-full" : "max-w-[92%] sm:max-w-[80%] md:max-w-[70%] lg:max-w-[60%]"} relative ${isSelectMode ? "pointer-events-none" : ""}`}>
-                  <div
-                    data-bubble
-                    className={`${
-                      isMediaPayload
-                        ? "px-2 py-2 sm:px-2.5 sm:py-2.5 md:px-3 md:py-3"
-                        : "px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5"
-                    } relative transition-all rounded-2xl ${
-                      msg.deleted
-                        ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
-                        : msg.poll
-                          ? (msg.own
-                              ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
-                              : "bg-zinc-900/60 text-zinc-200 border border-zinc-800/40 rounded-2xl")
-                          : msg.own
-                            ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
-                            : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
-                    } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
-                  >
-                    <div className={`flex justify-between items-start gap-4 ${hasHeaderContent ? "mb-2" : "mb-0"}`}>
-                      {!msg.own && !msg.deleted && (
-                        <p className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-widest truncate">
-                          {msg.username}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 ml-auto shrink-0">
-                        {hasEveryoneMention(msg.message) && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
-                            @EVERYONE
-                          </span>
-                        )}
-                        {msg.isContextMessage && !msg.deleted && (
-                          <span className="context-message-badge">CONTEXT</span>
-                        )}
-                        {isMessagePinned(msg.id) && !msg.deleted && (
-                          <span
-                            className={`flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full ${
-                              msg.own
-                                ? "bg-black/10 text-zinc-900 border border-zinc-200/10"
-                                : "bg-white/10 text-white"
-                            }`}
+            {messageList.map((msg, msgIndex) => {
+              const isDeleting = deletingIds.has(msg.id);
+              const isCommanderMessage =
+                !msg.system && !msg.deleted && !!msg.senderIsHost;
+              const messageReactionList = getMessageReactionList(msg?.id);
+              const messageReactionSummary = getMessageReactionSummary(msg?.id);
+              const myReactionEmoji =
+                messageReactionList.find(
+                  (reaction) =>
+                    reaction.username?.toLowerCase() ===
+                    username?.toLowerCase(),
+                )?.emoji || null;
+              const isMediaPayload =
+                msg.type === "image" ||
+                msg.type === "image-batch" ||
+                msg.type === "audio" ||
+                msg.type === "file";
+              const hasHeaderContent =
+                (!msg.own && !msg.deleted) ||
+                (hasEveryoneMention(msg.message) && !msg.deleted) ||
+                (msg.isContextMessage && !msg.deleted) ||
+                (isMessagePinned(msg.id) && !msg.deleted) ||
+                (msg.timer > 0 && !msg.deleted);
+              return (
+                <motion.div
+                  ref={(el) => {
+                    if (!el || !msg?.id) return;
+                    messageRefs.current[msg.id] = el;
+                  }}
+                  data-message-id={msg?.id}
+                  layout={!isDeleting ? "position" : false}
+                  key={msg.id || `msg-${msgIndex}`}
+                  initial={
+                    msg.system
+                      ? { opacity: 0, scale: 0.85 }
+                      : msg.own
+                        ? { opacity: 0, y: 20, scale: 0.96 }
+                        : { opacity: 0, x: -20, scale: 0.97 }
+                  }
+                  animate={{
+                    opacity: isDeleting ? 0 : 1,
+                    y: 0,
+                    x: 0,
+                    scale: 1,
+                    height: isDeleting ? 0 : "auto",
+                    paddingTop: isDeleting ? 0 : undefined,
+                    paddingBottom: isDeleting ? 0 : undefined,
+                    marginTop: isDeleting ? 0 : undefined,
+                    marginBottom: isDeleting ? 0 : undefined,
+                    transition: isDeleting
+                      ? { duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: 0 }
+                      : {
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 26,
+                          mass: 0.75,
+                        },
+                  }}
+                  exit={{
+                    opacity: 0,
+                    height: 0,
+                    marginTop: 0,
+                    marginBottom: 0,
+                    transition: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
+                  }}
+                  style={{ overflow: isDeleting ? "hidden" : undefined }}
+                  className={`flex group relative ${msg.system ? "justify-center" : msg.own ? "justify-end" : "justify-start"} ${isSelectMode && !msg.system ? "cursor-pointer" : ""} transition-colors duration-200 ${isSelectMode && !msg.system && selectedMessageIds.has(msg.id) ? "bg-white/[0.06] -mx-4 px-4 py-1 rounded-xl" : ""}`}
+                  onClick={
+                    isSelectMode && !msg.system
+                      ? () => toggleSelectMessage(msg.id)
+                      : undefined
+                  }
+                >
+                  {msg.system ? (
+                    <span className="text-[8px] sm:text-[9px] text-zinc-600 px-4 py-1.5 uppercase tracking-[0.2em] rounded-full bg-zinc-900/30 border border-zinc-800/20 backdrop-blur-sm font-mono">
+                      {msg.message}
+                    </span>
+                  ) : (
+                    <div
+                      className={`flex items-start gap-2.5 max-w-full w-full ${msg.own ? "justify-end" : "justify-start"}`}
+                    >
+                      {/* WhatsApp-style left checkmark */}
+                      {isSelectMode && (
+                        <div className="flex items-center self-center shrink-0">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${selectedMessageIds.has(msg.id) ? "border-white bg-white shadow-lg shadow-white/20 scale-110" : "border-zinc-600 bg-transparent hover:border-zinc-400"}`}
                           >
-                            <LuPin size={9} /> PINNED
-                          </span>
-                        )}
-                        {msg.timer > 0 && !msg.deleted && (
-                          <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">
-                            <LuTimer size={9} /> {msg.timer / 1000}S
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {msg.replyTo && (
+                            {selectedMessageIds.has(msg.id) && (
+                              <LuCheck
+                                className="text-black"
+                                size={12}
+                                strokeWidth={3}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
                       <div
-                        className={`mb-2 flex ${msg.own ? "justify-end" : "justify-start"}`}
+                        className={`flex flex-col ${msg.type === "audio" ? "max-w-full" : "max-w-[92%] sm:max-w-[80%] md:max-w-[70%] lg:max-w-[60%]"} relative ${isSelectMode ? "pointer-events-none" : ""}`}
                       >
                         <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            jumpToMessage(msg.replyTo?.messageId);
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ")
-                              jumpToMessage(msg.replyTo?.messageId);
-                          }}
-                          title="Jump to replied message"
-                          className={`border-l-2 px-3 py-1.5 text-[10px] w-full rounded-r-lg ${
-                            msg.own
-                              ? "bg-black/20 text-white/80 border-zinc-400"
-                              : "bg-white/10 text-zinc-300 border-zinc-500"
-                          } ${msg.replyTo?.messageId ? "cursor-pointer hover:bg-white/[0.06] transition-colors" : ""}`}
+                          data-bubble
+                          className={`${
+                            isMediaPayload
+                              ? "px-2 py-2 sm:px-2.5 sm:py-2.5 md:px-3 md:py-3"
+                              : "px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5"
+                          } relative transition-all rounded-2xl ${
+                            msg.deleted
+                              ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
+                              : msg.poll
+                                ? msg.own
+                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
+                                  : "bg-zinc-900/60 text-zinc-200 border border-zinc-800/40 rounded-2xl"
+                                : msg.own
+                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
+                                  : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
+                          } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
                         >
-                          <p
-                            className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}
+                          <div
+                            className={`flex justify-between items-start gap-4 ${hasHeaderContent ? "mb-2" : "mb-0"}`}
                           >
-                            <LuReply size={9} /> {msg.replyTo.username}
-                          </p>
-                          <p
-                            className={`italic truncate text-[10px] ${msg.own ? "text-zinc-400" : "text-zinc-400"}`}
-                          >
-                            {decrypt(msg.replyTo.message)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {msg.poll ? (
-                      <div className="space-y-3">
-                        <div>
-                          <p className={`text-sm sm:text-[15px] font-bold break-words ${msg.own ? "text-zinc-900" : "text-white"}`}>
-                            {decrypt(msg.poll.question)}
-                          </p>
-                          <p className={`text-[10px] mt-1 uppercase tracking-widest font-bold ${msg.own ? "text-zinc-600" : "text-zinc-500"}`}>
-                            {msg.poll.allowMultiple
-                              ? "Select one or more answers"
-                              : "Select one answer"}
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          {(() => {
-                            const options = msg.poll.options || [];
-                            const totalVotes = options.reduce(
-                              (sum, o) =>
-                                sum +
-                                (Array.isArray(o.votes) ? o.votes.length : 0),
-                              0,
-                            );
-                            const ended =
-                              msg.poll.expiresAt &&
-                              msg.poll.expiresAt <= Date.now();
-                            return options.map((opt, optIndex) => {
-                              const votes = Array.isArray(opt.votes)
-                                ? opt.votes.length
-                                : 0;
-                              const pct = totalVotes
-                                ? Math.round((votes / totalVotes) * 100)
-                                : 0;
-                              const iVoted = Array.isArray(opt.votes)
-                                ? opt.votes.includes(username)
-                                : false;
-                              return (
-                                <button
-                                  key={`${msg.id || "poll"}-opt-${opt.id || optIndex}`}
-                                  type="button"
-                                  disabled={ended}
-                                  onClick={() => voteOnPoll(msg, opt.id)}
-                                  className={`w-full text-left transition-all px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 ${ended ? "opacity-60 cursor-not-allowed" : ""} ${iVoted ? (msg.own ? "border-zinc-300/40 bg-white/5" : "border-white/30 bg-white/5") : ""} ${msg.own ? "border border-zinc-300/40 bg-white/5 hover:bg-white/10" : "border border-zinc-800/30 bg-zinc-900/30 hover:bg-zinc-800/40"}`}
-                                  title={ended ? "Poll ended" : "Vote"}
+                            {!msg.own && !msg.deleted && (
+                              <p className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-widest truncate">
+                                {msg.username}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 ml-auto shrink-0">
+                              {hasEveryoneMention(msg.message) &&
+                                !msg.deleted && (
+                                  <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                                    @EVERYONE
+                                  </span>
+                                )}
+                              {msg.isContextMessage && !msg.deleted && (
+                                <span className="context-message-badge">
+                                  CONTEXT
+                                </span>
+                              )}
+                              {isMessagePinned(msg.id) && !msg.deleted && (
+                                <span
+                                  className={`flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full ${
+                                    msg.own
+                                      ? "bg-black/10 text-zinc-900 border border-zinc-200/10"
+                                      : "bg-white/10 text-white"
+                                  }`}
                                 >
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <p className={`text-[13px] truncate ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                                        {decrypt(opt.text)}
-                                      </p>
-                                      <div className="flex items-center gap-3 shrink-0">
-                                        <span className={`text-[12px] font-bold tabular-nums ${msg.own ? "text-zinc-600" : "text-zinc-400"}`}>
-                                          {votes} {" "}
-                                          {votes === 1 ? "vote" : "votes"}
-                                        </span>
-                                        <span className={`text-[12px] font-bold tabular-nums ${msg.own ? "text-zinc-600" : "text-zinc-400"}`}>
-                                          {pct}%
-                                        </span>
-                                        {iVoted && (
-                                          <span className="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center shadow-lg shadow-white/20">
-                                            <LuCheck size={13} />
-                                          </span>
-                                        )}
+                                  <LuPin size={9} /> PINNED
+                                </span>
+                              )}
+                              {msg.timer > 0 && !msg.deleted && (
+                                <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">
+                                  <LuTimer size={9} /> {msg.timer / 1000}S
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {msg.replyTo && (
+                            <div
+                              className={`mb-2 flex ${msg.own ? "justify-end" : "justify-start"}`}
+                            >
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  jumpToMessage(msg.replyTo?.messageId);
+                                }}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ")
+                                    jumpToMessage(msg.replyTo?.messageId);
+                                }}
+                                title="Jump to replied message"
+                                className={`border-l-2 px-3 py-1.5 text-[10px] w-full rounded-r-lg ${
+                                  msg.own
+                                    ? "bg-black/20 text-white/80 border-zinc-400"
+                                    : "bg-white/10 text-zinc-300 border-zinc-500"
+                                } ${msg.replyTo?.messageId ? "cursor-pointer hover:bg-white/[0.06] transition-colors" : ""}`}
+                              >
+                                <p
+                                  className={`font-bold text-[8px] flex items-center gap-1 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}
+                                >
+                                  <LuReply size={9} /> {msg.replyTo.username}
+                                </p>
+                                <p
+                                  className={`italic truncate text-[10px] ${msg.own ? "text-zinc-400" : "text-zinc-400"}`}
+                                >
+                                  {decrypt(msg.replyTo.message)}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {msg.poll ? (
+                            <div className="space-y-3">
+                              <div>
+                                <p
+                                  className={`text-sm sm:text-[15px] font-bold break-words ${msg.own ? "text-zinc-900" : "text-white"}`}
+                                >
+                                  {decrypt(msg.poll.question)}
+                                </p>
+                                <p
+                                  className={`text-[10px] mt-1 uppercase tracking-widest font-bold ${msg.own ? "text-zinc-600" : "text-zinc-500"}`}
+                                >
+                                  {msg.poll.allowMultiple
+                                    ? "Select one or more answers"
+                                    : "Select one answer"}
+                                </p>
+                              </div>
+
+                              <div className="space-y-2">
+                                {(() => {
+                                  const options = msg.poll.options || [];
+                                  const totalVotes = options.reduce(
+                                    (sum, o) =>
+                                      sum +
+                                      (Array.isArray(o.votes)
+                                        ? o.votes.length
+                                        : 0),
+                                    0,
+                                  );
+                                  const ended =
+                                    msg.poll.expiresAt &&
+                                    msg.poll.expiresAt <= Date.now();
+                                  return options.map((opt, optIndex) => {
+                                    const votes = Array.isArray(opt.votes)
+                                      ? opt.votes.length
+                                      : 0;
+                                    const pct = totalVotes
+                                      ? Math.round((votes / totalVotes) * 100)
+                                      : 0;
+                                    const iVoted = Array.isArray(opt.votes)
+                                      ? opt.votes.includes(username)
+                                      : false;
+                                    return (
+                                      <button
+                                        key={`${msg.id || "poll"}-opt-${opt.id || optIndex}`}
+                                        type="button"
+                                        disabled={ended}
+                                        onClick={() => voteOnPoll(msg, opt.id)}
+                                        className={`w-full text-left transition-all px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 ${ended ? "opacity-60 cursor-not-allowed" : ""} ${iVoted ? (msg.own ? "border-zinc-300/40 bg-white/5" : "border-white/30 bg-white/5") : ""} ${msg.own ? "border border-zinc-300/40 bg-white/5 hover:bg-white/10" : "border border-zinc-800/30 bg-zinc-900/30 hover:bg-zinc-800/40"}`}
+                                        title={ended ? "Poll ended" : "Vote"}
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center justify-between gap-3">
+                                            <p
+                                              className={`text-[13px] truncate ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                            >
+                                              {decrypt(opt.text)}
+                                            </p>
+                                            <div className="flex items-center gap-3 shrink-0">
+                                              <span
+                                                className={`text-[12px] font-bold tabular-nums ${msg.own ? "text-zinc-600" : "text-zinc-400"}`}
+                                              >
+                                                {votes}{" "}
+                                                {votes === 1 ? "vote" : "votes"}
+                                              </span>
+                                              <span
+                                                className={`text-[12px] font-bold tabular-nums ${msg.own ? "text-zinc-600" : "text-zinc-400"}`}
+                                              >
+                                                {pct}%
+                                              </span>
+                                              {iVoted && (
+                                                <span className="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center shadow-lg shadow-white/20">
+                                                  <LuCheck size={13} />
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div
+                                            className={`mt-2 h-1 rounded-full overflow-hidden ${msg.own ? "bg-zinc-200" : "bg-black/40"}`}
+                                          >
+                                            <div
+                                              className={`${msg.own ? "h-full bg-gradient-to-r from-zinc-700 to-zinc-500" : "h-full bg-gradient-to-r from-white to-zinc-300"} rounded-full transition-all duration-500`}
+                                              style={{ width: `${pct}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                                {(() => {
+                                  const options = msg.poll.options || [];
+                                  const totalVotes = options.reduce(
+                                    (sum, o) =>
+                                      sum +
+                                      (Array.isArray(o.votes)
+                                        ? o.votes.length
+                                        : 0),
+                                    0,
+                                  );
+                                  return (
+                                    <span className="font-bold">
+                                      {totalVotes}{" "}
+                                      {totalVotes === 1 ? "vote" : "votes"} •{" "}
+                                      {formatTimeLeft(msg.poll.expiresAt)}
+                                    </span>
+                                  );
+                                })()}
+                                <button
+                                  type="button"
+                                  onClick={() => clearMyPollVotes(msg)}
+                                  className={`text-zinc-500 transition-all border border-zinc-800/40 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold active:scale-95 ${msg.own ? "hover:bg-zinc-200 hover:text-zinc-900" : "hover:bg-white/5 hover:text-white"}`}
+                                >
+                                  Remove Vote
+                                </button>
+                              </div>
+                            </div>
+                          ) : msg.type === "image" ? (
+                            (() => {
+                              const imgIdx = lightboxImages.findIndex(
+                                (item) =>
+                                  item.messageId === msg.id &&
+                                  item.itemIndex === 0,
+                              );
+                              return (
+                                <div className="space-y-2">
+                                  <div
+                                    className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40" : "border border-zinc-800/40 bg-zinc-900/60"}`}
+                                  >
+                                    <img
+                                      src={msg.message}
+                                      alt="Classified attachment"
+                                      className="max-w-full max-h-96 object-contain w-full cursor-zoom-in"
+                                      onClick={() => {
+                                        setLightboxIndex(
+                                          imgIdx >= 0 ? imgIdx : 0,
+                                        );
+                                        setLightboxOpen(true);
+                                      }}
+                                      onError={(e) => {
+                                        e.target.style.display = "none";
+                                        e.target.nextSibling.style.display =
+                                          "block";
+                                      }}
+                                    />
+                                    <div
+                                      style={{ display: "none" }}
+                                      className="p-4 text-center text-zinc-500 text-xs"
+                                    >
+                                      <LuTriangleAlert
+                                        className="inline mr-2"
+                                        size={14}
+                                      />
+                                      Failed to decrypt image
+                                    </div>
+                                    {/* Zoom hint overlay */}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                      <div className="bg-black/60 backdrop-blur-sm rounded-full p-2.5 border border-zinc-700/40">
+                                        <LuMaximize2
+                                          size={18}
+                                          className="text-white"
+                                        />
                                       </div>
                                     </div>
-                                    <div className={`mt-2 h-1 rounded-full overflow-hidden ${msg.own ? "bg-zinc-200" : "bg-black/40"}`}>
-                                      <div
-                                        className={`${msg.own ? "h-full bg-gradient-to-r from-zinc-700 to-zinc-500" : "h-full bg-gradient-to-r from-white to-zinc-300"} rounded-full transition-all duration-500`}
-                                        style={{ width: `${pct}%` }}
-                                      />
+                                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() =>
+                                          downloadImage(msg.message, msg.id)
+                                        }
+                                        className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg"
+                                        title="Download image"
+                                      >
+                                        <LuDownload size={13} />
+                                        Download
+                                      </button>
                                     </div>
                                   </div>
-                                </button>
+                                  {msg.caption && !msg.deleted && (
+                                    <p
+                                      className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                    >
+                                      {renderMessageText(
+                                        msg.caption,
+                                        `${msg.id}-caption`,
+                                      )}
+                                    </p>
+                                  )}
+                                </div>
                               );
-                            });
-                          })()}
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                          {(() => {
-                            const options = msg.poll.options || [];
-                            const totalVotes = options.reduce(
-                              (sum, o) =>
-                                sum +
-                                (Array.isArray(o.votes) ? o.votes.length : 0),
-                              0,
-                            );
-                            return (
-                              <span className="font-bold">
-                                {totalVotes}{" "}
-                                {totalVotes === 1 ? "vote" : "votes"} •{" "}
-                                {formatTimeLeft(msg.poll.expiresAt)}
-                              </span>
-                            );
-                          })()}
-                          <button
-                            type="button"
-                            onClick={() => clearMyPollVotes(msg)}
-                            className={`text-zinc-500 transition-all border border-zinc-800/40 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold active:scale-95 ${msg.own ? 'hover:bg-zinc-200 hover:text-zinc-900' : 'hover:bg-white/5 hover:text-white'}`}
-                          >
-                            Remove Vote
-                          </button>
-                        </div>
-                      </div>
-                    ) : msg.type === "image" ? (
-                      (() => {
-                        const imgIdx = lightboxImages.findIndex(
-                          (item) => item.messageId === msg.id && item.itemIndex === 0,
-                        );
-                        return (
-                        <div className="space-y-2">
-                          <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
-                            <img
-                              src={msg.message}
-                              alt="Classified attachment"
-                              className="max-w-full max-h-96 object-contain w-full cursor-zoom-in"
-                              onClick={() => {
-                                setLightboxIndex(imgIdx >= 0 ? imgIdx : 0);
-                                setLightboxOpen(true);
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                                e.target.nextSibling.style.display = "block";
-                              }}
-                            />
-                            <div
-                              style={{ display: "none" }}
-                              className="p-4 text-center text-zinc-500 text-xs"
-                            >
-                              <LuTriangleAlert className="inline mr-2" size={14} />
-                              Failed to decrypt image
-                            </div>
-                            {/* Zoom hint overlay */}
-                            <div
-                              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-                            >
-                              <div className="bg-black/60 backdrop-blur-sm rounded-full p-2.5 border border-zinc-700/40">
-                                <LuMaximize2 size={18} className="text-white" />
-                              </div>
-                            </div>
-                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => downloadImage(msg.message, msg.id)}
-                                className="bg-black/80 backdrop-blur-sm hover:bg-white hover:text-black text-white px-3 py-2 text-[10px] uppercase tracking-widest border border-zinc-700/30 hover:border-white font-bold transition-all flex items-center gap-1.5 rounded-lg"
-                                title="Download image"
+                            })()
+                          ) : msg.type === "image-batch" ? (
+                            <div className="space-y-2">
+                              <div
+                                className={`relative overflow-hidden rounded-[14px] p-1 w-[248px] sm:w-[284px] md:w-[320px] ${msg.own ? "border border-zinc-300/45 bg-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]" : "border border-zinc-800/45 bg-zinc-900/75"}`}
                               >
-                                <LuDownload size={13} />
-                                Download
-                              </button>
-                            </div>
-                          </div>
-                          {msg.caption && !msg.deleted && (
-                            <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                              {renderMessageText(msg.caption, `${msg.id}-caption`)}
-                            </p>
-                          )}
-                        </div>
-                        );
-                      })()
-                    ) : msg.type === "image-batch" ? (
-                      <div className="space-y-2">
-                        <div className={`relative overflow-hidden rounded-[14px] p-1 w-[248px] sm:w-[284px] md:w-[320px] ${msg.own ? "border border-zinc-300/45 bg-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]" : "border border-zinc-800/45 bg-zinc-900/75"}`}>
-                          {(() => {
-                            const previewImages = (msg.images || []).slice(0, 4);
-                            const previewCount = previewImages.length;
-                            const remainingCount = (msg.images?.length || 0) - 4;
-                            const gridClass =
-                              previewCount === 1
-                                ? "grid-cols-1"
-                                : previewCount === 3
-                                ? "grid-cols-2"
-                                : "grid-cols-2";
-
-                            return (
-                              <div className={`grid ${gridClass} gap-1`}>
-                                {previewImages.map((imageSrc, imageIndex) => {
-                                  const isLastPreview = imageIndex === 3 && remainingCount > 0;
-                                  const cornerClass =
+                                {(() => {
+                                  const previewImages = (
+                                    msg.images || []
+                                  ).slice(0, 4);
+                                  const previewCount = previewImages.length;
+                                  const remainingCount =
+                                    (msg.images?.length || 0) - 4;
+                                  const gridClass =
                                     previewCount === 1
-                                      ? "rounded-[10px]"
-                                      : previewCount === 2
-                                      ? imageIndex === 0
-                                        ? "rounded-l-[10px] rounded-r-[6px]"
-                                        : "rounded-r-[10px] rounded-l-[6px]"
+                                      ? "grid-cols-1"
                                       : previewCount === 3
-                                      ? imageIndex === 0
-                                        ? "rounded-t-[10px] rounded-b-[6px]"
-                                        : imageIndex === 1
-                                        ? "rounded-bl-[10px] rounded-tr-[6px]"
-                                        : "rounded-br-[10px] rounded-tl-[6px]"
-                                      : imageIndex === 0
-                                      ? "rounded-tl-[10px] rounded-br-[6px]"
-                                      : imageIndex === 1
-                                      ? "rounded-tr-[10px] rounded-bl-[6px]"
-                                      : imageIndex === 2
-                                      ? "rounded-bl-[10px] rounded-tr-[6px]"
-                                      : "rounded-br-[10px] rounded-tl-[6px]";
-                                  const tileClass =
-                                    previewCount === 1
-                                      ? "aspect-[5/4]"
-                                      : previewCount === 2
-                                      ? "aspect-[5/6]"
-                                      : previewCount === 3
-                                      ? imageIndex === 0
-                                        ? "col-span-2 aspect-[3/2]"
-                                        : "aspect-square"
-                                      : "aspect-square";
+                                        ? "grid-cols-2"
+                                        : "grid-cols-2";
 
                                   return (
-                                    <button
-                                      key={`${msg.id}-image-${imageIndex}`}
-                                      type="button"
-                                      className={`relative overflow-hidden group transition-transform duration-200 hover:scale-[1.01] ${tileClass} ${cornerClass}`}
-                                      onClick={() => {
-                                        openLightboxForMessageImage(msg.id, imageIndex);
-                                      }}
-                                    >
-                                      <img
-                                        src={imageSrc}
-                                        alt={`Classified attachment ${imageIndex + 1}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                      {/* Pin control moved to the lightbox view; removed inline pin from grid */}
-                                      {isLastPreview && (
-                                        <div className="absolute inset-0 bg-black/62 backdrop-blur-[1.5px] flex items-center justify-center">
-                                          <span className="text-white text-[28px] font-black tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">+{remainingCount}</span>
-                                        </div>
+                                    <div className={`grid ${gridClass} gap-1`}>
+                                      {previewImages.map(
+                                        (imageSrc, imageIndex) => {
+                                          const isLastPreview =
+                                            imageIndex === 3 &&
+                                            remainingCount > 0;
+                                          const cornerClass =
+                                            previewCount === 1
+                                              ? "rounded-[10px]"
+                                              : previewCount === 2
+                                                ? imageIndex === 0
+                                                  ? "rounded-l-[10px] rounded-r-[6px]"
+                                                  : "rounded-r-[10px] rounded-l-[6px]"
+                                                : previewCount === 3
+                                                  ? imageIndex === 0
+                                                    ? "rounded-t-[10px] rounded-b-[6px]"
+                                                    : imageIndex === 1
+                                                      ? "rounded-bl-[10px] rounded-tr-[6px]"
+                                                      : "rounded-br-[10px] rounded-tl-[6px]"
+                                                  : imageIndex === 0
+                                                    ? "rounded-tl-[10px] rounded-br-[6px]"
+                                                    : imageIndex === 1
+                                                      ? "rounded-tr-[10px] rounded-bl-[6px]"
+                                                      : imageIndex === 2
+                                                        ? "rounded-bl-[10px] rounded-tr-[6px]"
+                                                        : "rounded-br-[10px] rounded-tl-[6px]";
+                                          const tileClass =
+                                            previewCount === 1
+                                              ? "aspect-[5/4]"
+                                              : previewCount === 2
+                                                ? "aspect-[5/6]"
+                                                : previewCount === 3
+                                                  ? imageIndex === 0
+                                                    ? "col-span-2 aspect-[3/2]"
+                                                    : "aspect-square"
+                                                  : "aspect-square";
+
+                                          return (
+                                            <button
+                                              key={`${msg.id}-image-${imageIndex}`}
+                                              type="button"
+                                              className={`relative overflow-hidden group transition-transform duration-200 hover:scale-[1.01] ${tileClass} ${cornerClass}`}
+                                              onClick={() => {
+                                                openLightboxForMessageImage(
+                                                  msg.id,
+                                                  imageIndex,
+                                                );
+                                              }}
+                                            >
+                                              <img
+                                                src={imageSrc}
+                                                alt={`Classified attachment ${imageIndex + 1}`}
+                                                className="w-full h-full object-cover"
+                                              />
+                                              {/* Pin control moved to the lightbox view; removed inline pin from grid */}
+                                              {isLastPreview && (
+                                                <div className="absolute inset-0 bg-black/62 backdrop-blur-[1.5px] flex items-center justify-center">
+                                                  <span className="text-white text-[28px] font-black tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                                                    +{remainingCount}
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </button>
+                                          );
+                                        },
                                       )}
-                                    </button>
+                                    </div>
                                   );
-                                })}
+                                })()}
                               </div>
-                            );
-                          })()}
-                        </div>
-                        {msg.caption && !msg.deleted && (
-                          <p className={`text-[11px] sm:text-xs mt-1.5 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
-                          </p>
-                        )}
-                      </div>
-                    ) : msg.type === "audio" ? (
-                      <div className="space-y-2">
-                        <div className={`relative overflow-hidden rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
-                          {(() => {
-                            const audioId = `audio-${msg.id}`;
-                            return (
-                              <div className="p-3 space-y-2 w-full">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => {
-                                      const el = document.getElementById(audioId);
-                                      if (!el) return;
-                                      if (el.paused) {
-                                        // pause all other players first
-                                        document.querySelectorAll('audio[id^="audio-"]').forEach(a => { if (a.id !== audioId) a.pause(); });
-                                        el.play().catch(() => {});
-                                      } else {
-                                        el.pause();
-                                      }
-                                    }}
-                                    className={`h-11 w-11 sm:h-10 sm:w-10 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800" : "bg-white/10 hover:bg-white/20"}`}
-                                  >
-                                    <LuPlay size={14} className={msg.own ? "text-white" : "text-white"} id={`${audioId}-play-icon`} />
-                                  </button>
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    <div
-                                      className={`relative h-1.5 rounded-full cursor-pointer group ${msg.own ? "bg-zinc-400/40" : "bg-zinc-700/50"}`}
-                                      onClick={(e) => {
-                                        const el = document.getElementById(audioId);
-                                        if (!el || !el.duration) return;
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                                        el.currentTime = pct * el.duration;
-                                      }}
-                                    >
-                                      <div
-                                        id={`${audioId}-progress`}
-                                        className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-150 ${msg.own ? "bg-zinc-900/70" : "bg-white/60"}`}
-                                        style={{ width: '0%' }}
+                              {msg.caption && !msg.deleted && (
+                                <p
+                                  className={`text-[11px] sm:text-xs mt-1.5 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                >
+                                  {renderMessageText(
+                                    msg.caption,
+                                    `${msg.id}-caption`,
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          ) : msg.type === "audio" ? (
+                            <div className="space-y-2">
+                              <div
+                                className={`relative overflow-hidden rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}
+                              >
+                                {(() => {
+                                  const audioId = `audio-${msg.id}`;
+                                  return (
+                                    <div className="p-3 space-y-2 w-full">
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => {
+                                            const el =
+                                              document.getElementById(audioId);
+                                            if (!el) return;
+                                            if (el.paused) {
+                                              // pause all other players first
+                                              document
+                                                .querySelectorAll(
+                                                  'audio[id^="audio-"]',
+                                                )
+                                                .forEach((a) => {
+                                                  if (a.id !== audioId)
+                                                    a.pause();
+                                                });
+                                              el.play().catch(() => {});
+                                            } else {
+                                              el.pause();
+                                            }
+                                          }}
+                                          className={`h-11 w-11 sm:h-10 sm:w-10 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800" : "bg-white/10 hover:bg-white/20"}`}
+                                        >
+                                          <LuPlay
+                                            size={14}
+                                            className={
+                                              msg.own
+                                                ? "text-white"
+                                                : "text-white"
+                                            }
+                                            id={`${audioId}-play-icon`}
+                                          />
+                                        </button>
+                                        <div className="flex-1 min-w-0 space-y-1">
+                                          <div
+                                            className={`relative h-1.5 rounded-full cursor-pointer group ${msg.own ? "bg-zinc-400/40" : "bg-zinc-700/50"}`}
+                                            onClick={(e) => {
+                                              const el =
+                                                document.getElementById(
+                                                  audioId,
+                                                );
+                                              if (!el || !el.duration) return;
+                                              const rect =
+                                                e.currentTarget.getBoundingClientRect();
+                                              const pct = Math.max(
+                                                0,
+                                                Math.min(
+                                                  1,
+                                                  (e.clientX - rect.left) /
+                                                    rect.width,
+                                                ),
+                                              );
+                                              el.currentTime =
+                                                pct * el.duration;
+                                            }}
+                                          >
+                                            <div
+                                              id={`${audioId}-progress`}
+                                              className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-150 ${msg.own ? "bg-zinc-900/70" : "bg-white/60"}`}
+                                              style={{ width: "0%" }}
+                                            />
+                                            <div
+                                              className={`absolute inset-0 rounded-full transition-colors ${msg.own ? "bg-black/0 group-hover:bg-black/5" : "bg-white/0 group-hover:bg-white/5"}`}
+                                            />
+                                          </div>
+                                          <div className="flex items-center justify-between">
+                                            <span
+                                              id={`${audioId}-time`}
+                                              className={`text-[9px] font-mono font-bold tabular-nums tracking-wider ${msg.own ? "text-zinc-600" : "text-zinc-500"}`}
+                                            >
+                                              0:00 /{" "}
+                                              {formatDuration(
+                                                msg.audioDuration || 0,
+                                              )}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <button
+                                          id={`${audioId}-speed-btn`}
+                                          onClick={() => {
+                                            const el =
+                                              document.getElementById(audioId);
+                                            const btn = document.getElementById(
+                                              `${audioId}-speed-btn`,
+                                            );
+                                            if (!el || !btn) return;
+                                            const speeds = [1, 1.5, 2, 0.5];
+                                            const cur = el.playbackRate;
+                                            const idx = speeds.indexOf(cur);
+                                            const next =
+                                              speeds[(idx + 1) % speeds.length];
+                                            el.playbackRate = next;
+                                            btn.textContent = next + "x";
+                                          }}
+                                          className={`h-9 sm:h-8 inline-flex items-center justify-center text-[10px] px-2.5 rounded-md font-mono font-bold transition-all active:scale-90 shrink-0 ${msg.own ? "text-zinc-600 hover:text-zinc-900 bg-zinc-300/50 hover:bg-zinc-300 border border-zinc-400/30" : "text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/30"}`}
+                                        >
+                                          1x
+                                        </button>
+                                      </div>
+                                      <audio
+                                        id={audioId}
+                                        src={msg.message}
+                                        preload="metadata"
+                                        onTimeUpdate={(e) => {
+                                          const el = e.target;
+                                          const prog = document.getElementById(
+                                            `${audioId}-progress`,
+                                          );
+                                          const timeEl =
+                                            document.getElementById(
+                                              `${audioId}-time`,
+                                            );
+                                          const playIcon =
+                                            document.getElementById(
+                                              `${audioId}-play-icon`,
+                                            );
+                                          if (prog && el.duration)
+                                            prog.style.width = `${(el.currentTime / el.duration) * 100}%`;
+                                          if (timeEl)
+                                            timeEl.textContent = `${formatDuration(Math.floor(el.currentTime))} / ${formatDuration(Math.floor(el.duration) || msg.audioDuration || 0)}`;
+                                        }}
+                                        onPlay={(e) => {
+                                          const btn =
+                                            e.target.parentElement?.querySelector(
+                                              "button",
+                                            );
+                                          if (btn)
+                                            btn.innerHTML =
+                                              '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><line x1="6" y1="4" x2="6" y2="20"></line><line x1="18" y1="4" x2="18" y2="20"></line></svg>';
+                                        }}
+                                        onPause={(e) => {
+                                          const btn =
+                                            e.target.parentElement?.querySelector(
+                                              "button",
+                                            );
+                                          if (btn)
+                                            btn.innerHTML =
+                                              '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                                        }}
+                                        onEnded={(e) => {
+                                          const prog = document.getElementById(
+                                            `${audioId}-progress`,
+                                          );
+                                          if (prog) prog.style.width = "0%";
+                                          e.target.currentTime = 0;
+                                          const btn =
+                                            e.target.parentElement?.querySelector(
+                                              "button",
+                                            );
+                                          if (btn)
+                                            btn.innerHTML =
+                                              '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                                        }}
+                                        className="hidden"
                                       />
-                                      <div className={`absolute inset-0 rounded-full transition-colors ${msg.own ? "bg-black/0 group-hover:bg-black/5" : "bg-white/0 group-hover:bg-white/5"}`} />
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                      <span id={`${audioId}-time`} className={`text-[9px] font-mono font-bold tabular-nums tracking-wider ${msg.own ? "text-zinc-600" : "text-zinc-500"}`}>
-                                        0:00 / {formatDuration(msg.audioDuration || 0)}
-                                      </span>
-                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              {msg.caption && !msg.deleted && (
+                                <p
+                                  className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                >
+                                  {renderMessageText(
+                                    msg.caption,
+                                    `${msg.id}-caption`,
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          ) : msg.type === "file" ? (
+                            <div className="space-y-2">
+                              <div
+                                className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}
+                              >
+                                <div className="flex items-center gap-2.5 p-3">
+                                  <div
+                                    className={`h-11 w-11 sm:h-12 sm:w-12 rounded-xl shrink-0 flex items-center justify-center ${msg.own ? "bg-zinc-900/10 border border-zinc-300/40" : "bg-white/5 border border-zinc-700/30"}`}
+                                  >
+                                    {React.createElement(
+                                      getFileIcon(msg.fileType),
+                                      {
+                                        size: 22,
+                                        className: msg.own
+                                          ? "text-zinc-700"
+                                          : "text-zinc-300",
+                                      },
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p
+                                      className={`text-[11px] sm:text-xs font-bold truncate ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                    >
+                                      {msg.fileName || "Classified File"}
+                                    </p>
+                                    <p
+                                      className={`text-[9px] uppercase tracking-widest font-bold mt-0.5 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}
+                                    >
+                                      {formatFileSize(msg.fileSize)}
+                                    </p>
                                   </div>
                                   <button
-                                    id={`${audioId}-speed-btn`}
-                                    onClick={() => {
-                                      const el = document.getElementById(audioId);
-                                      const btn = document.getElementById(`${audioId}-speed-btn`);
-                                      if (!el || !btn) return;
-                                      const speeds = [1, 1.5, 2, 0.5];
-                                      const cur = el.playbackRate;
-                                      const idx = speeds.indexOf(cur);
-                                      const next = speeds[(idx + 1) % speeds.length];
-                                      el.playbackRate = next;
-                                      btn.textContent = next + 'x';
-                                    }}
-                                    className={`h-9 sm:h-8 inline-flex items-center justify-center text-[10px] px-2.5 rounded-md font-mono font-bold transition-all active:scale-90 shrink-0 ${msg.own ? "text-zinc-600 hover:text-zinc-900 bg-zinc-300/50 hover:bg-zinc-300 border border-zinc-400/30" : "text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/30"}`}
+                                    onClick={() =>
+                                      downloadFile(msg.message, msg.fileName)
+                                    }
+                                    className={`h-11 w-11 sm:h-10 sm:w-auto sm:px-3 sm:py-2 text-[10px] uppercase tracking-widest font-bold transition-all inline-flex items-center justify-center gap-1.5 rounded-lg shrink-0 self-center active:scale-95 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700" : "bg-white/5 hover:bg-white hover:text-black text-zinc-400 border border-zinc-700/30 hover:border-white"}`}
+                                    title="Download file"
                                   >
-                                    1x
+                                    <LuDownload size={13} />
+                                    <span className="hidden sm:inline">
+                                      Download
+                                    </span>
                                   </button>
                                 </div>
-                                <audio
-                                  id={audioId}
-                                  src={msg.message}
-                                  preload="metadata"
-                                  onTimeUpdate={(e) => {
-                                    const el = e.target;
-                                    const prog = document.getElementById(`${audioId}-progress`);
-                                    const timeEl = document.getElementById(`${audioId}-time`);
-                                    const playIcon = document.getElementById(`${audioId}-play-icon`);
-                                    if (prog && el.duration) prog.style.width = `${(el.currentTime / el.duration) * 100}%`;
-                                    if (timeEl) timeEl.textContent = `${formatDuration(Math.floor(el.currentTime))} / ${formatDuration(Math.floor(el.duration) || msg.audioDuration || 0)}`;
-                                  }}
-                                  onPlay={(e) => {
-                                    const btn = e.target.parentElement?.querySelector('button');
-                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><line x1="6" y1="4" x2="6" y2="20"></line><line x1="18" y1="4" x2="18" y2="20"></line></svg>';
-                                  }}
-                                  onPause={(e) => {
-                                    const btn = e.target.parentElement?.querySelector('button');
-                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-                                  }}
-                                  onEnded={(e) => {
-                                    const prog = document.getElementById(`${audioId}-progress`);
-                                    if (prog) prog.style.width = '0%';
-                                    e.target.currentTime = 0;
-                                    const btn = e.target.parentElement?.querySelector('button');
-                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-                                  }}
-                                  className="hidden"
-                                />
                               </div>
-                            );
-                          })()}
-                        </div>
-                        {msg.caption && !msg.deleted && (
-                          <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
-                          </p>
-                        )}
-                      </div>
-                    ) : msg.type === "file" ? (
-                      <div className="space-y-2">
-                        <div className={`relative overflow-hidden group rounded-xl ${msg.own ? "border border-zinc-300/40 bg-zinc-100" : "border border-zinc-800/40 bg-zinc-900/60"}`}>
-                          <div className="flex items-center gap-2.5 p-3">
-                            <div className={`h-11 w-11 sm:h-12 sm:w-12 rounded-xl shrink-0 flex items-center justify-center ${msg.own ? "bg-zinc-900/10 border border-zinc-300/40" : "bg-white/5 border border-zinc-700/30"}`}>
-                              {React.createElement(getFileIcon(msg.fileType), { size: 22, className: msg.own ? "text-zinc-700" : "text-zinc-300" })}
+                              {msg.caption && !msg.deleted && (
+                                <p
+                                  className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}
+                                >
+                                  {renderMessageText(
+                                    msg.caption,
+                                    `${msg.id}-caption`,
+                                  )}
+                                </p>
+                              )}
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className={`text-[11px] sm:text-xs font-bold truncate ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                                {msg.fileName || 'Classified File'}
-                              </p>
-                              <p className={`text-[9px] uppercase tracking-widest font-bold mt-0.5 ${msg.own ? "text-zinc-500" : "text-zinc-500"}`}>
-                                {formatFileSize(msg.fileSize)}
-                              </p>
+                          ) : msg.type === "high-clearance" ? (
+                            <div className="space-y-2">
+                              <div
+                                className={`relative p-4 sm:p-5 md:p-6 text-center rounded-xl overflow-hidden ${msg.own ? "border border-zinc-400/30 bg-gradient-to-br from-zinc-800 to-zinc-900" : "border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20"}`}
+                              >
+                                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
+                                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/25 to-transparent" />
+
+                                <div className="flex items-center justify-between absolute top-2.5 left-2.5 right-2.5 z-10">
+                                  <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
+                                    <LuLock size={9} /> High Clearance
+                                  </span>
+                                  {msg.requiresBiometric && (
+                                    <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
+                                      <LuFingerprint size={9} /> Biometric
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-col items-center gap-2.5 sm:gap-3.5 mt-5 sm:mt-6 relative z-10">
+                                  <div className="relative">
+                                    <div className="p-2.5 sm:p-3.5 bg-white/5 rounded-2xl border border-zinc-700/20">
+                                      <LuLock
+                                        className="text-white"
+                                        size={24}
+                                        strokeWidth={1.5}
+                                      />
+                                    </div>
+                                    <div className="absolute inset-0 bg-white/[0.02] rounded-2xl animate-pulse" />
+                                  </div>
+
+                                  <div>
+                                    <p className="text-white/90 text-sm uppercase tracking-[0.15em] font-black mb-1.5">
+                                      Classified Content
+                                    </p>
+                                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.15em]">
+                                      {msg.requiresBiometric
+                                        ? "Biometric authentication required"
+                                        : "High security encryption active"}
+                                    </p>
+                                  </div>
+
+                                  {msg.own ? (
+                                    <div className="bg-white/10 border border-zinc-700/20 text-white px-4 py-2 text-[10px] uppercase tracking-[0.15em] font-bold rounded-xl flex items-center gap-2">
+                                      <LuCheck size={13} />
+                                      Your high clearance message sent
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        try {
+                                          const decryptedContent = decrypt(
+                                            msg.message,
+                                          );
+                                          const parsedContent =
+                                            JSON.parse(decryptedContent);
+                                          openBiometricVault({
+                                            id: msg.id,
+                                            content:
+                                              parsedContent.content || "",
+                                            image: parsedContent.image,
+                                            file: parsedContent.file,
+                                            audio: parsedContent.audio,
+                                            type: "high-clearance",
+                                            requiresBiometric:
+                                              msg.requiresBiometric,
+                                            username: msg.username,
+                                          });
+                                        } catch (error) {
+                                          console.error(
+                                            "Failed to parse high-clearance message:",
+                                            error,
+                                          );
+                                          openBiometricVault({
+                                            id: msg.id,
+                                            content: decrypt(msg.message),
+                                            type: "high-clearance",
+                                            requiresBiometric:
+                                              msg.requiresBiometric,
+                                            username: msg.username,
+                                          });
+                                        }
+                                      }}
+                                      className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-black text-[10px] uppercase font-bold tracking-[0.15em] transition-all flex items-center gap-2 rounded-xl shadow-lg shadow-white/10 hover:shadow-white/20 active:scale-95"
+                                    >
+                                      <LuLock size={14} />
+                                      Access Vault
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <button
-                              onClick={() => downloadFile(msg.message, msg.fileName)}
-                              className={`h-11 w-11 sm:h-10 sm:w-auto sm:px-3 sm:py-2 text-[10px] uppercase tracking-widest font-bold transition-all inline-flex items-center justify-center gap-1.5 rounded-lg shrink-0 self-center active:scale-95 ${msg.own ? "bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700" : "bg-white/5 hover:bg-white hover:text-black text-zinc-400 border border-zinc-700/30 hover:border-white"}`}
-                              title="Download file"
+                          ) : (
+                            <p
+                              className={`leading-relaxed whitespace-pre-wrap break-words font-mono ${isCommanderMessage ? "text-sm sm:text-base" : "text-xs sm:text-sm"}`}
                             >
-                              <LuDownload size={13} />
-                              <span className="hidden sm:inline">Download</span>
-                            </button>
-                          </div>
-                        </div>
-                        {msg.caption && !msg.deleted && (
-                          <p className={`text-xs sm:text-sm mt-1 leading-relaxed ${msg.own ? "text-zinc-800" : "text-zinc-200"}`}>
-                            {renderMessageText(msg.caption, `${msg.id}-caption`)}
-                          </p>
-                        )}
-                      </div>
-                    ) : msg.type === "high-clearance" ? (
-                      <div className="space-y-2">
-                        <div className={`relative p-4 sm:p-5 md:p-6 text-center rounded-xl overflow-hidden ${msg.own ? "border border-zinc-400/30 bg-gradient-to-br from-zinc-800 to-zinc-900" : "border border-zinc-700/30 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20"}`}>
-                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
-                          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-600/25 to-transparent" />
-                          
-                          <div className="flex items-center justify-between absolute top-2.5 left-2.5 right-2.5 z-10">
-                            <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
-                              <LuLock size={9} /> High Clearance
-                            </span>
-                            {msg.requiresBiometric && (
-                              <span className="bg-white/10 text-white px-2.5 py-1 text-[7px] uppercase tracking-[0.2em] font-bold rounded-lg border border-zinc-700/20 flex items-center gap-1">
-                                <LuFingerprint size={9} /> Biometric
+                              {msg.deleted && (
+                                <LuTrash2
+                                  className="inline mr-1 opacity-50"
+                                  size={13}
+                                />
+                              )}{" "}
+                              {renderMessageText(
+                                msg.message,
+                                msg.id || "message",
+                              )}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1.5 justify-end mt-2 opacity-35">
+                            {msg.edited && !msg.deleted && (
+                              <span className="text-[6px] px-1.5 py-0.5 uppercase font-bold rounded-full bg-current/10 border border-current/20 tracking-wider">
+                                Edited
                               </span>
                             )}
-                          </div>
-
-                          <div className="flex flex-col items-center gap-2.5 sm:gap-3.5 mt-5 sm:mt-6 relative z-10">
-                            <div className="relative">
-                              <div className="p-2.5 sm:p-3.5 bg-white/5 rounded-2xl border border-zinc-700/20">
-                                <LuLock className="text-white" size={24} strokeWidth={1.5} />
-                              </div>
-                              <div className="absolute inset-0 bg-white/[0.02] rounded-2xl animate-pulse" />
-                            </div>
-                            
-                            <div>
-                              <p className="text-white/90 text-sm uppercase tracking-[0.15em] font-black mb-1.5">
-                                Classified Content
-                              </p>
-                              <p className="text-zinc-500 text-[10px] uppercase tracking-[0.15em]">
-                                {msg.requiresBiometric 
-                                  ? 'Biometric authentication required'
-                                  : 'High security encryption active'
-                                }
-                              </p>
-                            </div>
-
-                            {msg.own ? (
-                              <div className="bg-white/10 border border-zinc-700/20 text-white px-4 py-2 text-[10px] uppercase tracking-[0.15em] font-bold rounded-xl flex items-center gap-2">
-                                <LuCheck size={13} />
-                                Your high clearance message sent
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  try {
-                                    const decryptedContent = decrypt(msg.message);
-                                    const parsedContent = JSON.parse(decryptedContent);
-                                    openBiometricVault({
-                                      id: msg.id,
-                                      content: parsedContent.content || '',
-                                      image: parsedContent.image,
-                                      file: parsedContent.file,
-                                      audio: parsedContent.audio,
-                                      type: 'high-clearance',
-                                      requiresBiometric: msg.requiresBiometric,
-                                      username: msg.username,
-                                    });
-                                  } catch (error) {
-                                    console.error('Failed to parse high-clearance message:', error);
-                                    openBiometricVault({
-                                      id: msg.id,
-                                      content: decrypt(msg.message),
-                                      type: 'high-clearance',
-                                      requiresBiometric: msg.requiresBiometric,
-                                      username: msg.username,
-                                    });
-                                  }
-                                }}
-                                className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-black text-[10px] uppercase font-bold tracking-[0.15em] transition-all flex items-center gap-2 rounded-xl shadow-lg shadow-white/10 hover:shadow-white/20 active:scale-95"
-                              >
-                                <LuLock size={14} />
-                                Access Vault
-                              </button>
-                            )}
+                            <span className="text-[7px] font-bold tabular-nums font-mono">
+                              {msg.time}
+                            </span>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <p className={`leading-relaxed whitespace-pre-wrap break-words font-mono ${isCommanderMessage ? "text-sm sm:text-base" : "text-xs sm:text-sm"}`}>
-                        {msg.deleted && <LuTrash2 className="inline mr-1 opacity-50" size={13} />}{" "}
-                        {renderMessageText(msg.message, msg.id || "message")}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-1.5 justify-end mt-2 opacity-35">
-                      {msg.edited && !msg.deleted && (
-                        <span className="text-[6px] px-1.5 py-0.5 uppercase font-bold rounded-full bg-current/10 border border-current/20 tracking-wider">
-                          Edited
-                        </span>
-                      )}
-                      <span className="text-[7px] font-bold tabular-nums font-mono">{msg.time}</span>
-                    </div>
-                  </div>
-                  {!msg.deleted && !isSelectMode && (
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(
-                          activeMenuId === msg.id ? null : msg.id,
-                        );
-                      }}
-                      className={`absolute -top-2.5 ${msg.own ? "left-0" : "right-0"} p-1.5 cursor-pointer text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all bg-[#0a0a0c]/90 backdrop-blur-sm rounded-lg border border-zinc-800/40 hover:bg-zinc-800/80 ${activeMenuId === msg.id ? "opacity-100 bg-zinc-800/80" : ""}`}
-                    >
-                      <LuEllipsisVertical size={14} />
-                    </div>
-                  )}
-                  <AnimatePresence>
-                    {activeMenuId === msg.id && !msg.deleted && (
-                      <motion.div
-                        key={`quick-reaction-bar-${msg.id || msgIndex}`}
-                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                        transition={{ duration: 0.14 }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`absolute -top-10 ${msg.own ? "right-0" : "left-0"} z-[55] bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_8px_30px_rgba(0,0,0,0.45)] rounded-full px-1.5 py-1 inline-flex items-center gap-1`}
-                      >
-                        {QUICK_REACTION_EMOJIS.map((emoji) => (
+                        {!msg.deleted && !isSelectMode && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(
+                                activeMenuId === msg.id ? null : msg.id,
+                              );
+                            }}
+                            className={`absolute -top-2.5 ${msg.own ? "left-0" : "right-0"} p-1.5 cursor-pointer text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all bg-[#0a0a0c]/90 backdrop-blur-sm rounded-lg border border-zinc-800/40 hover:bg-zinc-800/80 ${activeMenuId === msg.id ? "opacity-100 bg-zinc-800/80" : ""}`}
+                          >
+                            <LuEllipsisVertical size={14} />
+                          </div>
+                        )}
+                        <AnimatePresence>
+                          {activeMenuId === msg.id && !msg.deleted && (
+                            <motion.div
+                              key={`quick-reaction-bar-${msg.id || msgIndex}`}
+                              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                              transition={{ duration: 0.14 }}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`absolute -top-10 ${msg.own ? "right-0" : "left-0"} z-[55] bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_8px_30px_rgba(0,0,0,0.45)] rounded-full px-1.5 py-1 inline-flex items-center gap-1`}
+                            >
+                              {QUICK_REACTION_EMOJIS.map((emoji) => (
+                                <button
+                                  key={`${msg.id}-${emoji}`}
+                                  type="button"
+                                  onClick={() => reactToMessage(msg.id, emoji)}
+                                  className={`h-8 w-8 rounded-full flex items-center justify-center text-sm transition-all active:scale-90 ${myReactionEmoji === emoji ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
+                                  title={`React with ${emoji}`}
+                                  aria-label={`React with ${emoji}`}
+                                >
+                                  <span>{emoji}</span>
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                          {activeMenuId === msg.id && (
+                            <motion.div
+                              key={`message-action-menu-${msg.id || msgIndex}`}
+                              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                              className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[150px] sm:min-w-[160px] rounded-xl overflow-hidden`}
+                            >
+                              {!msg.own && msg.username !== username && (
+                                <button
+                                  onClick={() => startReplying(msg)}
+                                  className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
+                                >
+                                  <LuReply size={13} /> Reply
+                                </button>
+                              )}
+                              <button
+                                onClick={() => togglePinMessage(msg.id)}
+                                className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
+                              >
+                                <LuPin size={13} />
+                                {isMessagePinned(msg.id) ? "Unpin" : "Pin"}
+                              </button>
+                              <div className="border-t border-zinc-800/30 mx-3" />
+                              <button
+                                onClick={() => animateDelete(msg.id, "local")}
+                                className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
+                              >
+                                <LuEyeOff size={13} /> Local Hide
+                              </button>
+                              {msg.own && !msg.poll && !msg.type && (
+                                <>
+                                  <button
+                                    onClick={() => startEditing(msg)}
+                                    className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
+                                  >
+                                    <LuPencil size={13} /> Edit Signal
+                                  </button>
+                                </>
+                              )}
+                              {(msg.own || isCurrentHost) && !msg.system && (
+                                <>
+                                  <div className="border-t border-zinc-800/30 mx-3" />
+                                  <button
+                                    onClick={() => {
+                                      socket.emit("delete_message", {
+                                        roomId,
+                                        messageId: msg.id,
+                                      });
+                                      setActiveMenuId(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
+                                  >
+                                    <LuTrash2 size={13} />
+                                    {isCurrentHost && !msg.own
+                                      ? "Expunge Global (Host)"
+                                      : "Expunge Global"}
+                                  </button>
+                                </>
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        {messageReactionList.length > 0 && !msg.deleted && (
                           <button
-                            key={`${msg.id}-${emoji}`}
                             type="button"
-                            onClick={() => reactToMessage(msg.id, emoji)}
-                            className={`h-8 w-8 rounded-full flex items-center justify-center text-sm transition-all active:scale-90 ${myReactionEmoji === emoji ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
-                            title={`React with ${emoji}`}
-                            aria-label={`React with ${emoji}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openReactionSheet(msg.id);
+                            }}
+                            className={`absolute -bottom-3 ${msg.own ? "right-2" : "left-2"} z-20`}
                           >
-                            <span>{emoji}</span>
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                    {activeMenuId === msg.id && (
-                      <motion.div
-                        key={`message-action-menu-${msg.id || msgIndex}`}
-                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className={`absolute top-[90%] mt-1 ${msg.own ? "right-0" : "left-0"} z-50 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] min-w-[150px] sm:min-w-[160px] rounded-xl overflow-hidden`}
-                      >
-                        {!msg.own && msg.username !== username && (
-                          <button
-                            onClick={() => startReplying(msg)}
-                            className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                          >
-                            <LuReply size={13} /> Reply
-                          </button>
-                        )}
-                        <button
-                          onClick={() => togglePinMessage(msg.id)}
-                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                        >
-                          <LuPin size={13} />
-                          {isMessagePinned(msg.id) ? "Unpin" : "Pin"}
-                        </button>
-                        <div className="border-t border-zinc-800/30 mx-3" />
-                        <button
-                          onClick={() => animateDelete(msg.id, 'local')}
-                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                        >
-                          <LuEyeOff size={13} /> Local Hide
-                        </button>
-                        {msg.own && !msg.poll && !msg.type && (
-                          <>
-                            <button
-                              onClick={() => startEditing(msg)}
-                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 flex items-center gap-2.5 uppercase font-bold transition-all"
-                            >
-                              <LuPencil size={13} /> Edit Signal
-                            </button>
-                          </>
-                        )}
-                        {(msg.own || isCurrentHost) && !msg.system && (
-                          <>
-                            <div className="border-t border-zinc-800/30 mx-3" />
-                            <button
-                              onClick={() => {
-                                socket.emit("delete_message", {
-                                  roomId,
-                                  messageId: msg.id,
-                                });
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 uppercase font-bold transition-all"
-                            >
-                              <LuTrash2 size={13} />
-                              {isCurrentHost && !msg.own
-                                ? "Expunge Global (Host)"
-                                : "Expunge Global"}
-                            </button>
-                          </>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {messageReactionList.length > 0 && !msg.deleted && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openReactionSheet(msg.id);
-                      }}
-                      className={`absolute -bottom-3 ${msg.own ? "right-2" : "left-2"} z-20`}
-                    >
-                      <span className="inline-flex h-6 min-w-6 px-1.5 items-center gap-1 rounded-full bg-[#0f0f11]/95 border border-zinc-700/50 shadow-[0_4px_18px_rgba(0,0,0,0.45)] text-sm leading-none">
-                        <span className="flex items-center -space-x-0.5">
-                          {messageReactionSummary.slice(0, 3).map((reaction) => (
-                            <span key={`${msg.id}-summary-${reaction.emoji}`} className="inline-flex h-4 w-4 items-center justify-center text-[11px]">
-                              {reaction.emoji}
+                            <span className="inline-flex h-6 min-w-6 px-1.5 items-center gap-1 rounded-full bg-[#0f0f11]/95 border border-zinc-700/50 shadow-[0_4px_18px_rgba(0,0,0,0.45)] text-sm leading-none">
+                              <span className="flex items-center -space-x-0.5">
+                                {messageReactionSummary
+                                  .slice(0, 3)
+                                  .map((reaction) => (
+                                    <span
+                                      key={`${msg.id}-summary-${reaction.emoji}`}
+                                      className="inline-flex h-4 w-4 items-center justify-center text-[11px]"
+                                    >
+                                      {reaction.emoji}
+                                    </span>
+                                  ))}
+                              </span>
+                              <span className="text-[9px] font-bold text-zinc-300 tabular-nums">
+                                {messageReactionList.length}
+                              </span>
                             </span>
-                          ))}
-                        </span>
-                        <span className="text-[9px] font-bold text-zinc-300 tabular-nums">
-                          {messageReactionList.length}
-                        </span>
-                      </span>
-                    </button>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   )}
-                </div>
-                </div>
-              )}
-            </motion.div>
-          ); })}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
 
           <AnimatePresence>
@@ -4209,9 +4678,18 @@ const ChatRoom = ({
                 <div className="max-w-[90%] bg-zinc-900/40 border border-zinc-800/30 p-3 rounded-2xl rounded-bl-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1 items-center px-1">
-                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '0ms'}} />
-                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '150ms'}} />
-                      <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{animationDelay: '300ms'}} />
+                      <span
+                        className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <span
+                        className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <span
+                        className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">
@@ -4220,7 +4698,10 @@ const ChatRoom = ({
                       <div className="text-[9px] text-white font-bold flex flex-wrap gap-x-1 uppercase truncate font-mono">
                         <span>[</span>
                         {typingUsers.map((u, i) => (
-                          <span key={`typing-${u || "unknown"}-${i}`} className="text-white">
+                          <span
+                            key={`typing-${u || "unknown"}-${i}`}
+                            className="text-white"
+                          >
                             <DecryptingName name={u} />
                             {i < typingUsers.length - 1 ? "," : ""}
                           </span>
@@ -4315,272 +4796,308 @@ const ChatRoom = ({
             </div>
           )}
 
-          {mentionSuggestions.length > 0 && !isRecording && !isMultiAttachmentCaptionLocked && (
-            <div className="mb-2 px-1 sm:px-2">
-              <div className="border border-zinc-700/40 bg-zinc-950/95 rounded-xl overflow-hidden">
-                <p className="px-3 py-1.5 text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold border-b border-zinc-800/40">
-                  Mention Suggestions
-                </p>
-                <div className="max-h-40 overflow-y-auto">
-                  {mentionSuggestions.map((name, index) => {
-                    const isActive = index === activeMentionIndex;
-                    return (
-                      <button
-                        key={`mention-${name}-${index}`}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => applyMentionSuggestion(name)}
-                        className={`w-full text-left px-3 py-2 text-xs font-mono transition-colors ${
-                          isActive
-                            ? "bg-white/10 text-white"
-                            : "text-zinc-300 hover:bg-white/5"
-                        }`}
-                      >
-                        @{name}
-                      </button>
-                    );
-                  })}
+          {mentionSuggestions.length > 0 &&
+            !isRecording &&
+            !isMultiAttachmentCaptionLocked && (
+              <div className="mb-2 px-1 sm:px-2">
+                <div className="border border-zinc-700/40 bg-zinc-950/95 rounded-xl overflow-hidden">
+                  <p className="px-3 py-1.5 text-[9px] text-zinc-500 uppercase tracking-[0.2em] font-bold border-b border-zinc-800/40">
+                    Mention Suggestions
+                  </p>
+                  <div className="max-h-40 overflow-y-auto">
+                    {mentionSuggestions.map((name, index) => {
+                      const isActive = index === activeMentionIndex;
+                      return (
+                        <button
+                          key={`mention-${name}-${index}`}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyMentionSuggestion(name)}
+                          className={`w-full text-left px-3 py-2 text-xs font-mono transition-colors ${
+                            isActive
+                              ? "bg-white/10 text-white"
+                              : "text-zinc-300 hover:bg-white/5"
+                          }`}
+                        >
+                          @{name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div
             className={`flex ${hasSelectedAttachments ? "flex-col" : "items-center"} p-1 sm:p-1.5 transition-all rounded-2xl ${isRadioSilenceEnforced ? "bg-zinc-900/70 border border-zinc-700/50 opacity-80" : editingMessageId ? "bg-white/[0.04] border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.04)]" : "bg-zinc-900/40 border border-zinc-800/30 focus-within:border-zinc-700/40 focus-within:bg-zinc-900/50 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.02)]"}`}
           >
-
             <div className="flex items-center w-full">
               {/* ── Mobile: single + button with popup (hidden during recording/audio preview) ── */}
               {!isRecording && !audioBlob && (
-              <div className="relative sm:hidden" ref={mobileToolbarRef}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    if (isRadioSilenceEnforced) return;
-                    e.stopPropagation();
-                    setShowMobileToolbar(!showMobileToolbar);
-                  }}
-                  className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                  disabled={isRadioSilenceEnforced}
-                >
-                  <LuPlus size={20} strokeWidth={2.5} className={`transition-transform duration-200 ${showMobileToolbar ? "rotate-45" : ""}`} />
-                  {/* Active indicator dot */}
-                  {(selfDestructTime > 0 || isRecording || hasSelectedAttachments || audioBlob) && !showMobileToolbar && (
-                    <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  )}
-                </button>
-                <AnimatePresence>
-                  {showMobileToolbar && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                      className="absolute bottom-full left-0 mb-2 bg-[#111113]/98 backdrop-blur-2xl border border-zinc-800/50 shadow-[0_16px_60px_rgba(0,0,0,0.9)] z-50 rounded-2xl overflow-hidden min-w-[200px]"
-                    >
-                      <div className="p-1.5 space-y-0.5">
-                        {/* Self-destruct timer - inline expandable */}
-                        <div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowTimerMenu(!showTimerMenu);
-                            }}
-                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"}`}
-                          >
-                            <LuTimer size={18} />
-                            <span className="text-[11px] font-bold uppercase tracking-wider flex-1 text-left">
-                              Self-Destruct {selfDestructTime > 0 ? `(${selfDestructTime / 1000}s)` : ""}
-                            </span>
-                            <LuChevronRight size={14} className={`transition-transform duration-200 ${showTimerMenu ? "rotate-90" : ""}`} />
-                          </button>
-                          <AnimatePresence>
-                            {showTimerMenu && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: "auto", opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2, ease: "easeOut" }}
-                                className="overflow-hidden"
-                              >
-                                <div className="grid grid-cols-3 gap-1 px-2 pb-2 pt-1">
-                                  {timerOptions.map((opt) => (
-                                    <button
-                                      key={opt.label}
-                                      onClick={() => {
-                                        setSelfDestructTime(opt.value);
-                                        setShowTimerMenu(false);
-                                        setShowMobileToolbar(false);
-                                      }}
-                                      className={`px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95 ${selfDestructTime === opt.value ? "bg-white/10 text-white ring-1 ring-white/20" : "text-zinc-500 hover:text-zinc-300 bg-white/[0.03] hover:bg-white/[0.06]"}`}
-                                    >
-                                      {opt.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                        {/* Poll */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            togglePollModal();
-                            setShowMobileToolbar(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId || isRadioSilenceEnforced}
-                        >
-                          <LuChartBar size={18} />
-                          <span className="text-[11px] font-bold uppercase tracking-wider">Create Poll</span>
-                        </button>
-
-                        {/* Attach file */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            fileInputRef.current?.click();
-                            setShowMobileToolbar(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId || isRadioSilenceEnforced}
-                        >
-                          <LuPaperclip size={18} />
-                          <span className="text-[11px] font-bold uppercase tracking-wider">Attach File</span>
-                        </button>
-
-                        {/* Attach audio (new) */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            audioInputRef.current?.click();
-                            setShowMobileToolbar(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] text-zinc-400 hover:text-white hover:bg-white/[0.06] ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId || isRadioSilenceEnforced}
-                        >
-                          <LuMic size={18} />
-                          <span className="text-[11px] font-bold uppercase tracking-wider">Attach Audio</span>
-                        </button>
-
-                        {/* High clearance */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowHighClearanceComposer(true);
-                            setShowMobileToolbar(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!!editingMessageId || isRadioSilenceEnforced}
-                        >
-                          <div className="relative">
-                            <LuLock size={18} />
-                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
-                          </div>
-                          <span className="text-[11px] font-bold uppercase tracking-wider">High Clearance</span>
-                        </button>
-
-                        {/* Voice message option removed from mobile toolbar; use composer mic button instead */}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-              )}
-
-              {/* ── Desktop: inline toolbar buttons (hidden during recording/audio preview) ── */}
-              {!isRecording && !audioBlob && (
-              <div className="hidden sm:flex items-center">
-                <div className="relative">
+                <div className="relative sm:hidden" ref={mobileToolbarRef}>
                   <button
+                    type="button"
                     onClick={(e) => {
-                      e.stopPropagation();
                       if (isRadioSilenceEnforced) return;
-                      setShowTimerMenu(!showTimerMenu);
+                      e.stopPropagation();
+                      setShowMobileToolbar(!showMobileToolbar);
                     }}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
                     disabled={isRadioSilenceEnforced}
                   >
-                    <LuTimer size={16} />
+                    <LuPlus
+                      size={20}
+                      strokeWidth={2.5}
+                      className={`transition-transform duration-200 ${showMobileToolbar ? "rotate-45" : ""}`}
+                    />
+                    {/* Active indicator dot */}
+                    {(selfDestructTime > 0 ||
+                      isRecording ||
+                      hasSelectedAttachments ||
+                      audioBlob) &&
+                      !showMobileToolbar && (
+                        <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      )}
                   </button>
                   <AnimatePresence>
-                    {showTimerMenu && (
+                    {showMobileToolbar && (
                       <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-36 rounded-xl overflow-hidden"
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className="absolute bottom-full left-0 mb-2 bg-[#111113]/98 backdrop-blur-2xl border border-zinc-800/50 shadow-[0_16px_60px_rgba(0,0,0,0.9)] z-50 rounded-2xl overflow-hidden min-w-[200px]"
                       >
-                        {timerOptions.map((opt) => (
+                        <div className="p-1.5 space-y-0.5">
+                          {/* Self-destruct timer - inline expandable */}
+                          <div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowTimerMenu(!showTimerMenu);
+                              }}
+                              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"}`}
+                            >
+                              <LuTimer size={18} />
+                              <span className="text-[11px] font-bold uppercase tracking-wider flex-1 text-left">
+                                Self-Destruct{" "}
+                                {selfDestructTime > 0
+                                  ? `(${selfDestructTime / 1000}s)`
+                                  : ""}
+                              </span>
+                              <LuChevronRight
+                                size={14}
+                                className={`transition-transform duration-200 ${showTimerMenu ? "rotate-90" : ""}`}
+                              />
+                            </button>
+                            <AnimatePresence>
+                              {showTimerMenu && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{
+                                    duration: 0.2,
+                                    ease: "easeOut",
+                                  }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="grid grid-cols-3 gap-1 px-2 pb-2 pt-1">
+                                    {timerOptions.map((opt) => (
+                                      <button
+                                        key={opt.label}
+                                        onClick={() => {
+                                          setSelfDestructTime(opt.value);
+                                          setShowTimerMenu(false);
+                                          setShowMobileToolbar(false);
+                                        }}
+                                        className={`px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95 ${selfDestructTime === opt.value ? "bg-white/10 text-white ring-1 ring-white/20" : "text-zinc-500 hover:text-zinc-300 bg-white/[0.03] hover:bg-white/[0.06]"}`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Poll */}
                           <button
-                            key={opt.label}
+                            type="button"
                             onClick={() => {
-                              setSelfDestructTime(opt.value);
-                              setShowTimerMenu(false);
+                              togglePollModal();
+                              setShowMobileToolbar(false);
                             }}
-                            className={`w-full text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={
+                              !!editingMessageId || isRadioSilenceEnforced
+                            }
                           >
-                            {opt.value > 0 && <LuTimer size={10} className="inline mr-1.5" />}
-                            {opt.label}
+                            <LuChartBar size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Create Poll
+                            </span>
                           </button>
-                        ))}
+
+                          {/* Attach file */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              fileInputRef.current?.click();
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={
+                              !!editingMessageId || isRadioSilenceEnforced
+                            }
+                          >
+                            <LuPaperclip size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Attach File
+                            </span>
+                          </button>
+
+                          {/* Attach audio (new) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              audioInputRef.current?.click();
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] text-zinc-400 hover:text-white hover:bg-white/[0.06] ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={
+                              !!editingMessageId || isRadioSilenceEnforced
+                            }
+                          >
+                            <LuMic size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Attach Audio
+                            </span>
+                          </button>
+
+                          {/* High clearance */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowHighClearanceComposer(true);
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={
+                              !!editingMessageId || isRadioSilenceEnforced
+                            }
+                          >
+                            <div className="relative">
+                              <LuLock size={18} />
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
+                            </div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              High Clearance
+                            </span>
+                          </button>
+
+                          {/* Voice message option removed from mobile toolbar; use composer mic button instead */}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={togglePollModal}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                  title="Create a poll"
-                  disabled={!!editingMessageId || isRadioSilenceEnforced}
-                >
-                  <LuChartBar size={16} />
-                </button>
+              {/* ── Desktop: inline toolbar buttons (hidden during recording/audio preview) ── */}
+              {!isRecording && !audioBlob && (
+                <div className="hidden sm:flex items-center">
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isRadioSilenceEnforced) return;
+                        setShowTimerMenu(!showTimerMenu);
+                      }}
+                      className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                      disabled={isRadioSilenceEnforced}
+                    >
+                      <LuTimer size={16} />
+                    </button>
+                    <AnimatePresence>
+                      {showTimerMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-36 rounded-xl overflow-hidden"
+                        >
+                          {timerOptions.map((opt) => (
+                            <button
+                              key={opt.label}
+                              onClick={() => {
+                                setSelfDestructTime(opt.value);
+                                setShowTimerMenu(false);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                            >
+                              {opt.value > 0 && (
+                                <LuTimer size={10} className="inline mr-1.5" />
+                              )}
+                              {opt.label}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isRadioSilenceEnforced) return;
-                    fileInputRef.current?.click();
-                  }}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                  title="Attach file or image"
-                  disabled={!!editingMessageId || isRadioSilenceEnforced}
-                >
-                  <LuPaperclip size={16} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={togglePollModal}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    title="Create a poll"
+                    disabled={!!editingMessageId || isRadioSilenceEnforced}
+                  >
+                    <LuChartBar size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isRadioSilenceEnforced) return;
-                    audioInputRef.current?.click();
-                  }}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 text-zinc-600 hover:text-white hover:bg-white/5 ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                  title="Attach audio"
-                  disabled={!!editingMessageId || isRadioSilenceEnforced}
-                >
-                  <LuMic size={16} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isRadioSilenceEnforced) return;
+                      fileInputRef.current?.click();
+                    }}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    title="Attach file or image"
+                    disabled={!!editingMessageId || isRadioSilenceEnforced}
+                  >
+                    <LuPaperclip size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowHighClearanceComposer(true)}
-                  className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                  title="Send high clearance message (biometric protected)"
-                  disabled={!!editingMessageId || isRadioSilenceEnforced}
-                >
-                  <LuLock size={17} />
-                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isRadioSilenceEnforced) return;
+                      audioInputRef.current?.click();
+                    }}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 text-zinc-600 hover:text-white hover:bg-white/5 ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    title="Attach audio"
+                    disabled={!!editingMessageId || isRadioSilenceEnforced}
+                  >
+                    <LuMic size={16} />
+                  </button>
 
-                {/* Microphone button removed from inline toolbar - recording available via composer button */}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowHighClearanceComposer(true)}
+                    className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    title="Send high clearance message (biometric protected)"
+                    disabled={!!editingMessageId || isRadioSilenceEnforced}
+                  >
+                    <LuLock size={17} />
+                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
+                  </button>
+
+                  {/* Microphone button removed from inline toolbar - recording available via composer button */}
+                </div>
               )}
 
               <input
@@ -4635,7 +5152,6 @@ const ChatRoom = ({
                     <LuTrash2 size={14} />
                   </button>
                 </div>
-
               ) : audioBlob && audioPreviewUrl ? (
                 /* Audio preview before sending */
                 <div className="flex-1 min-w-0">
@@ -4653,7 +5169,11 @@ const ChatRoom = ({
                       }}
                       className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-90 shrink-0"
                     >
-                      {isPlayingPreview ? <LuPause size={12} /> : <LuPlay size={12} />}
+                      {isPlayingPreview ? (
+                        <LuPause size={12} />
+                      ) : (
+                        <LuPlay size={12} />
+                      )}
                     </button>
                     <audio
                       ref={audioPreviewRef}
@@ -4668,7 +5188,11 @@ const ChatRoom = ({
                           <div
                             key={i}
                             className="flex-1 rounded-full bg-white/30"
-                            style={{ height: `${Math.max(3, h * 24)}px`, minWidth: 2, maxWidth: 5 }}
+                            style={{
+                              height: `${Math.max(3, h * 24)}px`,
+                              minWidth: 2,
+                              maxWidth: 5,
+                            }}
                           />
                         );
                       })}
@@ -4688,31 +5212,36 @@ const ChatRoom = ({
                     ref={inputRef}
                     type="text"
                     value={currentMessage}
-                    placeholder={isRadioSilenceEnforced ? `Radio Silence Enforced By HOST...` : "Add caption for voice message..."}
+                    placeholder={
+                      isRadioSilenceEnforced
+                        ? `Radio Silence Enforced By HOST...`
+                        : "Add caption for voice message..."
+                    }
                     className={`w-full bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
                     disabled={isRadioSilenceEnforced}
                     onChange={handleInputChange}
                     onKeyDown={handleComposerKeyDown}
                   />
                 </div>
-
               ) : (
                 /* Normal text input */
                 <>
-                  {replyingTo && !editingMessageId && !hasSelectedAttachments && (
-                    <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
-                      <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                        <LuReply size={11} className="text-white" />
-                        <span>Replying to: {replyingTo.username}</span>
-                        <button
-                          onClick={() => setReplyingTo(null)}
-                          className="hover:text-red-400 transition-colors ml-1"
-                        >
-                          <LuX size={12} />
-                        </button>
+                  {replyingTo &&
+                    !editingMessageId &&
+                    !hasSelectedAttachments && (
+                      <div className="flex items-center gap-2 text-[9px] text-zinc-400 uppercase tracking-widest font-bold">
+                        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                          <LuReply size={11} className="text-white" />
+                          <span>Replying to: {replyingTo.username}</span>
+                          <button
+                            onClick={() => setReplyingTo(null)}
+                            className="hover:text-red-400 transition-colors ml-1"
+                          >
+                            <LuX size={12} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   <input
                     ref={inputRef}
@@ -4722,31 +5251,36 @@ const ChatRoom = ({
                       isRadioSilenceEnforced
                         ? `Radio Silence Enforced By HOST...`
                         : isMultiAttachmentCaptionLocked
-                        ? "Caption available for single file or image batch"
-                        : editingMessageId
-                        ? "Editing message..."
-                        : hasSelectedAttachments
-                        ? "Add caption for attachment..."
-                        : "Type your encrypted signal..."
+                          ? "Caption available for single file or image batch"
+                          : editingMessageId
+                            ? "Editing message..."
+                            : hasSelectedAttachments
+                              ? "Add caption for attachment..."
+                              : "Type your encrypted signal..."
                     }
-                    className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${(isRadioSilenceEnforced || isMultiAttachmentCaptionLocked) ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
-                    disabled={isRadioSilenceEnforced || isMultiAttachmentCaptionLocked}
+                    className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced || isMultiAttachmentCaptionLocked ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
+                    disabled={
+                      isRadioSilenceEnforced || isMultiAttachmentCaptionLocked
+                    }
                     onChange={handleInputChange}
                     onKeyDown={handleComposerKeyDown}
                   />
                 </>
               )}
 
-              {hasSelectedAttachments && !editingMessageId && !isRecording && !audioBlob && (
-                <button
-                  type="button"
-                  onClick={clearAttachment}
-                  className="h-8 w-8 sm:h-9 sm:w-9 mr-1 sm:mr-1.5 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
-                  title="Remove attachment"
-                >
-                  <LuX size={13} />
-                </button>
-              )}
+              {hasSelectedAttachments &&
+                !editingMessageId &&
+                !isRecording &&
+                !audioBlob && (
+                  <button
+                    type="button"
+                    onClick={clearAttachment}
+                    className="h-8 w-8 sm:h-9 sm:w-9 mr-1 sm:mr-1.5 flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all active:scale-90 shrink-0"
+                    title="Remove attachment"
+                  >
+                    <LuX size={13} />
+                  </button>
+                )}
 
               {/** Show mic button when input is empty; show send when there is text **/}
               <button
@@ -4777,32 +5311,38 @@ const ChatRoom = ({
                   isRecording
                     ? "Stop recording"
                     : audioBlob
-                    ? "Send voice message"
-                    : hasSelectedAttachments
-                    ? "Send attachments"
-                    : (currentMessage && currentMessage.trim())
-                    ? "Send message"
-                    : "Record voice message"
+                      ? "Send voice message"
+                      : hasSelectedAttachments
+                        ? "Send attachments"
+                        : currentMessage && currentMessage.trim()
+                          ? "Send message"
+                          : "Record voice message"
                 }
               >
                 {isRecording ? (
                   <>
                     <LuSquare size={14} />
-                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">Stop</span>
+                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">
+                      Stop
+                    </span>
                   </>
                 ) : editingMessageId ? (
                   <LuCheck size={16} strokeWidth={2.5} />
                 ) : audioBlob ? (
                   <>
                     <LuSend size={16} />
-                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">Send</span>
+                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">
+                      Send
+                    </span>
                   </>
                 ) : hasSelectedAttachments ? (
                   <>
                     <LuSend size={16} />
-                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">Send</span>
+                    <span className="sm:hidden text-[10px] font-black uppercase tracking-wider">
+                      Send
+                    </span>
                   </>
-                ) : (currentMessage && currentMessage.trim()) ? (
+                ) : currentMessage && currentMessage.trim() ? (
                   <LuSend size={16} />
                 ) : (
                   <LuMic size={18} />
@@ -4810,39 +5350,90 @@ const ChatRoom = ({
               </button>
             </div>
 
-            {hasSelectedAttachments && !editingMessageId && !isRecording && !audioBlob && (
-              <div className="w-full px-2 py-2 border-t border-zinc-800/40">
-                <div className="mb-2 text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                  {selectedAttachments.length} attachment{selectedAttachments.length > 1 ? "s" : ""} ready
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selectedAttachments.map((attachment, attachmentIndex) => (
-                    attachment.type === "image" ? (
-                      <div key={attachment.id || `attachment-image-${attachmentIndex}`} className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden">
-                        <img
-                          src={attachment.data}
-                          alt={attachment.name}
-                          className="max-h-28 w-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(attachment.id)}
-                          className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-black/70 text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
-                          title="Remove attachment"
+            {hasSelectedAttachments &&
+              !editingMessageId &&
+              !isRecording &&
+              !audioBlob && (
+                <div className="w-full px-2 py-2 border-t border-zinc-800/40">
+                  <div className="mb-2 text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
+                    {selectedAttachments.length} attachment
+                    {selectedAttachments.length > 1 ? "s" : ""} ready
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {selectedAttachments.map((attachment, attachmentIndex) =>
+                      attachment.type === "image" ? (
+                        <div
+                          key={
+                            attachment.id ||
+                            `attachment-image-${attachmentIndex}`
+                          }
+                          className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden"
                         >
-                          <LuX size={11} />
-                        </button>
-                      </div>
-                    ) : attachment.type === 'audio' ? (
-                      <div key={attachment.id || `attachment-audio-${attachmentIndex}`} className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
-                            <LuMic size={18} className="text-zinc-300" />
+                          <img
+                            src={attachment.data}
+                            alt={attachment.name}
+                            className="max-h-28 w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(attachment.id)}
+                            className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-black/70 text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                            title="Remove attachment"
+                          >
+                            <LuX size={11} />
+                          </button>
+                        </div>
+                      ) : attachment.type === "audio" ? (
+                        <div
+                          key={
+                            attachment.id ||
+                            `attachment-audio-${attachmentIndex}`
+                          }
+                          className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
+                              <LuMic size={18} className="text-zinc-300" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] text-zinc-200 font-bold truncate">
+                                {attachment.name}
+                              </p>
+                              <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
+                                {formatFileSize(attachment.size)} •{" "}
+                                {formatDuration(attachment.audioDuration || 0)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(attachment.id)}
+                              className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                              title="Remove attachment"
+                            >
+                              <LuX size={11} />
+                            </button>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[11px] text-zinc-200 font-bold truncate">{attachment.name}</p>
+                        </div>
+                      ) : (
+                        <div
+                          key={
+                            attachment.id ||
+                            `attachment-file-${attachmentIndex}`
+                          }
+                          className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9"
+                        >
+                          <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
+                            {React.createElement(
+                              getFileIcon(attachment.mimeType),
+                              { size: 18, className: "text-zinc-300" },
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">
+                              {attachment.name}
+                            </p>
                             <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                              {formatFileSize(attachment.size)} • {formatDuration(attachment.audioDuration || 0)}
+                              {formatFileSize(attachment.size)}
                             </p>
                           </div>
                           <button
@@ -4854,32 +5445,11 @@ const ChatRoom = ({
                             <LuX size={11} />
                           </button>
                         </div>
-                      </div>
-                    ) : (
-                      <div key={attachment.id || `attachment-file-${attachmentIndex}`} className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9">
-                        <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
-                          {React.createElement(getFileIcon(attachment.mimeType), { size: 18, className: "text-zinc-300" })}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">{attachment.name}</p>
-                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                            {formatFileSize(attachment.size)}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(attachment.id)}
-                          className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
-                          title="Remove attachment"
-                        >
-                          <LuX size={11} />
-                        </button>
-                      </div>
-                    )
-                  ))}
+                      ),
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         </footer>
 
@@ -4924,7 +5494,9 @@ const ChatRoom = ({
 
                 <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-4 sm:space-y-5 pt-3 sm:pt-4">
                   <div>
-                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Question</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">
+                      Question
+                    </p>
                     <div className="relative">
                       <input
                         value={pollQuestion}
@@ -4941,7 +5513,9 @@ const ChatRoom = ({
                   </div>
 
                   <div>
-                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Answers</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">
+                      Answers
+                    </p>
                     <div className="space-y-2">
                       {pollAnswers.map((ans, idx) => (
                         <div key={idx} className="flex items-center gap-2">
@@ -4990,7 +5564,9 @@ const ChatRoom = ({
                   </div>
 
                   <div>
-                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">Duration</p>
+                    <p className="text-xs text-zinc-400 mb-2 font-bold uppercase tracking-wider">
+                      Duration
+                    </p>
                     <select
                       value={pollDurationMs}
                       onChange={(e) =>
@@ -5037,96 +5613,118 @@ const ChatRoom = ({
         </AnimatePresence>
 
         <AnimatePresence>
-          {reactionSheetMessageId && (() => {
-            const targetMessage = messageList.find((message) => message.id === reactionSheetMessageId);
-            const reactions = getMessageReactionList(reactionSheetMessageId);
-            const groupedSummary = getMessageReactionSummary(reactionSheetMessageId);
+          {reactionSheetMessageId &&
+            (() => {
+              const targetMessage = messageList.find(
+                (message) => message.id === reactionSheetMessageId,
+              );
+              const reactions = getMessageReactionList(reactionSheetMessageId);
+              const groupedSummary = getMessageReactionSummary(
+                reactionSheetMessageId,
+              );
 
-            if (!targetMessage || reactions.length === 0) {
-              return null;
-            }
+              if (!targetMessage || reactions.length === 0) {
+                return null;
+              }
 
-            return (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[9997] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
-                onClick={() => setReactionSheetMessageId(null)}
-              >
+              return (
                 <motion.div
-                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                  transition={{ type: "spring", damping: 24, stiffness: 260 }}
-                  className="w-full max-w-md bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden"
-                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[9997] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+                  onClick={() => setReactionSheetMessageId(null)}
                 >
-                  <div className="p-4 sm:p-5 border-b border-zinc-800/30 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-500 font-black">Reactions</p>
-                      <p className="text-sm text-white font-bold mt-0.5">All {reactions.length}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setReactionSheetMessageId(null)}
-                      className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/5 transition-all"
-                      aria-label="Close reactions"
-                    >
-                      <LuX size={16} />
-                    </button>
-                  </div>
-
-                  <div className="px-4 sm:px-5 py-3 border-b border-zinc-800/30 flex items-center gap-2 overflow-x-auto">
-                    {groupedSummary.map((entry) => (
-                      <span
-                        key={`${reactionSheetMessageId}-tab-${entry.emoji}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-700/40 text-xs text-zinc-200 whitespace-nowrap"
+                  <motion.div
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                    transition={{ type: "spring", damping: 24, stiffness: 260 }}
+                    className="w-full max-w-md bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-4 sm:p-5 border-b border-zinc-800/30 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-500 font-black">
+                          Reactions
+                        </p>
+                        <p className="text-sm text-white font-bold mt-0.5">
+                          All {reactions.length}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReactionSheetMessageId(null)}
+                        className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/5 transition-all"
+                        aria-label="Close reactions"
                       >
-                        <span>{entry.emoji}</span>
-                        <span className="font-bold">{entry.count}</span>
-                      </span>
-                    ))}
-                  </div>
+                        <LuX size={16} />
+                      </button>
+                    </div>
 
-                  <div className="max-h-[52vh] overflow-y-auto">
-                    {reactions.map((reaction, index) => {
-                      const isOwnReaction = reaction.username?.toLowerCase() === username?.toLowerCase();
-                      const initials = (reaction.username || "?").slice(0, 1).toUpperCase();
-                      const codenameLabel = (isOwnReaction ? "You" : reaction.username || "").toUpperCase();
-                      return (
-                        <button
-                          key={`${reactionSheetMessageId}-${reaction.username}-${reaction.emoji}-${index}`}
-                          type="button"
-                          onClick={() => {
-                            if (isOwnReaction) {
-                              reactToMessage(reactionSheetMessageId, reaction.emoji);
-                            }
-                          }}
-                          className={`w-full px-4 sm:px-5 py-3.5 border-b border-zinc-800/20 flex items-center justify-between gap-3 text-left ${isOwnReaction ? "hover:bg-white/[0.04]" : ""}`}
+                    <div className="px-4 sm:px-5 py-3 border-b border-zinc-800/30 flex items-center gap-2 overflow-x-auto">
+                      {groupedSummary.map((entry) => (
+                        <span
+                          key={`${reactionSheetMessageId}-tab-${entry.emoji}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-700/40 text-xs text-zinc-200 whitespace-nowrap"
                         >
-                          <div className="min-w-0 flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-full bg-zinc-800/80 border border-zinc-700/40 text-zinc-200 text-xs font-black uppercase flex items-center justify-center shrink-0">
-                              {initials}
+                          <span>{entry.emoji}</span>
+                          <span className="font-bold">{entry.count}</span>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="max-h-[52vh] overflow-y-auto">
+                      {reactions.map((reaction, index) => {
+                        const isOwnReaction =
+                          reaction.username?.toLowerCase() ===
+                          username?.toLowerCase();
+                        const initials = (reaction.username || "?")
+                          .slice(0, 1)
+                          .toUpperCase();
+                        const codenameLabel = (
+                          isOwnReaction ? "You" : reaction.username || ""
+                        ).toUpperCase();
+                        return (
+                          <button
+                            key={`${reactionSheetMessageId}-${reaction.username}-${reaction.emoji}-${index}`}
+                            type="button"
+                            onClick={() => {
+                              if (isOwnReaction) {
+                                reactToMessage(
+                                  reactionSheetMessageId,
+                                  reaction.emoji,
+                                );
+                              }
+                            }}
+                            className={`w-full px-4 sm:px-5 py-3.5 border-b border-zinc-800/20 flex items-center justify-between gap-3 text-left ${isOwnReaction ? "hover:bg-white/[0.04]" : ""}`}
+                          >
+                            <div className="min-w-0 flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-zinc-800/80 border border-zinc-700/40 text-zinc-200 text-xs font-black uppercase flex items-center justify-center shrink-0">
+                                {initials}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-zinc-100 truncate">
+                                  {codenameLabel}
+                                </p>
+                                {isOwnReaction && (
+                                  <p className="text-[11px] text-zinc-500">
+                                    Click to remove
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-zinc-100 truncate">
-                                {codenameLabel}
-                              </p>
-                              {isOwnReaction && (
-                                <p className="text-[11px] text-zinc-500">Click to remove</p>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-2xl leading-none">{reaction.emoji}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                            <span className="text-2xl leading-none">
+                              {reaction.emoji}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
-            );
-          })()}
+              );
+            })()}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -5165,45 +5763,47 @@ const ChatRoom = ({
                   </p>
                 </div>
 
-                {confirmAction === "terminate" && isCurrentHost && promotableUsers.length > 0 && (
-                  <div className="mb-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 mb-2 font-bold">
-                      Promote a new host instead of terminating
-                    </p>
-                    <input
-                      type="text"
-                      value={hostTransferSearch}
-                      onChange={(e) => setHostTransferSearch(e.target.value)}
-                      placeholder="Search codename"
-                      className="w-full mb-2 bg-black/40 border border-zinc-800/60 text-white px-3 py-2 text-xs outline-none rounded-lg focus:border-zinc-600 placeholder:text-zinc-700"
-                    />
-                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
-                      {filteredPromotableUsers.length === 0 ? (
-                        <p className="text-[10px] text-zinc-600 uppercase tracking-wider py-1">
-                          No matching codename found
-                        </p>
-                      ) : (
-                        filteredPromotableUsers.map((user, userIndex) => (
-                          <div
-                            key={user.id || `promotable-user-${userIndex}`}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 bg-black/20 px-2.5 py-2"
-                          >
-                            <span className="text-xs text-zinc-200 uppercase tracking-wide truncate">
-                              {user.username}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => promoteHostFromPopup(user)}
-                              className="shrink-0 px-2.5 py-1 text-[9px] uppercase tracking-widest font-black rounded-md border border-zinc-700/60 text-zinc-300 hover:bg-white hover:text-black hover:border-white transition-all"
+                {confirmAction === "terminate" &&
+                  isCurrentHost &&
+                  promotableUsers.length > 0 && (
+                    <div className="mb-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 mb-2 font-bold">
+                        Promote a new host instead of terminating
+                      </p>
+                      <input
+                        type="text"
+                        value={hostTransferSearch}
+                        onChange={(e) => setHostTransferSearch(e.target.value)}
+                        placeholder="Search codename"
+                        className="w-full mb-2 bg-black/40 border border-zinc-800/60 text-white px-3 py-2 text-xs outline-none rounded-lg focus:border-zinc-600 placeholder:text-zinc-700"
+                      />
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {filteredPromotableUsers.length === 0 ? (
+                          <p className="text-[10px] text-zinc-600 uppercase tracking-wider py-1">
+                            No matching codename found
+                          </p>
+                        ) : (
+                          filteredPromotableUsers.map((user, userIndex) => (
+                            <div
+                              key={user.id || `promotable-user-${userIndex}`}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 bg-black/20 px-2.5 py-2"
                             >
-                              Promote
-                            </button>
-                          </div>
-                        ))
-                      )}
+                              <span className="text-xs text-zinc-200 uppercase tracking-wide truncate">
+                                {user.username}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => promoteHostFromPopup(user)}
+                                className="shrink-0 px-2.5 py-1 text-[9px] uppercase tracking-widest font-black rounded-md border border-zinc-700/60 text-zinc-300 hover:bg-white hover:text-black hover:border-white transition-all"
+                              >
+                                Promote
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <div
                   ref={slideTrackRef}
@@ -5266,128 +5866,165 @@ const ChatRoom = ({
 
         {/* Image Lightbox */}
         <AnimatePresence>
-          {lightboxOpen && (() => {
-            const total = lightboxImages.length;
-            const current = lightboxImages[lightboxIndex];
-            const handlePrev = () => setLightboxIndex((i) => (i - 1 + total) % total);
-            const handleNext = () => setLightboxIndex((i) => (i + 1) % total);
-            return (
-              <motion.div
-                key="lightbox"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-xl"
-                onClick={() => setLightboxOpen(false)}
-              >
-                {/* Close button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
-                  className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 transition-all hover:scale-105 active:scale-95"
+          {lightboxOpen &&
+            (() => {
+              const total = lightboxImages.length;
+              const current = lightboxImages[lightboxIndex];
+              const handlePrev = () =>
+                setLightboxIndex((i) => (i - 1 + total) % total);
+              const handleNext = () => setLightboxIndex((i) => (i + 1) % total);
+              return (
+                <motion.div
+                  key="lightbox"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-xl"
+                  onClick={() => setLightboxOpen(false)}
                 >
-                  <LuX size={20} />
-                </button>
-
-                {/* Counter */}
-                {total > 1 && (
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/70 backdrop-blur-sm border border-zinc-700/40 text-zinc-300 text-[11px] uppercase tracking-widest px-4 py-2 rounded-xl font-bold">
-                    {lightboxIndex + 1} / {total}
-                  </div>
-                )}
-
-                {/* Prev button */}
-                {total > 1 && (
+                  {/* Close button */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-                    className="absolute left-2 sm:left-3 md:left-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxOpen(false);
+                    }}
+                    className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 transition-all hover:scale-105 active:scale-95"
                   >
-                    <LuChevronLeft size={20} className="sm:w-[22px] sm:h-[22px]" />
+                    <LuX size={20} />
                   </button>
-                )}
 
-                {/* Next button */}
-                {total > 1 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleNext(); }}
-                    className="absolute right-2 sm:right-3 md:right-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
-                  >
-                    <LuChevronRight size={20} className="sm:w-[22px] sm:h-[22px]" />
-                  </button>
-                )}
-
-                {/* Image */}
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={lightboxIndex}
-                    initial={{ opacity: 0, scale: 0.94 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.94 }}
-                    transition={{ duration: 0.18 }}
-                    className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] p-2 sm:p-4 md:p-6"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <img
-                      src={current?.src}
-                      alt="Full preview"
-                      className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60 max-h-[70dvh] sm:max-h-[80dvh] w-auto object-contain"
-                    />
-                    {/* Sender info + download */}
-                    <div className="flex items-center gap-3">
-                      <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
-                        <LuLock size={10} className="inline mr-1" />
-                        {current?.username}
-                      </span>
-                      {/* Pin / Unpin for specific image (when viewing in lightbox) */}
-                      {current?.messageId != null && typeof current?.itemIndex === "number" && (
-                        <button
-                          onClick={() => togglePinMessage(current.messageId, current.itemIndex)}
-                          className={`ml-2 bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95`}
-                          title={isImagePinnedFromBatch(current.messageId, current.itemIndex) ? "Unpin this image" : "Pin this image"}
-                        >
-                          <LuPin size={12} />
-                          {isImagePinnedFromBatch(current.messageId, current.itemIndex) ? "Unpin" : "Pin"}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => downloadImage(current?.src, current?.messageId)}
-                        className="bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 hover:border-white text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
-                      >
-                        <LuDownload size={12} />
-                        Download
-                      </button>
+                  {/* Counter */}
+                  {total > 1 && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/70 backdrop-blur-sm border border-zinc-700/40 text-zinc-300 text-[11px] uppercase tracking-widest px-4 py-2 rounded-xl font-bold">
+                      {lightboxIndex + 1} / {total}
                     </div>
-                  </motion.div>
-                </AnimatePresence>
+                  )}
 
-                {/* Thumbnail strip (shown when total > 1) */}
-                {total > 1 && (
-                  <div
-                    className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-sm border border-zinc-700/30 rounded-2xl max-w-[90vw] overflow-x-auto"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {lightboxImages.map((im, i) => (
-                      <button
-                        key={`${im.messageId}-${im.itemIndex}`}
-                        onClick={() => setLightboxIndex(i)}
-                        className={`relative flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
-                          i === lightboxIndex
-                            ? "border-white scale-110 shadow-lg shadow-white/10"
-                            : "border-zinc-700/40 hover:border-zinc-500 opacity-60 hover:opacity-100"
-                        }`}
-                      >
-                        <img
-                          src={im.src}
-                          alt={`thumb-${i}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </motion.div>
-            );
-          })()}
+                  {/* Prev button */}
+                  {total > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePrev();
+                      }}
+                      className="absolute left-2 sm:left-3 md:left-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <LuChevronLeft
+                        size={20}
+                        className="sm:w-[22px] sm:h-[22px]"
+                      />
+                    </button>
+                  )}
+
+                  {/* Next button */}
+                  {total > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNext();
+                      }}
+                      className="absolute right-2 sm:right-3 md:right-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl p-2.5 sm:p-3 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <LuChevronRight
+                        size={20}
+                        className="sm:w-[22px] sm:h-[22px]"
+                      />
+                    </button>
+                  )}
+
+                  {/* Image */}
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={lightboxIndex}
+                      initial={{ opacity: 0, scale: 0.94 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.94 }}
+                      transition={{ duration: 0.18 }}
+                      className="flex flex-col items-center gap-3 overflow-auto max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] p-2 sm:p-4 md:p-6"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <img
+                        src={current?.src}
+                        alt="Full preview"
+                        className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60 max-h-[70dvh] sm:max-h-[80dvh] w-auto object-contain"
+                      />
+                      {/* Sender info + download */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                          <LuLock size={10} className="inline mr-1" />
+                          {current?.username}
+                        </span>
+                        {/* Pin / Unpin for specific image (when viewing in lightbox) */}
+                        {current?.messageId != null &&
+                          typeof current?.itemIndex === "number" && (
+                            <button
+                              onClick={() =>
+                                togglePinMessage(
+                                  current.messageId,
+                                  current.itemIndex,
+                                )
+                              }
+                              className={`ml-2 bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95`}
+                              title={
+                                isImagePinnedFromBatch(
+                                  current.messageId,
+                                  current.itemIndex,
+                                )
+                                  ? "Unpin this image"
+                                  : "Pin this image"
+                              }
+                            >
+                              <LuPin size={12} />
+                              {isImagePinnedFromBatch(
+                                current.messageId,
+                                current.itemIndex,
+                              )
+                                ? "Unpin"
+                                : "Pin"}
+                            </button>
+                          )}
+                        <button
+                          onClick={() =>
+                            downloadImage(current?.src, current?.messageId)
+                          }
+                          className="bg-white/10 hover:bg-white hover:text-black border border-zinc-700/30 hover:border-white text-white px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all flex items-center gap-1.5 rounded-lg active:scale-95"
+                        >
+                          <LuDownload size={12} />
+                          Download
+                        </button>
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {/* Thumbnail strip (shown when total > 1) */}
+                  {total > 1 && (
+                    <div
+                      className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-sm border border-zinc-700/30 rounded-2xl max-w-[90vw] overflow-x-auto"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {lightboxImages.map((im, i) => (
+                        <button
+                          key={`${im.messageId}-${im.itemIndex}`}
+                          onClick={() => setLightboxIndex(i)}
+                          className={`relative flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
+                            i === lightboxIndex
+                              ? "border-white scale-110 shadow-lg shadow-white/10"
+                              : "border-zinc-700/40 hover:border-zinc-500 opacity-60 hover:opacity-100"
+                          }`}
+                        >
+                          <img
+                            src={im.src}
+                            alt={`thumb-${i}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })()}
         </AnimatePresence>
 
         {/* Biometric Vault Modal */}
@@ -5413,7 +6050,9 @@ const ChatRoom = ({
                   <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-700/30">
                     <LuMessageSquarePlus size={16} className="text-blue-400" />
                   </div>
-                  {contextModalMode === "all" ? "Send Context to All" : "Send Context"}
+                  {contextModalMode === "all"
+                    ? "Send Context to All"
+                    : "Send Context"}
                 </h3>
                 <button
                   type="button"
@@ -5429,12 +6068,19 @@ const ChatRoom = ({
                   <>
                     <p className="text-sm text-zinc-400">
                       Send all previous messages from the chat history to{" "}
-                      <span className="font-bold text-white">{selectedContextAgent.username}</span>?
+                      <span className="font-bold text-white">
+                        {selectedContextAgent.username}
+                      </span>
+                      ?
                     </p>
                     <div className="bg-blue-500/10 border border-blue-700/30 rounded-xl p-3">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">Info</p>
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">
+                        Info
+                      </p>
                       <p className="text-xs text-blue-200 mt-1">
-                        This will send all previous messages as context. The context messages will appear with a dotted border and be slightly dimmed.
+                        This will send all previous messages as context. The
+                        context messages will appear with a dotted border and be
+                        slightly dimmed.
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -5445,7 +6091,9 @@ const ChatRoom = ({
                         Cancel
                       </button>
                       <button
-                        onClick={() => sendContextToAgent(selectedContextAgent.id)}
+                        onClick={() =>
+                          sendContextToAgent(selectedContextAgent.id)
+                        }
                         disabled={!!selectedContextAgent?.hasFullHistory}
                         className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-bold uppercase text-xs tracking-wider hover:bg-blue-700 transition-all active:scale-95 hover:shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -5456,17 +6104,34 @@ const ChatRoom = ({
                 ) : contextModalMode === "all" ? (
                   <>
                     <p className="text-sm text-zinc-400">
-                      Send all previous messages to agents who don't have context yet?
+                      Send all previous messages to agents who don't have
+                      context yet?
                     </p>
                     <div className="bg-blue-500/10 border border-blue-700/30 rounded-xl p-3 space-y-2">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">Info</p>
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-blue-300 font-bold">
+                        Info
+                      </p>
                       <p className="text-xs text-blue-200">
-                        Agents who already have context will not receive duplicate messages.
+                        Agents who already have context will not receive
+                        duplicate messages.
                       </p>
                       <div className="mt-2 text-xs text-blue-200 space-y-1">
-                        <p><span className="font-bold">Total Agents:</span> {allAgents.length}</p>
-                        <p><span className="font-bold">Already have context:</span> {contextSyncedAgentsCount}</p>
-                        <p><span className="font-bold">Will receive context:</span> {agentsNeedingContext.length}</p>
+                        <p>
+                          <span className="font-bold">Total Agents:</span>{" "}
+                          {allAgents.length}
+                        </p>
+                        <p>
+                          <span className="font-bold">
+                            Already have context:
+                          </span>{" "}
+                          {contextSyncedAgentsCount}
+                        </p>
+                        <p>
+                          <span className="font-bold">
+                            Will receive context:
+                          </span>{" "}
+                          {agentsNeedingContext.length}
+                        </p>
                       </div>
                     </div>
                     <div className="flex gap-2">
