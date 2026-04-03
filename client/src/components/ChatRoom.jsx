@@ -2992,7 +2992,7 @@ const ChatRoom = ({
                         roomId,
                         roomPassword,
                       );
-                      const magicLink = `${window.location.origin}/chatroom/?invite=${encryptedPayload}`;
+                      const magicLink = `${window.location.origin}/?invite=${encryptedPayload}`;
                       return (
                         <button
                           type="button"
