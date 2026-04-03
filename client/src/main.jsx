@@ -10,7 +10,20 @@ const LandingPage = lazy(() => import("./components/LandingPage.jsx"));
 const TermsOfUse = lazy(() => import("./components/TermsOfUse.jsx"));
 const PrivacyPolicy = lazy(() => import("./components/PrivacyPolicy.jsx"));
 
-const pathname = window.location.pathname;
+const rawPathname = window.location.pathname;
+const pathname =
+  rawPathname.length > 1 && rawPathname.endsWith("/")
+    ? rawPathname.replace(/\/+$/, "")
+    : rawPathname;
+
+if (pathname !== rawPathname) {
+  window.history.replaceState(
+    null,
+    "",
+    `${pathname}${window.location.search}${window.location.hash}`,
+  );
+}
+
 const isChatroomPath = pathname === "/chatroom";
 const isTermsPath = pathname === "/terms";
 const isPrivacyPath = pathname === "/privacy";
