@@ -14,14 +14,6 @@ const pathname = window.location.pathname;
 const isChatroomPath = pathname === "/chatroom";
 const isTermsPath = pathname === "/terms";
 const isPrivacyPath = pathname === "/privacy";
-const hash = window.location.hash.startsWith("#")
-  ? window.location.hash.substring(1)
-  : window.location.hash;
-const hashParams = new URLSearchParams(hash);
-const queryParams = new URLSearchParams(window.location.search);
-const hasInvitePayload = Boolean(
-  hashParams.get("invite") || queryParams.get("invite"),
-);
 
 const goToChatroom = () => {
   const currentPath = window.location.pathname;
@@ -33,7 +25,7 @@ const goToChatroom = () => {
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Suspense fallback={null}>
-      {isChatroomPath || hasInvitePayload ? (
+      {isChatroomPath ? (
         <App />
       ) : isTermsPath ? (
         <TermsOfUse />
