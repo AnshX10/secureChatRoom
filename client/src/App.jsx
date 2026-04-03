@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 import JoinRoom from './components/JoinRoom';
 import ChatRoom from './components/ChatRoom';
@@ -24,6 +24,7 @@ function App() {
   const [roomSilencedUserIds, setRoomSilencedUserIds] = useState([]);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [isWaitingForFirstAgent, setIsWaitingForFirstAgent] = useState(false); // Host waiting for first agent to join
+  const inChatRef = useRef(false);
 
   useEffect(() => {
     socket.on("room_created_pending", ({ roomId, createdAt, roomName: serverRoomName, capacity, isWaitingForFirstAgent }) => {
@@ -50,6 +51,7 @@ function App() {
       setIsHost(true);
       setIsWaitingForFirstAgent(false); // First agent joined, room is now created
       setIsInChat(true);
+      inChatRef.current = true;
       setIsCreatingRoom(false);
     });
 
@@ -62,6 +64,7 @@ function App() {
       setRoomLocked(!!isLocked);
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsInChat(false);
+      inChatRef.current = false;
       setIsWaitingForFirstAgent(true);
     });
 
@@ -75,6 +78,7 @@ function App() {
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsWaitingForFirstAgent(false);
       setIsInChat(true);
+      inChatRef.current = true;
     });
 
     // Handle Join Success (direct or after host approval)
@@ -88,6 +92,7 @@ function App() {
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
       setIsHost(isHost);
       setIsInChat(true);
+      inChatRef.current = true;
       setIsWaitingApproval(false);
     });
 
@@ -108,6 +113,7 @@ function App() {
     // Handle Room Closed (by host)
     socket.on("room_closed", () => {
       setIsInChat(false);
+      inChatRef.current = false;
       setRoomId("");
       setIsHost(false);
       setRoomLocked(false);
@@ -135,6 +141,47 @@ function App() {
     };
   }, [username]);
 
+  const cleanupRoom = () => {
+    if (inChatRef.current && roomId) {
+      socket.emit("leave_room", { roomId });
+    }
+    setIsInChat(false);
+    inChatRef.current = false;
+    setRoomId("");
+    setUsername("");
+    setRoomPassword("");
+    setIsHost(false);
+  };
+
+  // Handle page unload / navigate away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      cleanupRoom();
+    };
+
+    const handlePageHide = () => {
+      cleanupRoom();
+    };
+
+    const handleVisibilityChange = () => {
+      // On mobile, when tab is minimized, also emit leave
+      if (document.hidden && inChatRef.current && roomId) {
+        socket.emit("leave_room", { roomId });
+        inChatRef.current = false;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [roomId]);
+
   const createRoom = (user, password, name, requireApproval, capacity) => {
     if (!user || !password || !name) return;
     setErrorMessage("");
@@ -161,6 +208,7 @@ function App() {
   };
 
   const leaveRoom = () => {
+    cleanupRoom();
     socket.disconnect();
     window.location.reload(); 
   };
