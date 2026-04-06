@@ -550,7 +550,8 @@ const ChatRoom = ({
 
   // Mobile toolbar toggle
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
-  const mobileToolbarRef = useRef(null);
+  const mobileToolbarMobileRef = useRef(null);
+  const mobileToolbarDesktopRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
   const areAllSelectedAttachmentsImages =
     hasSelectedAttachments &&
@@ -2667,10 +2668,12 @@ const ChatRoom = ({
   // Close mobile toolbar on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (
-        mobileToolbarRef.current &&
-        !mobileToolbarRef.current.contains(e.target)
-      ) {
+      const clickedInsideMobileToolbar =
+        mobileToolbarMobileRef.current?.contains(e.target) ?? false;
+      const clickedInsideDesktopToolbar =
+        mobileToolbarDesktopRef.current?.contains(e.target) ?? false;
+
+      if (!clickedInsideMobileToolbar && !clickedInsideDesktopToolbar) {
         setShowMobileToolbar(false);
       }
     };
@@ -3808,9 +3811,13 @@ const ChatRoom = ({
                   }
                 >
                   {msg.system ? (
-                    <span className="text-[8px] sm:text-[9px] text-zinc-600 px-4 py-1.5 uppercase tracking-[0.2em] rounded-full bg-zinc-900/30 border border-zinc-800/20 backdrop-blur-sm font-mono">
-                      {msg.message}
-                    </span>
+                    <div className="w-full flex items-center justify-center gap-3 px-1 py-1.5">
+                      <span className="h-px flex-1 bg-zinc-700/45" />
+                      <span className="text-[10px] sm:text-[11px] text-zinc-600 font-semibold uppercase tracking-[0.14em] text-center leading-tight">
+                        {msg.message}
+                      </span>
+                      <span className="h-px flex-1 bg-zinc-700/45" />
+                    </div>
                   ) : (
                     <div
                       className={`flex items-start gap-2.5 max-w-full w-full ${msg.own ? "justify-end" : "justify-start"}`}
@@ -4876,7 +4883,7 @@ const ChatRoom = ({
             <div className="flex items-center w-full">
               {/* ── Mobile: single + button with popup (hidden during recording/audio preview) ── */}
               {!isRecording && !audioBlob && (
-                <div className="relative sm:hidden" ref={mobileToolbarRef}>
+                <div className="relative sm:hidden" ref={mobileToolbarMobileRef}>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -5050,7 +5057,7 @@ const ChatRoom = ({
 
               {/* ── Desktop: same + popup as mobile (hidden during recording/audio preview) ── */}
               {!isRecording && !audioBlob && (
-                <div className="relative hidden sm:block" ref={mobileToolbarRef}>
+                <div className="relative hidden sm:block" ref={mobileToolbarDesktopRef}>
                   <button
                     type="button"
                     onClick={(e) => {
