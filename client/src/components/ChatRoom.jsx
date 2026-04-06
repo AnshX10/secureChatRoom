@@ -2980,7 +2980,7 @@ const ChatRoom = ({
                             return (
                               <div
                                 key={`room-id-box-${index}`}
-                                className="h-10 w-8 rounded-lg border border-zinc-700/70 bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center text-[15px] font-black tracking-[0.08em] font-mono text-zinc-100 shrink-0"
+                                className="h-10 w-8 rounded-xl border border-zinc-700/70 bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-center justify-center text-[15px] font-black tracking-[0.08em] font-mono text-zinc-100 shrink-0"
                               >
                                 {char || "•"}
                               </div>
@@ -3074,7 +3074,7 @@ const ChatRoom = ({
                         value={agentSearchQuery}
                         onChange={(e) => setAgentSearchQuery(e.target.value)}
                         placeholder="Search agent"
-                        className="min-w-0 flex-1 bg-transparent text-[10px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+                        className="min-w-0 flex-1 bg-transparent text-[10px] text-zinc-100 placeholder:text-zinc-400 outline-none"
                       />
                       {agentSearchQuery && (
                         <button
@@ -3531,7 +3531,7 @@ const ChatRoom = ({
 
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none max-w-[45%] sm:max-w-[50%]">
             <div className="flex flex-col items-center">
-              <span className="text-[6px] sm:text-[7px] md:text-[8px] text-zinc-700 uppercase tracking-[0.4em] sm:tracking-[0.5em] font-bold mb-0.5 sm:mb-1">
+              <span className="text-[6px] sm:text-[7px] md:text-[8px] text-zinc-500 uppercase tracking-[0.4em] sm:tracking-[0.5em] font-bold mb-0.5 sm:mb-1">
                 Room
               </span>
               <h1 className="text-sm sm:text-base md:text-xl font-black tracking-[0.1em] sm:tracking-[0.12em] text-zinc-100 leading-none uppercase font-mono truncate">
@@ -3627,7 +3627,7 @@ const ChatRoom = ({
               className={`text-[8px] sm:text-[9px] border px-2.5 py-1.5 uppercase transition-all shrink-0 font-bold flex items-center gap-1.5 rounded-xl active:scale-95 ${
                 isSelectMode
                   ? "bg-white text-black border-white shadow-lg shadow-white/10"
-                  : "border-zinc-800/50 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 hover:border-zinc-700"
+                  : "border-zinc-800/50 text-zinc-300 hover:bg-white/5 hover:text-zinc-300 hover:border-zinc-700"
               }`}
               title="Select multiple messages"
             >
@@ -3847,16 +3847,16 @@ const ChatRoom = ({
                             isMediaPayload
                               ? "px-2 py-2 sm:px-2.5 sm:py-2.5 md:px-3 md:py-3"
                               : "px-3 py-2.5 sm:px-3.5 sm:py-3 md:px-4 md:py-3.5"
-                          } relative transition-all rounded-2xl ${
+                          } relative transition-all rounded-xl ${
                             msg.deleted
-                              ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-2xl"
+                              ? "bg-zinc-900/30 border border-zinc-800/20 text-zinc-600 italic rounded-xl"
                               : msg.poll
                                 ? msg.own
-                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
-                                  : "bg-zinc-900/60 text-zinc-200 border border-zinc-800/40 rounded-2xl"
+                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-xl rounded-br-sm"
+                                  : "bg-zinc-900/60 text-zinc-200 border border-zinc-800/40 rounded-xl"
                                 : msg.own
-                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-2xl rounded-br-sm"
-                                  : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-2xl rounded-bl-sm"
+                                  ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-xl rounded-br-sm"
+                                  : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-xl rounded-bl-sm"
                           } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
                         >
                           <div
@@ -5368,7 +5368,7 @@ const ChatRoom = ({
                               ? "Add caption for attachment..."
                               : "Type your encrypted signal..."
                     }
-                    className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced || isMultiAttachmentCaptionLocked ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-700"}`}
+                    className={`flex-1 bg-transparent px-2 sm:px-4 py-2 sm:py-3 outline-none text-xs sm:text-sm font-mono tracking-wide min-w-0 ${isRadioSilenceEnforced || isMultiAttachmentCaptionLocked ? "text-zinc-500 placeholder:text-zinc-500 cursor-not-allowed" : "text-white placeholder:text-zinc-400"}`}
                     disabled={
                       isRadioSilenceEnforced || isMultiAttachmentCaptionLocked
                     }
