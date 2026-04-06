@@ -2964,8 +2964,8 @@ const ChatRoom = ({
                   >
                     <div className="absolute inset-0 animate-shimmer pointer-events-none" />
                     <div className="flex items-center justify-between mb-2.5 relative">
-                      <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5">
-                        <LuHash size={11} className="text-zinc-500" /> Operation
+                      <p className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5">
+                        <LuHash size={11} className="text-zinc-200" /> Room
                         ID
                       </p>
                       <span className="text-[8px] uppercase tracking-[0.16em] font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors inline-flex items-center gap-1">
@@ -3006,7 +3006,7 @@ const ChatRoom = ({
                           }
                           className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 flex items-center justify-between gap-2 hover:border-zinc-700/60 hover:bg-zinc-900/50 active:scale-[0.99] transition-all group"
                         >
-                          <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
+                          <p className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
                             <LuKeyRound size={11} /> Magic Invite
                           </p>
                           <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
@@ -3064,8 +3064,8 @@ const ChatRoom = ({
                   )}
 
                   <div className="flex items-center gap-2 mb-4 mt-1">
-                    <h3 className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
-                      <LuUsers size={11} className="text-zinc-600" /> Agents
+                    <h3 className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
+                      <LuUsers size={11} className="text-zinc-200" /> Agents
                       Online
                     </h3>
                     <div className="min-w-0 flex-1 flex items-center gap-1.5 bg-zinc-900/70 border border-zinc-700/60 rounded-lg px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] focus-within:border-zinc-500/70 focus-within:bg-zinc-900/90">
@@ -3173,7 +3173,7 @@ const ChatRoom = ({
                               <span className="text-xs uppercase tracking-wide truncate flex items-center gap-1.5">
                                 {user.username}
                                 {user.username === username && (
-                                  <span className="text-zinc-600 text-[10px] shrink-0">
+                                  <span className="text-zinc-400 text-[10px] shrink-0">
                                     (YOU)
                                   </span>
                                 )}
@@ -3337,13 +3337,13 @@ const ChatRoom = ({
                             setContextModalMode("all");
                             setShowContextModal(true);
                           }}
-                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2"
+                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-blue-500/[0.04] mb-2"
                         >
                           <LuMessageSquarePlus size={13} /> SEND CONTEXT TO ALL
                         </button>
                         <button
                           onClick={handleTerminateClick}
-                          className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-red-500/20 active:scale-[0.98] bg-red-500/[0.04]"
+                          className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-red-500/[0.04]"
                         >
                           <LuLogOut size={14} /> TERMINATE ROOM
                         </button>
@@ -3356,7 +3356,7 @@ const ChatRoom = ({
                             !!currentUser?.hasFullHistory ||
                             isContextRequestPending
                           }
-                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] bg-blue-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full border border-blue-500/20 text-blue-400 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-blue-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <LuMessageSquarePlus size={13} />{" "}
                           {isContextRequestPending
@@ -3365,7 +3365,7 @@ const ChatRoom = ({
                         </button>
                         <button
                           onClick={handleLeaveClick}
-                          className="w-full border border-zinc-800/50 text-zinc-500 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
+                          className="w-full border border-zinc-800/50 text-zinc-200 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-zinc-900/30"
                         >
                           <LuLogOut size={14} /> LEAVE ROOM
                         </button>
@@ -3515,15 +3515,15 @@ const ChatRoom = ({
               className="w-7 h-7 sm:w-8 sm:h-8 text-white/80 shrink-0"
             />
             <div className="hidden xs:flex flex-col truncate">
-              <h1 className="font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-[11px] text-zinc-500 truncate flex items-center gap-1.5">
+              <h1 className="font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-[11px] text-zinc-300 truncate flex items-center gap-1.5">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
                 </span>
                 Encrypted Session
               </h1>
-              <p className="text-[11px] text-zinc-600 uppercase tracking-[0.15em] flex items-center gap-1.5 mt-0.5 font-mono tabular-nums">
-                <LuClock className="text-zinc-700" size={10} />{" "}
+              <p className="text-[12px] text-zinc-400 font-bold uppercase tracking-[0.15em] flex items-center gap-1.5 mt-0.5 tabular-nums">
+                <LuClock className="text-zinc-400" size={12} />{" "}
                 {sessionDuration}
               </p>
             </div>
@@ -3626,7 +3626,7 @@ const ChatRoom = ({
               onClick={toggleSelectMode}
               className={`text-[8px] sm:text-[9px] border px-2.5 py-1.5 uppercase transition-all shrink-0 font-bold flex items-center gap-1.5 rounded-xl active:scale-95 ${
                 isSelectMode
-                  ? "bg-white text-black border-white shadow-lg shadow-white/10"
+                  ? "bg-white text-black border-white"
                   : "border-zinc-800/50 text-zinc-300 hover:bg-white/5 hover:text-zinc-300 hover:border-zinc-700"
               }`}
               title="Select multiple messages"
@@ -4543,7 +4543,7 @@ const ChatRoom = ({
                                           });
                                         }
                                       }}
-                                      className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-black text-[10px] uppercase font-bold tracking-[0.15em] transition-all flex items-center gap-2 rounded-xl shadow-lg shadow-white/10 hover:shadow-white/20 active:scale-95"
+                                      className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-black text-[10px] uppercase font-bold tracking-[0.15em] transition-all flex items-center gap-2 rounded-xl active:scale-95"
                                     >
                                       <LuLock size={14} />
                                       Access Vault

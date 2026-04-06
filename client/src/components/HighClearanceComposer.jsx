@@ -519,7 +519,7 @@ const HighClearanceComposer = ({
                     (!message.trim() && !selectedImage && !selectedFile && !audioBlob) ||
                     (biometricCapabilities?.supported && !hasCredential)
                   }
-                  className="flex-1 bg-white hover:bg-zinc-100 text-black py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-white/10 active:scale-[0.98]"
+                  className="flex-1 bg-white hover:bg-zinc-100 text-black py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl active:scale-[0.98]"
                   title={
                     biometricCapabilities?.supported && !hasCredential
                       ? 'Biometric setup required for high-clearance messages'

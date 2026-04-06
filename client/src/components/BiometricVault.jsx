@@ -250,7 +250,7 @@ const BiometricVault = ({
                       <button
                         onClick={handleBiometricUnlock}
                         disabled={isUnlocking}
-                        className="w-full bg-white hover:bg-zinc-100 text-black py-4 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-white/10 active:scale-[0.98]"
+                        className="w-full bg-white hover:bg-zinc-100 text-black py-4 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl active:scale-[0.98]"
                       >
                         {isUnlocking ? (
                           <>
@@ -499,7 +499,7 @@ const BiometricVault = ({
                   
                   <button
                     onClick={onClose}
-                    className="flex-1 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all rounded-xl active:scale-[0.98] hover:shadow-lg hover:shadow-white/10"
+                    className="flex-1 bg-gradient-to-r from-white to-zinc-100 text-zinc-900 py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all rounded-xl active:scale-[0.98]"
                   >
                     Close
                   </button>
