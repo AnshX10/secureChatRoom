@@ -509,6 +509,9 @@ const ChatRoom = ({
   const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
 
   const [selectedAttachments, setSelectedAttachments] = useState([]);
+  const [previewAttachmentIndex, setPreviewAttachmentIndex] = useState(null);
+  const attachmentScrollRef = useRef(null);
+  const draggingAttachmentIndexRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
 
@@ -553,6 +556,108 @@ const ChatRoom = ({
   const mobileToolbarMobileRef = useRef(null);
   const mobileToolbarDesktopRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
+  const reorderSelectedAttachments = (sourceIndex, targetIndex) => {
+    if (
+      sourceIndex === targetIndex ||
+      sourceIndex < 0 ||
+      targetIndex < 0 ||
+      sourceIndex >= selectedAttachments.length ||
+      targetIndex >= selectedAttachments.length
+    ) {
+      return;
+    }
+
+    setSelectedAttachments((previous) => {
+      const updated = [...previous];
+      // Remove from source
+      const [moved] = updated.splice(sourceIndex, 1);
+      // Insert at target position (adjusted if source was before target)
+      const insertIndex =
+        sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      updated.splice(insertIndex, 0, moved);
+      return updated;
+    });
+
+    setPreviewAttachmentIndex((previousIndex) => {
+      if (previousIndex === null) return previousIndex;
+      if (previousIndex === sourceIndex) {
+        return sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      }
+      if (
+        sourceIndex < targetIndex &&
+        previousIndex > sourceIndex &&
+        previousIndex <= targetIndex
+      ) {
+        return previousIndex - 1;
+      }
+      if (
+        sourceIndex > targetIndex &&
+        previousIndex >= targetIndex &&
+        previousIndex < sourceIndex
+      ) {
+        return previousIndex + 1;
+      }
+      return previousIndex;
+    });
+  };
+
+  const handleAttachmentDragAutoScroll = (event) => {
+    const container = attachmentScrollRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const edgeThreshold = 56;
+    const maxStep = 20;
+
+    if (event.clientY < rect.top + edgeThreshold) {
+      const intensity = Math.min(
+        1,
+        (rect.top + edgeThreshold - event.clientY) / edgeThreshold,
+      );
+      container.scrollTop -= Math.ceil(maxStep * intensity);
+      return;
+    }
+
+    if (event.clientY > rect.bottom - edgeThreshold) {
+      const intensity = Math.min(
+        1,
+        (event.clientY - (rect.bottom - edgeThreshold)) / edgeThreshold,
+      );
+      container.scrollTop += Math.ceil(maxStep * intensity);
+    }
+  };
+
+  const handleAttachmentTouchStart = (index) => {
+    draggingAttachmentIndexRef.current = index;
+  };
+
+  const handleAttachmentTouchMove = (event) => {
+    const sourceIndex = draggingAttachmentIndexRef.current;
+    if (sourceIndex === null || sourceIndex === undefined) return;
+
+    const touchPoint = event.touches?.[0];
+    if (!touchPoint) return;
+
+    handleAttachmentDragAutoScroll({ clientY: touchPoint.clientY });
+
+    const elementUnderTouch = document
+      .elementFromPoint(touchPoint.clientX, touchPoint.clientY)
+      ?.closest("[data-attachment-index]");
+
+    if (!elementUnderTouch) return;
+
+    const targetIndex = Number(elementUnderTouch.getAttribute("data-attachment-index"));
+    if (Number.isNaN(targetIndex) || targetIndex === sourceIndex) return;
+
+    reorderSelectedAttachments(sourceIndex, targetIndex);
+    draggingAttachmentIndexRef.current = targetIndex;
+    event.preventDefault();
+  };
+
+  const clearAttachmentDragState = () => {
+    draggingAttachmentIndexRef.current = null;
+  };
+
   const areAllSelectedAttachmentsImages =
     hasSelectedAttachments &&
     selectedAttachments.every((attachment) => attachment.type === "image");
@@ -5469,94 +5574,221 @@ const ChatRoom = ({
                     {selectedAttachments.length} attachment
                     {selectedAttachments.length > 1 ? "s" : ""} ready
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {selectedAttachments.map((attachment, attachmentIndex) =>
-                      attachment.type === "image" ? (
-                        <div
-                          key={
-                            attachment.id ||
-                            `attachment-image-${attachmentIndex}`
+                    <div
+                      ref={attachmentScrollRef}
+                      className="overflow-y-auto max-h-96 scrollbar-thumb-zinc-700 scrollbar-track-zinc-800 scrollbar-thin"
+                    >
+                      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 pb-2">
+                      {selectedAttachments.map((attachment, attachmentIndex) => {
+                        const handleDragStart = (e) => {
+                          draggingAttachmentIndexRef.current = attachmentIndex;
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", attachmentIndex.toString());
+                        };
+
+                        const handleDragOver = (e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          handleAttachmentDragAutoScroll(e);
+                        };
+
+                        const handleDrop = (e) => {
+                          e.preventDefault();
+                          const sourceIndex = Number.parseInt(
+                            e.dataTransfer.getData("text/plain"),
+                            10,
+                          );
+                          const normalizedSource = Number.isNaN(sourceIndex)
+                            ? draggingAttachmentIndexRef.current
+                            : sourceIndex;
+
+                          if (
+                            normalizedSource === null ||
+                            normalizedSource === undefined
+                          ) {
+                            return;
                           }
-                          className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden"
-                        >
-                          <img
-                            src={attachment.data}
-                            alt={attachment.name}
-                            className="max-h-28 w-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(attachment.id)}
-                            className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-black/70 text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
-                            title="Remove attachment"
+
+                          reorderSelectedAttachments(normalizedSource, attachmentIndex);
+                          clearAttachmentDragState();
+                        };
+
+                        return attachment.type === "image" ? (
+                          <div
+                            key={
+                              attachment.id ||
+                              `attachment-image-${attachmentIndex}`
+                            }
+                            data-attachment-index={attachmentIndex}
+                            draggable
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                            onDragEnd={clearAttachmentDragState}
+                            onTouchStart={() => handleAttachmentTouchStart(attachmentIndex)}
+                            onTouchMove={handleAttachmentTouchMove}
+                            onTouchEnd={clearAttachmentDragState}
+                            onTouchCancel={clearAttachmentDragState}
+                            onClick={() => {
+                              if (isMobile) {
+                                setPreviewAttachmentIndex(attachmentIndex);
+                              }
+                            }}
+                            onDoubleClick={() => setPreviewAttachmentIndex(attachmentIndex)}
+                              className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg overflow-hidden group aspect-square cursor-move hover:border-zinc-600/80 transition-colors"
                           >
-                            <LuX size={11} />
-                          </button>
-                        </div>
-                      ) : attachment.type === "audio" ? (
-                        <div
-                          key={
-                            attachment.id ||
-                            `attachment-audio-${attachmentIndex}`
-                          }
-                          className="relative border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
-                              <LuMic size={18} className="text-zinc-300" />
+                            <div
+                              className="absolute top-1 left-1 z-10 inline-flex items-center gap-0.5 rounded-md bg-black/65 px-1 py-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity"
+                              title="Hold and drag"
+                            >
+                              <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                              <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                              <span className="h-1 w-1 rounded-full bg-zinc-200" />
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[11px] text-zinc-200 font-bold truncate">
-                                {attachment.name}
-                              </p>
-                              <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                                {formatFileSize(attachment.size)} •{" "}
-                                {formatDuration(attachment.audioDuration || 0)}
-                              </p>
+                            <img
+                              src={attachment.data}
+                              alt={attachment.name}
+                                className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeAttachment(attachment.id);
+                              }}
+                                className="absolute top-1 right-1 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center bg-black/70 text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                              title="Remove attachment"
+                            >
+                                <LuX size={8} className="sm:hidden" />
+                                <LuX size={10} className="hidden sm:block" />
+                            </button>
+                          </div>
+                        ) : attachment.type === "audio" ? (
+                          <div
+                            key={
+                              attachment.id ||
+                              `attachment-audio-${attachmentIndex}`
+                            }
+                            data-attachment-index={attachmentIndex}
+                            draggable
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                            onDragEnd={clearAttachmentDragState}
+                            onTouchStart={() => handleAttachmentTouchStart(attachmentIndex)}
+                            onTouchMove={handleAttachmentTouchMove}
+                            onTouchEnd={clearAttachmentDragState}
+                            onTouchCancel={clearAttachmentDragState}
+                            onClick={() => {
+                              if (isMobile) {
+                                setPreviewAttachmentIndex(attachmentIndex);
+                              }
+                            }}
+                            onDoubleClick={() => setPreviewAttachmentIndex(attachmentIndex)}
+                            className="relative col-span-3 sm:col-span-2 border border-zinc-700/50 bg-zinc-900 rounded-lg px-2 py-2 group cursor-move hover:border-zinc-600/80 transition-colors"
+                          >
+                              <div
+                                className="absolute top-1 left-1 z-10 inline-flex items-center gap-0.5 rounded-md bg-black/65 px-1 py-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity"
+                                title="Hold and drag"
+                              >
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                              </div>
+                              <div className="flex items-center gap-2 h-full">
+                                <div className="p-1.5 bg-white/5 rounded-lg border border-zinc-700/30 flex-shrink-0">
+                                  <LuMic size={14} className="text-zinc-300" />
+                              </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[9px] text-zinc-200 font-bold truncate">
+                                  {attachment.name}
+                                </p>
+                                  <p className="text-[7px] text-zinc-500 uppercase tracking-widest font-bold">
+                                    {formatFileSize(attachment.size)} • {formatDuration(attachment.audioDuration || 0)}
+                                  </p>
+                              </div>
+                                <span className="text-[8px] font-bold bg-white/10 px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                #{attachmentIndex + 1}
+                              </span>
                             </div>
                             <button
                               type="button"
-                              onClick={() => removeAttachment(attachment.id)}
-                              className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeAttachment(attachment.id);
+                              }}
+                              className="absolute top-1 right-1 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
                               title="Remove attachment"
                             >
-                              <LuX size={11} />
+                              <LuX size={8} className="sm:hidden" />
+                              <LuX size={10} className="hidden sm:block" />
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div
-                          key={
-                            attachment.id ||
-                            `attachment-file-${attachmentIndex}`
-                          }
-                          className="relative inline-flex items-center gap-3 border border-zinc-700/50 bg-zinc-900 rounded-lg px-3 py-3 pr-9"
-                        >
-                          <div className="p-2 bg-white/5 rounded-lg border border-zinc-700/30">
-                            {React.createElement(
-                              getFileIcon(attachment.mimeType),
-                              { size: 18, className: "text-zinc-300" },
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[11px] text-zinc-200 font-bold truncate max-w-[200px]">
-                              {attachment.name}
-                            </p>
-                            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">
-                              {formatFileSize(attachment.size)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(attachment.id)}
-                            className="absolute top-1.5 right-1.5 h-6 w-6 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
-                            title="Remove attachment"
+                        ) : (
+                          <div
+                            key={
+                              attachment.id ||
+                              `attachment-file-${attachmentIndex}`
+                            }
+                            data-attachment-index={attachmentIndex}
+                            draggable
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                            onDragEnd={clearAttachmentDragState}
+                            onTouchStart={() => handleAttachmentTouchStart(attachmentIndex)}
+                            onTouchMove={handleAttachmentTouchMove}
+                            onTouchEnd={clearAttachmentDragState}
+                            onTouchCancel={clearAttachmentDragState}
+                            onClick={() => {
+                              if (isMobile) {
+                                setPreviewAttachmentIndex(attachmentIndex);
+                              }
+                            }}
+                            onDoubleClick={() => setPreviewAttachmentIndex(attachmentIndex)}
+                            className="relative col-span-3 sm:col-span-2 flex items-center gap-2 border border-zinc-700/50 bg-zinc-900 rounded-lg px-2 py-2 group cursor-move hover:border-zinc-600/80 transition-colors"
                           >
-                            <LuX size={11} />
-                          </button>
-                        </div>
-                      ),
-                    )}
+                              <div
+                                className="absolute top-1 left-1 z-10 inline-flex items-center gap-0.5 rounded-md bg-black/65 px-1 py-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity"
+                                title="Hold and drag"
+                              >
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                                <span className="h-1 w-1 rounded-full bg-zinc-200" />
+                              </div>
+                              <div className="p-1.5 bg-white/5 rounded-lg border border-zinc-700/30 flex-shrink-0">
+                              {React.createElement(
+                                getFileIcon(attachment.mimeType),
+                                  { size: 14, className: "text-zinc-300" },
+                              )}
+                            </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[9px] text-zinc-200 font-bold truncate">
+                                {attachment.name}
+                              </p>
+                                <p className="text-[7px] text-zinc-500 uppercase tracking-widest font-bold">
+                                {formatFileSize(attachment.size)}
+                              </p>
+                            </div>
+                              <span className="text-[8px] font-bold bg-white/10 px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                              #{attachmentIndex + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeAttachment(attachment.id);
+                              }}
+                              className="absolute top-1 right-1 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-red-600 rounded-full transition-all active:scale-90"
+                              title="Remove attachment"
+                            >
+                              <LuX size={8} className="sm:hidden" />
+                              <LuX size={10} className="hidden sm:block" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -5564,6 +5796,114 @@ const ChatRoom = ({
         </footer>
 
         <AnimatePresence>
+          {previewAttachmentIndex !== null && selectedAttachments[previewAttachmentIndex] && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => setPreviewAttachmentIndex(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", damping: 22, stiffness: 240 }}
+                className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {selectedAttachments[previewAttachmentIndex].type === "image" ? (
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <img
+                      src={selectedAttachments[previewAttachmentIndex].data}
+                      alt={selectedAttachments[previewAttachmentIndex].name}
+                      className="max-w-full max-h-[90vh] object-contain"
+                    />
+                  </div>
+                ) : selectedAttachments[previewAttachmentIndex].type === "audio" ? (
+                  <div className="bg-zinc-900/90 border border-zinc-800/50 rounded-2xl p-8 w-full max-w-md">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="p-4 bg-white/10 rounded-xl border border-zinc-700/30">
+                        <LuMic size={32} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-zinc-200 truncate">
+                          {selectedAttachments[previewAttachmentIndex].name}
+                        </p>
+                        <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold">
+                          {formatFileSize(selectedAttachments[previewAttachmentIndex].size)} •{" "}
+                          {formatDuration(selectedAttachments[previewAttachmentIndex].audioDuration || 0)}
+                        </p>
+                      </div>
+                    </div>
+                    <audio
+                      src={selectedAttachments[previewAttachmentIndex].data}
+                      controls
+                      className="w-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-zinc-900/90 border border-zinc-800/50 rounded-2xl p-8 w-full max-w-md">
+                    <div className="flex items-center gap-4">
+                      <div className="p-4 bg-white/10 rounded-xl border border-zinc-700/30">
+                        {React.createElement(
+                          getFileIcon(selectedAttachments[previewAttachmentIndex].mimeType),
+                          { size: 32, className: "text-white" },
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-zinc-200 truncate">
+                          {selectedAttachments[previewAttachmentIndex].name}
+                        </p>
+                        <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold">
+                          {formatFileSize(selectedAttachments[previewAttachmentIndex].size)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Image counter */}
+                <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+                  {previewAttachmentIndex + 1} / {selectedAttachments.length}
+                </div>
+
+                {/* Navigation buttons */}
+                {previewAttachmentIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewAttachmentIndex(previewAttachmentIndex - 1)}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl transition-all active:scale-90"
+                    title="Previous attachment"
+                  >
+                    <LuChevronLeft size={24} />
+                  </button>
+                )}
+
+                {previewAttachmentIndex < selectedAttachments.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewAttachmentIndex(previewAttachmentIndex + 1)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl transition-all active:scale-90"
+                    title="Next attachment"
+                  >
+                    <LuChevronRight size={24} />
+                  </button>
+                )}
+
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewAttachmentIndex(null)}
+                  className="absolute top-4 right-4 h-10 w-10 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-zinc-700/40 text-white rounded-xl transition-all active:scale-90"
+                  title="Close preview"
+                >
+                  <LuX size={20} />
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+
           {showPollModal && (
             <motion.div
               initial={{ opacity: 0 }}
