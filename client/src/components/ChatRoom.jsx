@@ -109,6 +109,7 @@ const ChatRoom = ({
   );
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [activeHostActionUserId, setActiveHostActionUserId] = useState(null);
   const [typingUsers, setTypingUsers] = useState([]);
   const [isLocalTyping, setIsLocalTyping] = useState(false);
   const [selfDestructTime, setSelfDestructTime] = useState(0);
@@ -2656,6 +2657,7 @@ const ChatRoom = ({
   useEffect(() => {
     const fn = () => {
       setActiveMenuId(null);
+      setActiveHostActionUserId(null);
       setShowTimerMenu(false);
     };
     document.addEventListener("click", fn);
@@ -3193,88 +3195,128 @@ const ChatRoom = ({
                                 )}
                               </span>
                             </div>
-                            {isCurrentHost &&
-                              user.id !== socket.id &&
-                              (contextRequestForUser ? (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    onClick={() =>
-                                      rejectContextRequest(user.id)
-                                    }
-                                    className="text-zinc-500 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded-lg"
-                                    title={`Reject ${user.username}'s context request`}
-                                  >
-                                    <LuX size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      approveContextRequest(user.id)
-                                    }
-                                    className="text-zinc-500 hover:text-blue-300 p-1.5 hover:bg-blue-500/10 rounded-lg"
-                                    title={`Accept ${user.username}'s context request`}
-                                  >
-                                    <LuCheck size={14} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                                  <button
-                                    onClick={() =>
-                                      toggleAgentRadioSilence(user.id)
-                                    }
-                                    className={`p-1.5 rounded-lg ${
-                                      isUserSilenced
-                                        ? "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                        : "text-zinc-500 hover:text-white hover:bg-white/10"
-                                    }`}
-                                    title={
-                                      isUserSilenced
-                                        ? `Restore ${user.username}'s channel`
-                                        : "Enforce Radio Silence"
-                                    }
-                                  >
-                                    {isUserSilenced ? (
-                                      <LuMicOff size={14} />
-                                    ) : (
-                                      <LuMic size={14} />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      transferHostTo(user.id, user.username)
-                                    }
-                                    className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
-                                    title={`Transfer host to ${user.username}`}
-                                  >
-                                    <LuCrown size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setSelectedContextAgent(user);
-                                      setContextModalMode("agent");
-                                      setShowContextModal(true);
-                                    }}
-                                    className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title={
-                                      user.hasFullHistory
-                                        ? `${user.username} already has context`
-                                        : `Send context to ${user.username}`
-                                    }
-                                    disabled={!!user.hasFullHistory}
-                                  >
-                                    <LuMessageSquarePlus size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      kickAgent(user.id, user.username)
-                                    }
-                                    className="text-red-900 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg"
-                                    title={`Remove ${user.username}`}
-                                  >
-                                    <LuUserMinus size={16} />
-                                  </button>
-                                </div>
-                              ))}
+                            {isCurrentHost && user.id !== socket.id && (
+                              <div className="relative shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setActiveHostActionUserId((prev) =>
+                                      prev === user.id ? null : user.id,
+                                    );
+                                  }}
+                                  className="text-zinc-500 hover:text-white p-1.5 hover:bg-white/10 rounded-lg"
+                                  title={`Open actions for ${user.username}`}
+                                >
+                                  <LuEllipsisVertical size={16} />
+                                </button>
+
+                                <AnimatePresence>
+                                  {activeHostActionUserId === user.id && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                                      transition={{ duration: 0.16, ease: "easeOut" }}
+                                      onClick={(event) => event.stopPropagation()}
+                                      className="absolute right-0 top-full mt-1.5 min-w-[220px] rounded-xl border border-zinc-700/40 bg-[#0f0f11]/98 backdrop-blur-xl shadow-[0_18px_60px_rgba(0,0,0,0.75)] z-50 p-1.5"
+                                    >
+                                      {contextRequestForUser ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              rejectContextRequest(user.id);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-red-300 hover:bg-red-500/10 transition-all"
+                                          >
+                                            <LuX size={14} />
+                                            Reject Context Request
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              approveContextRequest(user.id);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-blue-300 hover:bg-blue-500/10 transition-all"
+                                          >
+                                            <LuCheck size={14} />
+                                            Accept Context Request
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              toggleAgentRadioSilence(user.id);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                              isUserSilenced
+                                                ? "text-red-300 hover:bg-red-500/10"
+                                                : "text-zinc-300 hover:bg-white/10"
+                                            }`}
+                                          >
+                                            {isUserSilenced ? (
+                                              <LuMicOff size={14} />
+                                            ) : (
+                                              <LuMic size={14} />
+                                            )}
+                                            {isUserSilenced
+                                              ? "Restore Agent Channel"
+                                              : "Enforce Radio Silence"}
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              transferHostTo(user.id, user.username);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-300 hover:bg-white/10 transition-all"
+                                          >
+                                            <LuCrown size={14} />
+                                            Transfer Host Access
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedContextAgent(user);
+                                              setContextModalMode("agent");
+                                              setShowContextModal(true);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-300 hover:bg-white/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                            disabled={!!user.hasFullHistory}
+                                          >
+                                            <LuMessageSquarePlus size={14} />
+                                            {user.hasFullHistory
+                                              ? "Context Already Synced"
+                                              : "Send Chat Context"}
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              kickAgent(user.id, user.username);
+                                              setActiveHostActionUserId(null);
+                                            }}
+                                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-red-300 hover:bg-red-500/10 transition-all"
+                                          >
+                                            <LuUserMinus size={14} />
+                                            Remove Agent
+                                          </button>
+                                        </>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -5006,97 +5048,158 @@ const ChatRoom = ({
                 </div>
               )}
 
-              {/* ── Desktop: inline toolbar buttons (hidden during recording/audio preview) ── */}
+              {/* ── Desktop: same + popup as mobile (hidden during recording/audio preview) ── */}
               {!isRecording && !audioBlob && (
-                <div className="hidden sm:flex items-center">
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isRadioSilenceEnforced) return;
-                        setShowTimerMenu(!showTimerMenu);
-                      }}
-                      className={`p-2.5 rounded-xl transition-all active:scale-90 ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                      disabled={isRadioSilenceEnforced}
-                    >
-                      <LuTimer size={16} />
-                    </button>
-                    <AnimatePresence>
-                      {showTimerMenu && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-full left-0 mb-2 bg-[#0f0f11]/95 backdrop-blur-xl border border-zinc-800/40 shadow-[0_12px_50px_rgba(0,0,0,0.8)] z-50 w-36 rounded-xl overflow-hidden"
-                        >
-                          {timerOptions.map((opt) => (
-                            <button
-                              key={opt.label}
-                              onClick={() => {
-                                setSelfDestructTime(opt.value);
-                                setShowTimerMenu(false);
-                              }}
-                              className={`w-full text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/[0.06] transition-all ${selfDestructTime === opt.value ? "bg-white/[0.06] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
-                            >
-                              {opt.value > 0 && (
-                                <LuTimer size={10} className="inline mr-1.5" />
-                              )}
-                              {opt.label}
-                            </button>
-                          ))}
-                        </motion.div>
+                <div className="relative hidden sm:block" ref={mobileToolbarRef}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      if (isRadioSilenceEnforced) return;
+                      e.stopPropagation();
+                      setShowMobileToolbar(!showMobileToolbar);
+                    }}
+                    className={`p-2.5 rounded-xl transition-all duration-200 active:scale-90 ${showMobileToolbar ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/5"} ${isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                    disabled={isRadioSilenceEnforced}
+                  >
+                    <LuPlus
+                      size={20}
+                      strokeWidth={2.5}
+                      className={`transition-transform duration-200 ${showMobileToolbar ? "rotate-45" : ""}`}
+                    />
+                    {(selfDestructTime > 0 ||
+                      isRecording ||
+                      hasSelectedAttachments ||
+                      audioBlob) &&
+                      !showMobileToolbar && (
+                        <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                       )}
-                    </AnimatePresence>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={togglePollModal}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${showPollModal ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                    title="Create a poll"
-                    disabled={!!editingMessageId || isRadioSilenceEnforced}
-                  >
-                    <LuChartBar size={16} />
                   </button>
+                  <AnimatePresence>
+                    {showMobileToolbar && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className="absolute bottom-full left-0 mb-2 bg-[#111113]/98 backdrop-blur-2xl border border-zinc-800/50 shadow-[0_16px_60px_rgba(0,0,0,0.9)] z-50 rounded-2xl overflow-hidden min-w-[200px]"
+                      >
+                        <div className="p-1.5 space-y-0.5">
+                          <div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowTimerMenu(!showTimerMenu);
+                              }}
+                              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${selfDestructTime > 0 ? "text-red-400 bg-red-500/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"}`}
+                            >
+                              <LuTimer size={18} />
+                              <span className="text-[11px] font-bold uppercase tracking-wider flex-1 text-left">
+                                Self-Destruct{" "}
+                                {selfDestructTime > 0
+                                  ? `(${selfDestructTime / 1000}s)`
+                                  : ""}
+                              </span>
+                              <LuChevronRight
+                                size={14}
+                                className={`transition-transform duration-200 ${showTimerMenu ? "rotate-90" : ""}`}
+                              />
+                            </button>
+                            <AnimatePresence>
+                              {showTimerMenu && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="grid grid-cols-3 gap-1 px-2 pb-2 pt-1">
+                                    {timerOptions.map((opt) => (
+                                      <button
+                                        key={opt.label}
+                                        onClick={() => {
+                                          setSelfDestructTime(opt.value);
+                                          setShowTimerMenu(false);
+                                          setShowMobileToolbar(false);
+                                        }}
+                                        className={`px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95 ${selfDestructTime === opt.value ? "bg-white/10 text-white ring-1 ring-white/20" : "text-zinc-500 hover:text-zinc-300 bg-white/[0.03] hover:bg-white/[0.06]"}`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isRadioSilenceEnforced) return;
-                      fileInputRef.current?.click();
-                    }}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                    title="Attach file or image"
-                    disabled={!!editingMessageId || isRadioSilenceEnforced}
-                  >
-                    <LuPaperclip size={16} />
-                  </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              togglePollModal();
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${showPollModal ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={!!editingMessageId || isRadioSilenceEnforced}
+                          >
+                            <LuChartBar size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Create Poll
+                            </span>
+                          </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isRadioSilenceEnforced) return;
-                      audioInputRef.current?.click();
-                    }}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 text-zinc-600 hover:text-white hover:bg-white/5 ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                    title="Attach audio"
-                    disabled={!!editingMessageId || isRadioSilenceEnforced}
-                  >
-                    <LuMic size={16} />
-                  </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              fileInputRef.current?.click();
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] ${hasSelectedAttachments ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={!!editingMessageId || isRadioSilenceEnforced}
+                          >
+                            <LuPaperclip size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Attach File
+                            </span>
+                          </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowHighClearanceComposer(true)}
-                    className={`p-2.5 rounded-xl transition-all active:scale-90 relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-600 hover:text-white hover:bg-white/5"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
-                    title="Send high clearance message (biometric protected)"
-                    disabled={!!editingMessageId || isRadioSilenceEnforced}
-                  >
-                    <LuLock size={17} />
-                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
-                  </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              audioInputRef.current?.click();
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] text-zinc-400 hover:text-white hover:bg-white/[0.06] ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={!!editingMessageId || isRadioSilenceEnforced}
+                          >
+                            <LuMic size={18} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              Attach Audio
+                            </span>
+                          </button>
 
-                  {/* Microphone button removed from inline toolbar - recording available via composer button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowHighClearanceComposer(true);
+                              setShowMobileToolbar(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all active:scale-[0.98] relative ${showHighClearanceComposer ? "text-white bg-white/10" : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"} ${editingMessageId || isRadioSilenceEnforced ? "opacity-40 cursor-not-allowed" : ""}`}
+                            disabled={!!editingMessageId || isRadioSilenceEnforced}
+                          >
+                            <div className="relative">
+                              <LuLock size={18} />
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-pulse opacity-70"></div>
+                            </div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              High Clearance
+                            </span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
 
