@@ -5,7 +5,6 @@ import {
   LuX,
   LuSend,
   LuImage,
-  LuMic,
   LuTriangleAlert,
   LuFingerprint,
   LuKeyRound,
@@ -28,16 +27,12 @@ const HighClearanceComposer = ({
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null); // { name, size, type, data }
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
   const [biometricCapabilities, setBiometricCapabilities] = useState(null);
   const [hasCredential, setHasCredential] = useState(false);
   const [error, setError] = useState('');
   
   const fileInputRef = useRef(null);
   const fileAttachInputRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
 
   React.useEffect(() => {
     const checkCapabilities = async () => {
@@ -111,43 +106,10 @@ const HighClearanceComposer = ({
     return LuFile;
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        setAudioBlob(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setError('');
-    } catch (err) {
-      setError('Microphone access denied or not available');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
   const clearAttachments = () => {
     setSelectedImage(null);
     setImagePreview(null);
     setSelectedFile(null);
-    setAudioBlob(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -157,7 +119,7 @@ const HighClearanceComposer = ({
   };
 
   const handleSend = async () => {
-    if (!message.trim() && !selectedImage && !selectedFile && !audioBlob) {
+    if (!message.trim() && !selectedImage && !selectedFile) {
       setError('Please enter a message or attach content');
       return;
     }
@@ -168,30 +130,10 @@ const HighClearanceComposer = ({
       return;
     }
 
-    // If biometrics not supported, warn user about reduced security
+    // High-clearance messaging requires biometric support
     if (!biometricCapabilities?.supported) {
-      const confirmed = window.confirm(
-        'Biometric authentication is not available on this device. ' +
-        'High-clearance messages will use password-only protection. ' +
-        'Recipients can access with room password. Continue?'
-      );
-      if (!confirmed) return;
-    }
-
-    let audioData = null;
-    if (audioBlob) {
-      // Convert audio blob to base64 for transmission
-      try {
-        const reader = new FileReader();
-        audioData = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(audioBlob);
-        });
-      } catch (err) {
-        setError('Failed to process audio recording');
-        return;
-      }
+      setError('Biometric authentication is required to send high-clearance messages on this device.');
+      return;
     }
 
     const messageData = {
@@ -204,7 +146,6 @@ const HighClearanceComposer = ({
         type: selectedFile.type,
         data: selectedFile.data,
       } : null,
-      audio: audioData,
       requiresBiometric: biometricCapabilities?.supported && hasCredential,
       timestamp: Date.now(),
     };
@@ -307,9 +248,9 @@ const HighClearanceComposer = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <LuTriangleAlert className="text-zinc-400" size={14} />
-                    <span className="text-zinc-400 text-[11px]">
-                      Biometric authentication not available — password fallback will be used
+                    <LuTriangleAlert className="text-red-400" size={14} />
+                    <span className="text-red-300 text-[11px]">
+                      Biometric authentication not available — high-clearance sending is disabled
                     </span>
                   </div>
                 )}
@@ -327,9 +268,9 @@ const HighClearanceComposer = ({
                 )}
 
                 {!hasCredential && !biometricCapabilities?.supported && (
-                  <div className="mt-2 p-2.5 bg-zinc-900/40 border border-zinc-700/20 text-zinc-400 text-[10px] rounded-lg">
+                  <div className="mt-2 p-2.5 bg-red-950/40 border border-red-500/15 text-red-200/80 text-[10px] rounded-lg">
                     <LuTriangleAlert className="inline mr-1.5" size={11} />
-                    Without biometric setup, recipients can access this message with room password only.
+                    High-clearance messages require biometric authentication and cannot be sent from this device.
                   </div>
                 )}
               </div>
@@ -365,7 +306,7 @@ const HighClearanceComposer = ({
               </div>
 
               {/* Attachments */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Image Attachment */}
                 <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
                   <div className="flex items-center justify-between mb-3">
@@ -464,44 +405,6 @@ const HighClearanceComposer = ({
                   />
                 </div>
 
-                {/* Voice Memo */}
-                <div className="border border-zinc-800/40 p-4 rounded-xl bg-zinc-900/30">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
-                      Voice Memo
-                    </span>
-                    <button
-                      onClick={isRecording ? stopRecording : startRecording}
-                      className={`p-2 transition-all rounded-lg active:scale-90 ${
-                        isRecording 
-                          ? 'text-red-400 bg-red-500/10 animate-pulse' 
-                          : 'text-zinc-500 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <LuMic size={16} />
-                    </button>
-                  </div>
-                  
-                  {audioBlob ? (
-                    <div className="space-y-2">
-                      <audio 
-                        controls 
-                        src={URL.createObjectURL(audioBlob)}
-                        className="w-full"
-                      />
-                      <button
-                        onClick={() => setAudioBlob(null)}
-                        className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase tracking-wider font-bold"
-                      >
-                        Remove recording
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-center text-zinc-600 text-[10px] py-4 uppercase tracking-wider">
-                      {isRecording ? 'Recording...' : 'No voice memo recorded'}
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Send Button */}
@@ -516,22 +419,27 @@ const HighClearanceComposer = ({
                 <button
                   onClick={handleSend}
                   disabled={
-                    (!message.trim() && !selectedImage && !selectedFile && !audioBlob) ||
+                    (!message.trim() && !selectedImage && !selectedFile) ||
+                    !biometricCapabilities?.supported ||
                     (biometricCapabilities?.supported && !hasCredential)
                   }
                   className="flex-1 bg-white hover:bg-zinc-100 text-black py-3 uppercase text-[10px] font-bold tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-xl active:scale-[0.98]"
                   title={
-                    biometricCapabilities?.supported && !hasCredential
+                    !biometricCapabilities?.supported
+                      ? 'Biometric authentication is required on this device'
+                      : biometricCapabilities?.supported && !hasCredential
                       ? 'Biometric setup required for high-clearance messages'
                       : 'Send high-clearance message'
                   }
                 >
                   <LuSend size={14} />
-                  {biometricCapabilities?.supported && !hasCredential
-                    ? 'Setup Required'
-                    : hasCredential
-                      ? 'Send Biometric'
-                      : 'Send Encrypted'
+                  {!biometricCapabilities?.supported
+                    ? 'Unavailable'
+                    : biometricCapabilities?.supported && !hasCredential
+                      ? 'Setup Required'
+                      : hasCredential
+                        ? 'Send Biometric'
+                        : 'Send Encrypted'
                   }
                 </button>
               </div>

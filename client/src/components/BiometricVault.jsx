@@ -8,7 +8,6 @@ import {
   LuTriangleAlert,
   LuCheck,
   LuX,
-  LuKeyRound,
   LuTimer,
   LuImage,
   LuMic,
@@ -22,7 +21,6 @@ import {
   registerBiometric,
   hasBiometricCredential,
   getBiometricCapabilities,
-  isWebAuthnSupported,
 } from '../utils/webauthn';
 
 const BiometricVault = ({
@@ -129,18 +127,6 @@ const BiometricVault = ({
       setError(err.message);
     } finally {
       setIsUnlocking(false);
-    }
-  };
-
-  const handlePasswordFallback = () => {
-    // Fallback to password authentication
-    const password = prompt('Enter room encryption password as fallback:');
-    if (password) {
-      // This would need to be validated against the room password
-      // For now, we'll simulate success
-      setIsDecrypted(true);
-      setCountdown(10);
-      onDecrypted?.(message);
     }
   };
 
@@ -284,14 +270,6 @@ const BiometricVault = ({
                       </button>
                     )}
 
-                    <div className="text-center">
-                      <button
-                        onClick={handlePasswordFallback}
-                        className="text-zinc-500 hover:text-white text-[10px] uppercase tracking-[0.15em] transition-colors"
-                      >
-                        Use password fallback
-                      </button>
-                    </div>
                   </>
                 ) : (
                   <div className="text-center space-y-3">
@@ -299,14 +277,10 @@ const BiometricVault = ({
                       <LuTriangleAlert className="inline mr-2" size={13} />
                       Biometric authentication not available on this device
                     </div>
-                    
-                    <button
-                      onClick={handlePasswordFallback}
-                      className="w-full bg-zinc-800/60 hover:bg-zinc-700/60 text-white py-4 uppercase text-[10px] font-bold tracking-[0.15em] transition-all flex items-center justify-center gap-2 rounded-xl border border-zinc-700/30 active:scale-[0.98]"
-                    >
-                      <LuLock size={16} />
-                      Use Password Authentication
-                    </button>
+
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-[0.15em]">
+                      Biometric authentication is required to access high clearance messages.
+                    </p>
                   </div>
                 )}
               </div>

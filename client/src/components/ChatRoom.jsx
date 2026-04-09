@@ -1184,6 +1184,16 @@ const ChatRoom = ({
       };
     }
 
+    if (msg.type === "high-clearance") {
+      return {
+        title: "High Clearance Message",
+        meta: `Secure • ${msg.username || "UNKNOWN"}`,
+        icon: LuLock,
+        thumbnailSrc: null,
+        isMultiImage: false,
+      };
+    }
+
     if (msg.type === "audio") {
       const duration = formatDuration(msg.audioDuration || 0);
       const caption = msg.caption?.trim();
