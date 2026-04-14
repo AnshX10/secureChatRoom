@@ -26,6 +26,14 @@ const corsOptions = {
 // --- 3. APPLY CORS TO EXPRESS ---
 app.use(cors(corsOptions));
 
+// --- 3.1 DISABLE HTTP CACHING FOR SENSITIVE RESPONSES ---
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 // --- 4. APPLY CORS TO SOCKET.IO ---
 const io = new Server(server, {
   cors: corsOptions,
@@ -78,6 +86,93 @@ function ensureContextData(roomId) {
     };
   }
   return contextMessages[roomId];
+}
+
+function ensureActivityLog(room) {
+  if (!room.activityLog) {
+    room.activityLog = [];
+  }
+  return room.activityLog;
+}
+
+function appendRoomActivity(room, eventType, payload = {}) {
+  if (!room) return;
+  const activityLog = ensureActivityLog(room);
+  activityLog.push({
+    id: crypto.randomBytes(8).toString("hex"),
+    eventType,
+    timestamp: Date.now(),
+    ...payload,
+  });
+}
+
+function buildExportApprovalStatus(room) {
+  const approval = room?.exportApproval;
+  if (!approval) return null;
+
+  const approvedAgentIds = new Set(approval.approvedAgentIds || []);
+  const requiredAgents = Array.isArray(approval.requiredAgents)
+    ? approval.requiredAgents
+    : [];
+  const approvedAgents = requiredAgents.filter((agent) =>
+    approvedAgentIds.has(agent.id),
+  );
+  const pendingAgents = requiredAgents.filter(
+    (agent) => !approvedAgentIds.has(agent.id),
+  );
+
+  return {
+    requestId: approval.requestId,
+    requestedAt: approval.requestedAt,
+    status: approval.status,
+    totalRequired: requiredAgents.length,
+    approvedCount: approvedAgents.length,
+    pendingCount: pendingAgents.length,
+    approvedAgents,
+    pendingAgents,
+    rejectedBy: approval.rejectedBy || null,
+  };
+}
+
+function buildChatHistoryExportPayload(roomId) {
+  const room = rooms[roomId];
+  if (!room) return null;
+
+  const contextData = contextMessages[roomId] || { messages: [] };
+  return {
+    roomId,
+    roomName: room.roomName || "",
+    generatedAt: Date.now(),
+    createdAt: room.createdAt,
+    hostId: room.hostId,
+    messages: contextData.messages || [],
+    activityLog: room.activityLog || [],
+    currentUsers: (room.users || []).map((user) => ({
+      id: user.id,
+      username: user.username,
+      isHost: !!user.isHost,
+      joinedAt: user.joinedAt || null,
+    })),
+  };
+}
+
+function cancelExportApproval(room, ioInstance, reason, extras = {}) {
+  if (!room || !room.exportApproval) return;
+
+  const approval = room.exportApproval;
+  const payload = {
+    roomId: extras.roomId,
+    requestId: approval.requestId,
+    reason,
+    ...extras,
+  };
+
+  ioInstance.to(room.hostId).emit("chat_history_export_request_cancelled", payload);
+  (approval.requiredAgents || []).forEach((agent) => {
+    ioInstance.to(agent.id).emit("chat_history_export_request_cancelled", payload);
+  });
+
+  room.exportApproval = null;
 }
 
 function emitFullContextToUser({ roomId, user, socketId }) {
@@ -237,8 +332,23 @@ io.on("connection", (socket) => {
         messageOwners: pendingRoom.messageOwners,
         messageReactions: pendingRoom.messageReactions || {},
         requireApproval: pendingRoom.requireApproval,
-        pendingRequests: pendingRoom.pendingRequests
+        pendingRequests: pendingRoom.pendingRequests,
+        activityLog: [],
+        exportApproval: null,
       };
+
+      appendRoomActivity(rooms[roomId], "room_created", {
+        roomName: rooms[roomId].roomName || "",
+        capacity: rooms[roomId].capacity,
+      });
+      appendRoomActivity(rooms[roomId], "host_joined", {
+        userId: hostUser.id,
+        username: hostUser.username,
+      });
+      appendRoomActivity(rooms[roomId], "agent_joined", {
+        userId: newUser.id,
+        username: newUser.username,
+      });
 
       // Initialize context tracking for this room
       ensureContextData(roomId);
@@ -338,6 +448,10 @@ io.on("connection", (socket) => {
       const nowTime = Date.now();
       const newUser = { id: socket.id, username, isHost: false, hasFullHistory: !needsContext, joinedAt: nowTime }; 
       room.users.push(newUser); // Add new user to list
+      appendRoomActivity(room, "agent_joined", {
+        userId: newUser.id,
+        username: newUser.username,
+      });
 
       if (room.isHalted) {
         room.isHalted = false;
@@ -423,6 +537,11 @@ io.on("connection", (socket) => {
     const nowTime = Date.now();
     const newUser = { id: socketId, username: request.username, isHost: false, hasFullHistory: !needsContext, joinedAt: nowTime };
     room.users.push(newUser);
+    appendRoomActivity(room, "agent_joined", {
+      userId: newUser.id,
+      username: newUser.username,
+      approvedJoin: true,
+    });
 
     if (room.isHalted) {
       room.isHalted = false;
@@ -519,6 +638,24 @@ io.on("connection", (socket) => {
         // Remove from room data
         room.users = room.users.filter(u => u.id !== userId);
         room.silencedUserIds = (room.silencedUserIds || []).filter((id) => id !== userId);
+        appendRoomActivity(room, "agent_removed", {
+          userId,
+          username: targetUser.username,
+          removedBy: socket.id,
+        });
+
+        if (
+          room.exportApproval &&
+          room.exportApproval.status === "pending" &&
+          room.exportApproval.requiredAgents?.some((agent) => agent.id === userId)
+        ) {
+          cancelExportApproval(
+            room,
+            io,
+            `${targetUser.username} left before export approval completed.`,
+            { roomId },
+          );
+        }
 
         // Notify room
         io.to(roomId).emit("receive_message", { system: true, message: `${targetUser.username} was removed from the session.` });
@@ -570,6 +707,11 @@ io.on("connection", (socket) => {
       ...user,
       isHost: user.id === newHostId,
     }));
+    appendRoomActivity(room, "host_transferred", {
+      previousHostId: socket.id,
+      newHostId,
+      newHostUsername: nextHost.username,
+    });
 
     io.to(roomId).emit("host_transferred", {
       roomId,
@@ -871,6 +1013,14 @@ io.on("connection", (socket) => {
     }
     
     if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
+      if (rooms[roomId].exportApproval && rooms[roomId].exportApproval.status === "pending") {
+        cancelExportApproval(
+          rooms[roomId],
+          io,
+          "Host terminated room before export approval completed.",
+          { roomId },
+        );
+      }
       io.to(roomId).emit("room_closed");
       io.in(roomId).socketsLeave(roomId);
       markRoomDestroyed(roomId);
@@ -922,6 +1072,157 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("request_chat_history_export", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+
+    const requester = room.users.find((user) => user.id === socket.id);
+    const activeAgents = room.users.filter((user) => !user.isHost);
+
+    if (room.exportApproval && room.exportApproval.status === "pending") {
+      socket.emit("chat_history_export_approval_status", {
+        roomId,
+        ...(buildExportApprovalStatus(room) || {}),
+      });
+      return;
+    }
+
+    if (activeAgents.length === 0) {
+      const exportPayload = buildChatHistoryExportPayload(roomId);
+      if (!exportPayload) return;
+      socket.emit("chat_history_export_ready", {
+        roomId,
+        requestId: null,
+        exportPayload,
+      });
+      return;
+    }
+
+    const requestId = crypto.randomBytes(8).toString("hex");
+    room.exportApproval = {
+      requestId,
+      requestedAt: Date.now(),
+      status: "pending",
+      hostId: socket.id,
+      requiredAgents: activeAgents.map((agent) => ({
+        id: agent.id,
+        username: agent.username,
+      })),
+      approvedAgentIds: [],
+      rejectedBy: null,
+    };
+
+    appendRoomActivity(room, "chat_history_export_requested", {
+      requestId,
+      requestedBy: requester?.username || "HOST",
+      requiredApprovals: activeAgents.length,
+    });
+
+    io.to(room.hostId).emit("chat_history_export_approval_status", {
+      roomId,
+      ...(buildExportApprovalStatus(room) || {}),
+    });
+
+    activeAgents.forEach((agent) => {
+      io.to(agent.id).emit("chat_history_export_approval_requested", {
+        roomId,
+        requestId,
+        hostUsername: requester?.username || "HOST",
+        requestedAt: room.exportApproval.requestedAt,
+      });
+    });
+  });
+
+  socket.on("respond_chat_history_export_approval", ({ roomId, requestId, approve }) => {
+    const room = rooms[roomId];
+    if (!room || !room.exportApproval) return;
+
+    const approval = room.exportApproval;
+    if (approval.status !== "pending" || approval.requestId !== requestId) return;
+
+    const responder = room.users.find((user) => user.id === socket.id && !user.isHost);
+    if (!responder) return;
+
+    const isRequiredApprover = (approval.requiredAgents || []).some(
+      (agent) => agent.id === socket.id,
+    );
+    if (!isRequiredApprover) return;
+
+    if ((approval.approvedAgentIds || []).includes(socket.id)) return;
+
+    if (!approve) {
+      approval.status = "rejected";
+      approval.rejectedBy = {
+        id: responder.id,
+        username: responder.username,
+        at: Date.now(),
+      };
+
+      appendRoomActivity(room, "chat_history_export_rejected", {
+        requestId,
+        rejectedBy: responder.username,
+      });
+
+      cancelExportApproval(
+        room,
+        io,
+        `${responder.username} rejected the export approval request.`,
+        {
+          roomId,
+          rejectedBy: approval.rejectedBy,
+        },
+      );
+      return;
+    }
+
+    approval.approvedAgentIds.push(socket.id);
+    appendRoomActivity(room, "chat_history_export_approved", {
+      requestId,
+      approvedBy: responder.username,
+    });
+
+    io.to(room.hostId).emit("chat_history_export_approval_status", {
+      roomId,
+      ...(buildExportApprovalStatus(room) || {}),
+    });
+
+    io.to(socket.id).emit("chat_history_export_response_received", {
+      roomId,
+      requestId,
+      approved: true,
+    });
+
+    const requiredCount = (approval.requiredAgents || []).length;
+    if (approval.approvedAgentIds.length < requiredCount) {
+      return;
+    }
+
+    approval.status = "approved";
+    appendRoomActivity(room, "chat_history_export_ready", {
+      requestId,
+      approvedCount: requiredCount,
+    });
+
+    const exportPayload = buildChatHistoryExportPayload(roomId);
+    if (!exportPayload) return;
+
+    io.to(room.hostId).emit("chat_history_export_ready", {
+      roomId,
+      requestId,
+      exportPayload,
+      approval: buildExportApprovalStatus(room),
+    });
+
+    (approval.requiredAgents || []).forEach((agent) => {
+      io.to(agent.id).emit("chat_history_export_request_completed", {
+        roomId,
+        requestId,
+      });
+    });
+
+    room.exportApproval = null;
+  });
+
   socket.on("disconnect", () => {
     // Clean up pending rooms if host disconnects
     for (const roomId in pendingRooms) {
@@ -940,8 +1241,29 @@ io.on("connection", (socket) => {
 
       if (userIndex !== -1) {
         const username = room.users[userIndex].username;
+        const disconnectedUser = room.users[userIndex];
+        const wasHost = disconnectedUser?.isHost || room.hostId === socket.id;
+
+        if (
+          room.exportApproval &&
+          room.exportApproval.status === "pending" &&
+          room.exportApproval.requiredAgents?.some((agent) => agent.id === socket.id)
+        ) {
+          cancelExportApproval(
+            room,
+            io,
+            `${username} disconnected before approving export request.`,
+            { roomId },
+          );
+        }
+
         room.users.splice(userIndex, 1);
         room.silencedUserIds = (room.silencedUserIds || []).filter((id) => id !== socket.id);
+        appendRoomActivity(room, wasHost ? "host_left" : "agent_left", {
+          userId: socket.id,
+          username,
+          reason: "disconnect",
+        });
 
         io.to(roomId).emit("receive_message", {
           system: true,
@@ -966,6 +1288,15 @@ io.on("connection", (socket) => {
         }
 
         if (room.hostId === socket.id) {
+          if (room.exportApproval && room.exportApproval.status === "pending") {
+            cancelExportApproval(
+              room,
+              io,
+              "Host disconnected. Export approval request cancelled.",
+              { roomId },
+            );
+          }
+
           if (room.users.length === 0) {
             io.to(roomId).emit("room_closed");
             markRoomDestroyed(roomId);
@@ -978,6 +1309,12 @@ io.on("connection", (socket) => {
               ...user,
               isHost: user.id === nextHost.id,
             }));
+            appendRoomActivity(room, "host_transferred", {
+              previousHostId: socket.id,
+              newHostId: nextHost.id,
+              newHostUsername: nextHost.username,
+              reason: "disconnect",
+            });
 
             io.to(roomId).emit("host_transferred", {
               roomId,

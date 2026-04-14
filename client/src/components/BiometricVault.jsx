@@ -40,6 +40,32 @@ const BiometricVault = ({
   const [countdown, setCountdown] = useState(0);
   const [scanAnimation, setScanAnimation] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [imageObjectUrl, setImageObjectUrl] = useState(null);
+  const [audioObjectUrl, setAudioObjectUrl] = useState(null);
+
+  const resolveMediaSource = (rawValue) => {
+    if (!rawValue) return null;
+    if (rawValue instanceof Blob) {
+      return URL.createObjectURL(rawValue);
+    }
+    if (typeof rawValue === 'string' && rawValue.startsWith('data:')) {
+      const commaIndex = rawValue.indexOf(',');
+      if (commaIndex === -1) return null;
+      const header = rawValue.slice(0, commaIndex);
+      const payload = rawValue.slice(commaIndex + 1);
+      const mimeMatch = header.match(/^data:([^;]+);base64$/i);
+      if (!mimeMatch) return null;
+
+      const binary = atob(payload);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+
+      return URL.createObjectURL(new Blob([bytes], { type: mimeMatch[1] }));
+    }
+    return null;
+  };
 
   // Keyboard support for image preview
   useEffect(() => {
@@ -79,6 +105,34 @@ const BiometricVault = ({
     }
     return () => clearInterval(interval);
   }, [countdown]);
+
+  useEffect(() => {
+    if (!isVisible || !message?.image) {
+      setImageObjectUrl(null);
+      return;
+    }
+
+    const nextUrl = resolveMediaSource(message.image);
+    setImageObjectUrl(nextUrl);
+
+    return () => {
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [isVisible, message?.image]);
+
+  useEffect(() => {
+    if (!isVisible || !message?.audio) {
+      setAudioObjectUrl(null);
+      return;
+    }
+
+    const nextUrl = resolveMediaSource(message.audio);
+    setAudioObjectUrl(nextUrl);
+
+    return () => {
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [isVisible, message?.audio]);
 
   const handleBiometricSetup = async () => {
     if (!biometricCapabilities?.supported) {
@@ -327,7 +381,7 @@ const BiometricVault = ({
                         </p>
                         <div className="relative border border-zinc-800/30 bg-black/30 overflow-hidden rounded-xl group">
                           <img 
-                            src={message.image} 
+                            src={imageObjectUrl || message.image} 
                             alt="Classified" 
                             className="max-w-full max-h-48 sm:max-h-64 object-contain w-full cursor-zoom-in"
                             onClick={() => setImagePreviewOpen(true)}
@@ -353,7 +407,7 @@ const BiometricVault = ({
                             <button
                               onClick={() => {
                                 const link = document.createElement('a');
-                                link.href = message.image;
+                                link.href = imageObjectUrl || message.image;
                                 link.download = `classified_hc_image_${Date.now()}.png`;
                                 document.body.appendChild(link);
                                 link.click();
@@ -379,13 +433,13 @@ const BiometricVault = ({
                         <div className="bg-black/30 p-3 border border-zinc-800/30 rounded-lg space-y-2">
                           <audio 
                             controls 
-                            src={typeof message.audio === 'string' ? message.audio : URL.createObjectURL(message.audio)}
+                            src={audioObjectUrl || message.audio}
                             className="w-full"
                           />
                           <button
                             onClick={() => {
                               const link = document.createElement('a');
-                              link.href = typeof message.audio === 'string' ? message.audio : URL.createObjectURL(message.audio);
+                              link.href = audioObjectUrl || message.audio;
                               link.download = `classified_hc_audio_${Date.now()}.wav`;
                               document.body.appendChild(link);
                               link.click();
@@ -524,7 +578,7 @@ const BiometricVault = ({
                 onClick={(e) => e.stopPropagation()}
               >
                 <img
-                  src={message.image}
+                  src={imageObjectUrl || message.image}
                   alt="Full preview"
                   className="rounded-xl border border-zinc-700/30 shadow-2xl shadow-black/60"
                 />
@@ -532,7 +586,7 @@ const BiometricVault = ({
                 <button
                   onClick={() => {
                     const link = document.createElement('a');
-                    link.href = message.image;
+                    link.href = imageObjectUrl || message.image;
                     link.download = `classified_hc_image_${Date.now()}.png`;
                     document.body.appendChild(link);
                     link.click();

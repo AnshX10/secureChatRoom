@@ -34,6 +34,18 @@ const HighClearanceComposer = ({
   const fileInputRef = useRef(null);
   const fileAttachInputRef = useRef(null);
 
+  const revokeObjectUrlIfNeeded = (url) => {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  React.useEffect(() => {
+    return () => {
+      revokeObjectUrlIfNeeded(imagePreview);
+    };
+  }, [imagePreview]);
+
   React.useEffect(() => {
     const checkCapabilities = async () => {
       const capabilities = await getBiometricCapabilities();
@@ -64,8 +76,12 @@ const HighClearanceComposer = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target.result;
+      const nextPreviewUrl = URL.createObjectURL(file);
+      setImagePreview((previousUrl) => {
+        revokeObjectUrlIfNeeded(previousUrl);
+        return nextPreviewUrl;
+      });
       setSelectedImage(base64);
-      setImagePreview(base64);
       setError('');
     };
     reader.readAsDataURL(file);
@@ -107,6 +123,7 @@ const HighClearanceComposer = ({
   };
 
   const clearAttachments = () => {
+    revokeObjectUrlIfNeeded(imagePreview);
     setSelectedImage(null);
     setImagePreview(null);
     setSelectedFile(null);
@@ -116,6 +133,13 @@ const HighClearanceComposer = ({
     if (fileAttachInputRef.current) {
       fileAttachInputRef.current.value = '';
     }
+  };
+
+  const handleCloseComposer = () => {
+    setMessage('');
+    clearAttachments();
+    setError('');
+    onClose();
   };
 
   const handleSend = async () => {
@@ -168,7 +192,7 @@ const HighClearanceComposer = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] flex items-end sm:items-center justify-center p-0 sm:p-4"
-        onClick={onClose}
+        onClick={handleCloseComposer}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -195,7 +219,7 @@ const HighClearanceComposer = ({
               </div>
               
               <button
-                onClick={onClose}
+                onClick={handleCloseComposer}
                 className="p-2 text-zinc-500 hover:text-white transition-all hover:bg-white/5 rounded-xl active:scale-90"
               >
                 <LuX size={20} />
@@ -330,6 +354,7 @@ const HighClearanceComposer = ({
                       />
                       <button
                         onClick={() => {
+                          revokeObjectUrlIfNeeded(imagePreview);
                           setSelectedImage(null);
                           setImagePreview(null);
                         }}
@@ -410,7 +435,7 @@ const HighClearanceComposer = ({
               {/* Send Button */}
               <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
                 <button
-                  onClick={onClose}
+                  onClick={handleCloseComposer}
                   className="flex-1 border border-zinc-800/40 text-zinc-500 py-3 uppercase text-[10px] font-bold tracking-[0.15em] hover:bg-white/5 hover:text-white transition-all rounded-xl active:scale-[0.98]"
                 >
                   Cancel

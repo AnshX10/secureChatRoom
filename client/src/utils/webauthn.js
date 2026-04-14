@@ -1,7 +1,57 @@
-/**
- * WebAuthn Biometric Authentication Utility
- * Provides hardware-level security for high-clearance messages
- */
+import CryptoJS from 'crypto-js';
+
+const BIOMETRIC_STORAGE_VERSION = 1;
+const BIOMETRIC_STORAGE_SECRET = `${window.location.origin}::securechatroom::biometric::v1`;
+
+const parseLegacyBiometricRecord = (rawValue) => {
+  if (!rawValue) return null;
+  try {
+    const legacy = JSON.parse(rawValue);
+    if (
+      legacy &&
+      typeof legacy === 'object' &&
+      Array.isArray(legacy.credentialId)
+    ) {
+      return legacy;
+    }
+  } catch {}
+  return null;
+};
+
+const encodeBiometricRecord = (record) => {
+  const plaintext = JSON.stringify({
+    v: BIOMETRIC_STORAGE_VERSION,
+    data: record,
+  });
+  return CryptoJS.AES.encrypt(plaintext, BIOMETRIC_STORAGE_SECRET).toString();
+};
+
+const decodeBiometricRecord = (rawValue) => {
+  if (!rawValue) return null;
+
+  const legacyRecord = parseLegacyBiometricRecord(rawValue);
+  if (legacyRecord) return legacyRecord;
+
+  try {
+    const bytes = CryptoJS.AES.decrypt(rawValue, BIOMETRIC_STORAGE_SECRET);
+    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+    if (!decrypted) return null;
+
+    const parsed = JSON.parse(decrypted);
+    if (
+      !parsed ||
+      parsed.v !== BIOMETRIC_STORAGE_VERSION ||
+      !parsed.data ||
+      !Array.isArray(parsed.data.credentialId)
+    ) {
+      return null;
+    }
+
+    return parsed.data;
+  } catch {
+    return null;
+  }
+};
 
 // Check if WebAuthn is supported
 export const isWebAuthnSupported = () => {
@@ -14,8 +64,7 @@ export const isPlatformAuthenticatorAvailable = async () => {
   
   try {
     return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch (error) {
-    console.warn('Platform authenticator check failed:', error);
+  } catch {
     return false;
   }
 };
@@ -67,7 +116,7 @@ export const registerBiometric = async (username, roomId) => {
       throw new Error('Failed to create credential');
     }
 
-    // Store credential info in localStorage for this room
+    // Store encrypted credential metadata in localStorage for this room
     const credentialData = {
       credentialId: Array.from(new Uint8Array(credential.rawId)),
       username,
@@ -76,14 +125,13 @@ export const registerBiometric = async (username, roomId) => {
     };
 
     const storageKey = `biometric_${roomId}_${username}`;
-    localStorage.setItem(storageKey, JSON.stringify(credentialData));
+    localStorage.setItem(storageKey, encodeBiometricRecord(credentialData));
 
     return {
       credentialId: Array.from(new Uint8Array(credential.rawId)),
       publicKey: Array.from(new Uint8Array(credential.response.getPublicKey())),
     };
   } catch (error) {
-    console.error('Biometric registration failed:', error);
     throw new Error(`Biometric setup failed: ${error.message}`);
   }
 };
@@ -107,7 +155,21 @@ export const authenticateBiometric = async (username, roomId) => {
     throw new Error('No biometric credential found. Please set up biometric authentication first.');
   }
 
-  const credentialData = JSON.parse(storedCredential);
+  const legacyCredential = parseLegacyBiometricRecord(storedCredential);
+  if (legacyCredential) {
+    localStorage.setItem(storageKey, encodeBiometricRecord(legacyCredential));
+  }
+
+  const credentialData = decodeBiometricRecord(storedCredential);
+  if (!credentialData) {
+    localStorage.removeItem(storageKey);
+    throw new Error('Stored biometric credential is invalid. Please set up biometric authentication again.');
+  }
+
+  if (credentialData.username !== username || credentialData.roomId !== roomId) {
+    throw new Error('Biometric credential scope mismatch. Please set up biometric authentication again.');
+  }
+
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
 
@@ -133,8 +195,6 @@ export const authenticateBiometric = async (username, roomId) => {
     // Authentication successful
     return true;
   } catch (error) {
-    console.error('Biometric authentication failed:', error);
-    
     // Handle specific error cases
     if (error.name === 'NotAllowedError') {
       throw new Error('Biometric authentication was cancelled or failed');
@@ -154,7 +214,21 @@ export const authenticateBiometric = async (username, roomId) => {
  */
 export const hasBiometricCredential = (username, roomId) => {
   const storageKey = `biometric_${roomId}_${username}`;
-  return !!localStorage.getItem(storageKey);
+  const storedCredential = localStorage.getItem(storageKey);
+  if (!storedCredential) return false;
+
+  const legacyCredential = parseLegacyBiometricRecord(storedCredential);
+  if (legacyCredential) {
+    localStorage.setItem(storageKey, encodeBiometricRecord(legacyCredential));
+  }
+
+  const decoded = decodeBiometricRecord(storedCredential);
+  if (!decoded) {
+    localStorage.removeItem(storageKey);
+    return false;
+  }
+
+  return decoded.username === username && decoded.roomId === roomId;
 };
 
 /**

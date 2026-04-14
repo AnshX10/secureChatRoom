@@ -344,7 +344,7 @@ const ChatRoom = ({
                   key={`${keyPrefix}-mention-${idx}-${segmentIndex}`}
                   className={`px-1 py-0.5 rounded-md font-bold ${
                     isEveryone
-                      ? "bg-blue-500/20 text-blue-200"
+                      ? "bg-blue-500/20 text-white-200"
                       : "bg-zinc-700/50 text-zinc-100"
                   }`}
                 >
@@ -528,6 +528,8 @@ const ChatRoom = ({
   const analyserRef = useRef(null);
   const animFrameRef = useRef(null);
   const [audioLevels, setAudioLevels] = useState(new Array(24).fill(0));
+  const selectedAttachmentsRef = useRef([]);
+  const audioPreviewUrlRef = useRef(null);
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -551,11 +553,42 @@ const ChatRoom = ({
   const [showHighClearanceComposer, setShowHighClearanceComposer] =
     useState(false);
 
+  const revokeObjectUrlIfNeeded = (url) => {
+    if (typeof url === "string" && url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const revokeAttachmentPreview = (attachment) => {
+    if (!attachment) return;
+    revokeObjectUrlIfNeeded(attachment.previewUrl);
+  };
+
+  const revokeAttachmentPreviews = (attachments = []) => {
+    attachments.forEach((attachment) => revokeAttachmentPreview(attachment));
+  };
+
   // Mobile toolbar toggle
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
   const mobileToolbarMobileRef = useRef(null);
   const mobileToolbarDesktopRef = useRef(null);
   const hasSelectedAttachments = selectedAttachments.length > 0;
+
+  useEffect(() => {
+    selectedAttachmentsRef.current = selectedAttachments;
+  }, [selectedAttachments]);
+
+  useEffect(() => {
+    audioPreviewUrlRef.current = audioPreviewUrl;
+  }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      revokeAttachmentPreviews(selectedAttachmentsRef.current || []);
+      revokeObjectUrlIfNeeded(audioPreviewUrlRef.current);
+    };
+  }, []);
+
   const reorderSelectedAttachments = (sourceIndex, targetIndex) => {
     if (
       sourceIndex === targetIndex ||
@@ -672,6 +705,11 @@ const ChatRoom = ({
   const [selectedContextAgent, setSelectedContextAgent] = useState(null);
   const [contextRequests, setContextRequests] = useState([]);
   const [isContextRequestPending, setIsContextRequestPending] = useState(false);
+  const [chatExportApprovalStatus, setChatExportApprovalStatus] =
+    useState(null);
+  const [pendingChatExportRequest, setPendingChatExportRequest] =
+    useState(null);
+  const [isRequestingChatExport, setIsRequestingChatExport] = useState(false);
 
   const timerOptions = [
     { label: "OFF", value: 0 },
@@ -1000,21 +1038,53 @@ const ChatRoom = ({
     try {
       const rawHistory = sessionStorage.getItem(hostChatStorageKey);
       if (!rawHistory) return;
-      const parsedHistory = JSON.parse(rawHistory);
-      if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
-        setMessageList(parsedHistory);
+      const parsedStorage = JSON.parse(rawHistory);
+
+      if (Array.isArray(parsedStorage) && parsedStorage.length > 0) {
+        setMessageList(parsedStorage);
+        return;
       }
+
+      if (
+        parsedStorage &&
+        parsedStorage.v === 1 &&
+        typeof parsedStorage.payload === "string"
+      ) {
+        const bytes = CryptoJS.AES.decrypt(parsedStorage.payload, roomPassword);
+        const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+        if (!decrypted) {
+          sessionStorage.removeItem(hostChatStorageKey);
+          return;
+        }
+
+        const parsedHistory = JSON.parse(decrypted);
+        if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
+          setMessageList(parsedHistory);
+          return;
+        }
+      }
+
+      sessionStorage.removeItem(hostChatStorageKey);
     } catch {
       sessionStorage.removeItem(hostChatStorageKey);
     }
-  }, [isHost, hostChatStorageKey]);
+  }, [isHost, hostChatStorageKey, roomPassword]);
 
   useEffect(() => {
     if (!isHost || !hostChatStorageKey) return;
     try {
-      sessionStorage.setItem(hostChatStorageKey, JSON.stringify(messageList));
+      const encryptedHistory = CryptoJS.AES.encrypt(
+        JSON.stringify(messageList),
+        roomPassword,
+      ).toString();
+      const storageEnvelope = {
+        v: 1,
+        payload: encryptedHistory,
+        updatedAt: Date.now(),
+      };
+      sessionStorage.setItem(hostChatStorageKey, JSON.stringify(storageEnvelope));
     } catch {}
-  }, [isHost, hostChatStorageKey, messageList]);
+  }, [isHost, hostChatStorageKey, messageList, roomPassword]);
 
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
   const decrypt = (cipherText) => {
@@ -1024,6 +1094,401 @@ const ChatRoom = ({
     } catch {
       return "🚫 ERROR";
     }
+  };
+
+  const formatReportTimestamp = (timestamp) => {
+    if (!timestamp) return "Unknown";
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch {
+      return "Unknown";
+    }
+  };
+
+  const escapeHtmlForReport = (value) => {
+    const normalized = value == null ? "" : String(value);
+    return normalized
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  };
+
+  const decryptForReport = (encryptedValue) => {
+    if (typeof encryptedValue !== "string") return "";
+    return decrypt(encryptedValue);
+  };
+
+  const decodeExportMessage = (rawMessage = {}) => {
+    const base = {
+      ...rawMessage,
+      type: rawMessage.type || "text",
+    };
+
+    const decodeReply = (replyTo) => {
+      if (!replyTo) return null;
+      return {
+        ...replyTo,
+        message: decryptForReport(replyTo.message),
+      };
+    };
+
+    if (base.type === "image") {
+      return {
+        ...base,
+        message: decryptForReport(base.message),
+        caption: base.caption ? decryptForReport(base.caption) : "",
+        replyTo: decodeReply(base.replyTo),
+      };
+    }
+
+    if (base.type === "image-batch") {
+      return {
+        ...base,
+        images: (Array.isArray(base.images) ? base.images : []).map((img) =>
+          decryptForReport(img),
+        ),
+        caption: base.caption ? decryptForReport(base.caption) : "",
+        replyTo: decodeReply(base.replyTo),
+      };
+    }
+
+    if (base.type === "audio") {
+      return {
+        ...base,
+        message: decryptForReport(base.message),
+        caption: base.caption ? decryptForReport(base.caption) : "",
+        replyTo: decodeReply(base.replyTo),
+      };
+    }
+
+    if (base.type === "file") {
+      return {
+        ...base,
+        message: decryptForReport(base.message),
+        fileName: decryptForReport(base.fileName),
+        caption: base.caption ? decryptForReport(base.caption) : "",
+        replyTo: decodeReply(base.replyTo),
+      };
+    }
+
+    if (base.type === "poll" || base.poll) {
+      const poll = base.poll || {};
+      return {
+        ...base,
+        poll: {
+          ...poll,
+          question: decryptForReport(poll.question),
+          options: (Array.isArray(poll.options) ? poll.options : []).map(
+            (option) => ({
+              ...option,
+              text: decryptForReport(option.text),
+            }),
+          ),
+        },
+        replyTo: decodeReply(base.replyTo),
+      };
+    }
+
+    return {
+      ...base,
+      message: decryptForReport(base.message),
+      caption: base.caption ? decryptForReport(base.caption) : "",
+      replyTo: decodeReply(base.replyTo),
+    };
+  };
+
+  const renderFilePreviewForReport = (fileData, fileType, fileName) => {
+    if (!fileData || typeof fileData !== "string") return "";
+    const safeFileType = (fileType || "").toLowerCase();
+    const safeName = escapeHtmlForReport(fileName || "Classified File");
+
+    if (safeFileType.startsWith("image/")) {
+      return `<img src="${fileData}" alt="${safeName}" style="max-width:320px;max-height:240px;border-radius:10px;border:1px solid #27272a;" />`;
+    }
+
+    if (safeFileType.startsWith("audio/")) {
+      return `<audio controls src="${fileData}" style="width:320px;max-width:100%;"></audio>`;
+    }
+
+    if (safeFileType.startsWith("video/")) {
+      return `<video controls src="${fileData}" style="max-width:420px;max-height:240px;border-radius:10px;border:1px solid #27272a;"></video>`;
+    }
+
+    if (safeFileType.includes("pdf")) {
+      return `<iframe src="${fileData}" title="${safeName}" style="width:100%;max-width:560px;height:280px;border:1px solid #27272a;border-radius:10px;background:#fff;"></iframe>`;
+    }
+
+    return `<a href="${fileData}" download="${safeName}" style="color:#60a5fa;font-weight:600;">Open / Download ${safeName}</a>`;
+  };
+
+  const renderMessageBodyForReport = (message) => {
+    const safeCaption = message.caption
+      ? `<div style="margin-top:8px;color:#a1a1aa;"><strong>Caption:</strong> ${escapeHtmlForReport(message.caption)}</div>`
+      : "";
+
+    if (message.type === "image") {
+      return `
+        <div>
+          <img src="${message.message}" alt="image" style="max-width:360px;max-height:260px;border-radius:10px;border:1px solid #27272a;" />
+          ${safeCaption}
+        </div>
+      `;
+    }
+
+    if (message.type === "image-batch") {
+      const items = (Array.isArray(message.images) ? message.images : [])
+        .map(
+          (img, index) =>
+            `<img src="${img}" alt="image-${index + 1}" style="max-width:180px;max-height:160px;border-radius:10px;border:1px solid #27272a;" />`,
+        )
+        .join("");
+
+      return `
+        <div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">${items}</div>
+          ${safeCaption}
+        </div>
+      `;
+    }
+
+    if (message.type === "audio") {
+      return `
+        <div>
+          <audio controls src="${message.message}" style="width:320px;max-width:100%;"></audio>
+          <div style="margin-top:6px;color:#a1a1aa;"><strong>Duration:</strong> ${escapeHtmlForReport(formatDuration(Number(message.audioDuration || 0)))}</div>
+          ${safeCaption}
+        </div>
+      `;
+    }
+
+    if (message.type === "file") {
+      return `
+        <div>
+          <div style="margin-bottom:8px;"><strong>File:</strong> ${escapeHtmlForReport(message.fileName || "Classified File")}</div>
+          <div style="margin-bottom:8px;color:#a1a1aa;">
+            <span><strong>Type:</strong> ${escapeHtmlForReport(message.fileType || "Unknown")}</span>
+            <span style="margin-left:12px;"><strong>Size:</strong> ${escapeHtmlForReport(formatFileSize(Number(message.fileSize || 0)))}</span>
+            <span style="margin-left:12px;"><strong>Pages:</strong> ${escapeHtmlForReport(getFilePageCountLabel(message.filePageCount || 1))}</span>
+          </div>
+          ${renderFilePreviewForReport(message.message, message.fileType, message.fileName)}
+          ${safeCaption}
+        </div>
+      `;
+    }
+
+    if (message.type === "poll" || message.poll) {
+      const poll = message.poll || {};
+      const options = (Array.isArray(poll.options) ? poll.options : [])
+        .map((option) => {
+          const voteCount = Array.isArray(option.votes) ? option.votes.length : 0;
+          return `<li>${escapeHtmlForReport(option.text || "")}
+            <span style="color:#a1a1aa;"> (${voteCount} vote${voteCount === 1 ? "" : "s"})</span>
+          </li>`;
+        })
+        .join("");
+
+      return `
+        <div>
+          <div><strong>Poll:</strong> ${escapeHtmlForReport(poll.question || "")}</div>
+          <ol style="margin-top:8px;padding-left:18px;">${options}</ol>
+        </div>
+      `;
+    }
+
+    return `<div>${escapeHtmlForReport(message.message || "")}</div>`;
+  };
+
+  const downloadChatHistoryReport = (exportPayload, approvalSnapshot = null) => {
+    if (!exportPayload) return;
+
+    const decodedMessages = (Array.isArray(exportPayload.messages)
+      ? exportPayload.messages
+      : []
+    )
+      .map((message) => decodeExportMessage(message))
+      .sort((a, b) => (a.sentAt || 0) - (b.sentAt || 0));
+
+    const activityLog = Array.isArray(exportPayload.activityLog)
+      ? exportPayload.activityLog
+      : [];
+
+    // Build anonymization mapping for agents who left or were kicked
+    const departedAgents = new Map();
+    const departedUsernameToAnon = new Map();
+    activityLog.forEach((entry) => {
+      if (entry.eventType === "agent_left" || entry.eventType === "agent_removed") {
+        if (entry.username && !departedUsernameToAnon.has(entry.username)) {
+          const randomNum = Math.floor(Math.random() * 10000);
+          departedUsernameToAnon.set(entry.username, `Anonymous_${randomNum}`);
+        }
+      }
+    });
+
+    // Helper to replace departed agent names in text
+    const anonifyTextForDeparted = (text) => {
+      let result = text;
+      departedUsernameToAnon.forEach((anonName, realName) => {
+        // Replace full mentions and display names
+        const regex = new RegExp(`\\b${escapeRegex(realName)}\\b`, "g");
+        result = result.replace(regex, anonName);
+      });
+      return result;
+    };
+
+    // Escape special regex characters
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const entryEvents = activityLog.filter(
+      (entry) => entry.eventType === "agent_joined",
+    );
+
+    const messageRows = decodedMessages
+      .map((message, index) => {
+        // Apply anonymization to message sender and reply-to user
+        const displayUsername = departedUsernameToAnon.has(message.username || "")
+          ? departedUsernameToAnon.get(message.username || "")
+          : message.username || "UNKNOWN";
+
+        const replyToUsername = message.replyTo?.username
+          ? departedUsernameToAnon.has(message.replyTo.username)
+            ? departedUsernameToAnon.get(message.replyTo.username)
+            : message.replyTo.username
+          : "UNKNOWN";
+
+        const replyTo = message.replyTo
+          ? `<div style="margin-bottom:8px;padding:8px;border-radius:8px;background:#18181b;border:1px dashed #3f3f46;color:#d4d4d8;"><strong>Reply To:</strong> ${escapeHtmlForReport(replyToUsername)} — ${escapeHtmlForReport(anonifyTextForDeparted(message.replyTo.message || ""))}</div>`
+          : "";
+
+        return `
+          <article style="border:1px solid #27272a;border-radius:12px;padding:12px;margin-bottom:10px;background:#111113;">
+            <header style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+              <div><strong>#${index + 1}</strong> • ${escapeHtmlForReport(displayUsername)}</div>
+              <div style="color:#a1a1aa;">${escapeHtmlForReport(formatReportTimestamp(message.sentAt))} • ${escapeHtmlForReport((message.type || "text").toUpperCase())}</div>
+            </header>
+            ${replyTo}
+            ${renderMessageBodyForReport(message)}
+          </article>
+        `;
+      })
+      .join("");
+
+    const entryRows = entryEvents
+      .map(
+        (entry, index) => {
+          const displayUsername = departedUsernameToAnon.has(entry.username || "")
+            ? departedUsernameToAnon.get(entry.username || "")
+            : entry.username || "UNKNOWN";
+
+          return `
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${index + 1}</td>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(displayUsername)}</td>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(formatReportTimestamp(entry.timestamp))}</td>
+          </tr>
+        `;
+        },
+      )
+      .join("");
+
+    const activityRows = activityLog
+      .map(
+        (entry, index) => {
+          // Anonymize username, newHostUsername, rejectedBy, approvedBy if they are departed agents
+          let actor = entry.username || entry.newHostUsername || entry.rejectedBy || entry.approvedBy || "-";
+          if (actor !== "-" && departedUsernameToAnon.has(actor)) {
+            actor = departedUsernameToAnon.get(actor);
+          }
+
+          return `
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${index + 1}</td>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(entry.eventType || "unknown")}</td>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(actor)}</td>
+            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(formatReportTimestamp(entry.timestamp))}</td>
+          </tr>
+        `;
+        },
+      )
+      .join("");
+
+    const approvalMeta = approvalSnapshot
+      ? `<p><strong>Approval:</strong> ${escapeHtmlForReport(approvalSnapshot.approvedCount || 0)} / ${escapeHtmlForReport(approvalSnapshot.totalRequired || 0)} agents approved.</p>`
+      : "";
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width,initial-scale=1" />
+          <title>Secure Chat History Report</title>
+        </head>
+        <body style="margin:0;background:#09090b;color:#fafafa;font-family:Inter,Segoe UI,Arial,sans-serif;padding:20px;line-height:1.5;">
+          <main style="max-width:1100px;margin:0 auto;">
+            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
+              <h1 style="margin:0 0 6px 0;font-size:22px;">Secure Chat Full History Report</h1>
+              <p style="margin:4px 0;"><strong>Room:</strong> ${escapeHtmlForReport(exportPayload.roomName || exportPayload.roomId || "Unknown")}</p>
+              <p style="margin:4px 0;"><strong>Room ID:</strong> ${escapeHtmlForReport(exportPayload.roomId || "Unknown")}</p>
+              <p style="margin:4px 0;"><strong>Created:</strong> ${escapeHtmlForReport(formatReportTimestamp(exportPayload.createdAt))}</p>
+              <p style="margin:4px 0;"><strong>Generated:</strong> ${escapeHtmlForReport(formatReportTimestamp(exportPayload.generatedAt))}</p>
+              <p style="margin:4px 0;"><strong>Total Messages:</strong> ${escapeHtmlForReport(decodedMessages.length)}</p>
+              ${approvalMeta}
+            </section>
+
+            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
+              <h2 style="margin-top:0;">Agent Entry Timeline</h2>
+              <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead>
+                  <tr style="text-align:left;background:#18181b;">
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">#</th>
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">Agent</th>
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">Entered At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${entryRows || '<tr><td colspan="3" style="padding:10px;color:#a1a1aa;">No agent entry records found.</td></tr>'}
+                </tbody>
+              </table>
+            </section>
+
+            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
+              <h2 style="margin-top:0;">Full Chat Messages (with previews)</h2>
+              ${messageRows || '<p style="color:#a1a1aa;">No messages found.</p>'}
+            </section>
+
+            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;">
+              <h2 style="margin-top:0;">Room Activity Log</h2>
+              <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead>
+                  <tr style="text-align:left;background:#18181b;">
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">#</th>
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">Event</th>
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">Actor</th>
+                    <th style="padding:8px;border-bottom:1px solid #27272a;">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${activityRows || '<tr><td colspan="4" style="padding:10px;color:#a1a1aa;">No activity records found.</td></tr>'}
+                </tbody>
+              </table>
+            </section>
+          </main>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    link.href = url;
+    link.download = `secure-chat-history-${roomId}-${stamp}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -1495,12 +1960,13 @@ const ChatRoom = ({
           let audioDuration = null;
           if (file.type && file.type.startsWith("audio/")) {
             atype = "audio";
-            // try to get duration from the audio data URL
+            const audioProbeUrl = URL.createObjectURL(file);
+            // try to get duration from an object URL
             audioDuration = await new Promise((resolve) => {
               try {
                 const audio = document.createElement("audio");
                 audio.preload = "metadata";
-                audio.src = base64;
+                audio.src = audioProbeUrl;
                 const clear = () => {
                   audio.removeEventListener("loadedmetadata", onLoaded);
                   audio.removeEventListener("error", onError);
@@ -1508,21 +1974,32 @@ const ChatRoom = ({
                 const onLoaded = () => {
                   const d = Math.floor(audio.duration || 0);
                   clear();
+                  URL.revokeObjectURL(audioProbeUrl);
                   resolve(d);
                 };
                 const onError = () => {
                   clear();
+                  URL.revokeObjectURL(audioProbeUrl);
                   resolve(null);
                 };
                 audio.addEventListener("loadedmetadata", onLoaded);
                 audio.addEventListener("error", onError);
-                // in some browsers loadedmetadata may never fire for data urls; set a fallback timeout
-                setTimeout(() => resolve(null), 1500);
+                // in some browsers loadedmetadata may never fire; set a fallback timeout
+                setTimeout(() => {
+                  URL.revokeObjectURL(audioProbeUrl);
+                  resolve(null);
+                }, 1500);
               } catch (e) {
+                URL.revokeObjectURL(audioProbeUrl);
                 resolve(null);
               }
             });
           }
+
+          const previewUrl =
+            atype === "image" || atype === "audio"
+              ? URL.createObjectURL(file)
+              : null;
 
           return {
             id: uuidv4(),
@@ -1533,12 +2010,12 @@ const ChatRoom = ({
             type: atype,
             audioDuration: audioDuration,
             data: base64,
+            previewUrl,
           };
         }),
       );
       setSelectedAttachments((prev) => [...prev, ...newAttachments]);
     } catch (error) {
-      console.error("Failed to process selected files:", error);
       alert("Some files could not be processed. Please try again.");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1547,15 +2024,25 @@ const ChatRoom = ({
   };
 
   const clearAttachment = () => {
-    setSelectedAttachments([]);
+    setSelectedAttachments((previousAttachments) => {
+      revokeAttachmentPreviews(previousAttachments);
+      return [];
+    });
+    setPreviewAttachmentIndex(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (audioInputRef.current) audioInputRef.current.value = "";
   };
 
   const removeAttachment = (attachmentId) => {
-    setSelectedAttachments((prev) =>
-      prev.filter((attachment) => attachment.id !== attachmentId),
-    );
+    setSelectedAttachments((previousAttachments) => {
+      const targetAttachment = previousAttachments.find(
+        (attachment) => attachment.id === attachmentId,
+      );
+      revokeAttachmentPreview(targetAttachment);
+      return previousAttachments.filter(
+        (attachment) => attachment.id !== attachmentId,
+      );
+    });
   };
 
   const downloadImage = (imageData, messageId) => {
@@ -1567,7 +2054,7 @@ const ChatRoom = ({
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error("Failed to download image:", error);
+      alert("Failed to download image. Please try again.");
     }
   };
 
@@ -1756,7 +2243,7 @@ const ChatRoom = ({
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error("Failed to download file:", error);
+      alert("Failed to download file. Please try again.");
     }
   };
 
@@ -1825,7 +2312,10 @@ const ChatRoom = ({
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(blob);
-        setAudioPreviewUrl(URL.createObjectURL(blob));
+        setAudioPreviewUrl((previousUrl) => {
+          revokeObjectUrlIfNeeded(previousUrl);
+          return URL.createObjectURL(blob);
+        });
         stream.getTracks().forEach((t) => t.stop());
         if (analyserRef.current) {
           analyserRef.current.audioCtx.close();
@@ -1842,7 +2332,6 @@ const ChatRoom = ({
         setRecordingDuration((d) => d + 1);
       }, 1000);
     } catch (err) {
-      console.error("Mic access denied:", err);
       alert("Microphone access is required to record audio.");
     }
   };
@@ -1869,7 +2358,7 @@ const ChatRoom = ({
       setAudioLevels(new Array(24).fill(0));
     }
     setAudioBlob(null);
-    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+    revokeObjectUrlIfNeeded(audioPreviewUrl);
     setAudioPreviewUrl(null);
     setRecordingDuration(0);
     setIsPlayingPreview(false);
@@ -1932,7 +2421,7 @@ const ChatRoom = ({
 
       // Cleanup
       setAudioBlob(null);
-      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      revokeObjectUrlIfNeeded(audioPreviewUrl);
       setAudioPreviewUrl(null);
       setRecordingDuration(0);
       setIsPlayingPreview(false);
@@ -2143,6 +2632,22 @@ const ChatRoom = ({
     if (!isCurrentHost) return;
     socket.emit("send_context_to_all", { roomId });
     setShowContextModal(false);
+  };
+
+  const requestChatHistoryExport = () => {
+    if (!isCurrentHost) return;
+    setIsRequestingChatExport(true);
+    socket.emit("request_chat_history_export", { roomId });
+  };
+
+  const respondToChatExportApproval = (approve) => {
+    if (isCurrentHost || !pendingChatExportRequest?.requestId) return;
+    socket.emit("respond_chat_history_export_approval", {
+      roomId,
+      requestId: pendingChatExportRequest.requestId,
+      approve,
+    });
+    setPendingChatExportRequest(null);
   };
 
   const requestContext = () => {
@@ -2423,8 +2928,7 @@ const ChatRoom = ({
   };
 
   const handleVaultDecrypted = (message) => {
-    // Message has been successfully decrypted and viewed
-    console.log("High clearance message accessed:", message);
+    if (!message) return;
   };
 
   useEffect(() => {
@@ -2588,6 +3092,9 @@ const ChatRoom = ({
       if (incomingRoomId !== roomId) return;
       setJoinRequests([]);
       setContextRequests([]);
+      setChatExportApprovalStatus(null);
+      setPendingChatExportRequest(null);
+      setIsRequestingChatExport(false);
     });
     socket.on("kicked", () => {
       leaveRoom();
@@ -2607,12 +3114,6 @@ const ChatRoom = ({
           setShowIntrusionHud(false);
         }, 4600);
 
-        if (attemptedCodename) {
-          console.warn(
-            "Unauthorized decryption attempt detected:",
-            attemptedCodename,
-          );
-        }
       },
     );
     socket.on("room_lock_state", ({ roomId: incomingRoomId, isLocked }) => {
@@ -2666,6 +3167,82 @@ const ChatRoom = ({
         },
       ]);
     });
+
+    socket.on(
+      "chat_history_export_approval_requested",
+      ({ roomId: incomingRoomId, requestId, hostUsername, requestedAt }) => {
+        if (incomingRoomId !== roomId || isCurrentHost) return;
+        setPendingChatExportRequest({
+          requestId,
+          hostUsername,
+          requestedAt,
+        });
+      },
+    );
+
+    socket.on("chat_history_export_approval_status", (payload) => {
+      if (payload?.roomId !== roomId || !isCurrentHost) return;
+      setChatExportApprovalStatus(payload);
+      setIsRequestingChatExport(payload.status === "pending");
+    });
+
+    socket.on(
+      "chat_history_export_request_cancelled",
+      ({ roomId: incomingRoomId, reason }) => {
+        if (incomingRoomId !== roomId) return;
+        setChatExportApprovalStatus(null);
+        setPendingChatExportRequest(null);
+        setIsRequestingChatExport(false);
+        setMessageList((list) => [
+          ...list,
+          {
+            id: uuidv4(),
+            system: true,
+            message:
+              reason || "Chat history export request was cancelled.",
+          },
+        ]);
+      },
+    );
+
+    socket.on(
+      "chat_history_export_request_completed",
+      ({ roomId: incomingRoomId }) => {
+        if (incomingRoomId !== roomId || isCurrentHost) return;
+        setPendingChatExportRequest(null);
+        setMessageList((list) => [
+          ...list,
+          {
+            id: uuidv4(),
+            system: true,
+            message: "Host export request completed successfully.",
+          },
+        ]);
+      },
+    );
+
+    socket.on(
+      "chat_history_export_ready",
+      ({ roomId: incomingRoomId, exportPayload, approval }) => {
+        if (incomingRoomId !== roomId) return;
+
+        setChatExportApprovalStatus(null);
+        setPendingChatExportRequest(null);
+        setIsRequestingChatExport(false);
+
+        if (!isCurrentHost || !exportPayload) return;
+
+        downloadChatHistoryReport(exportPayload, approval || null);
+        setMessageList((list) => [
+          ...list,
+          {
+            id: uuidv4(),
+            system: true,
+            message: "Full chat history report downloaded.",
+          },
+        ]);
+      },
+    );
 
     socket.on(
       "message_reactions_sync",
@@ -2727,6 +3304,11 @@ const ChatRoom = ({
       socket.off("context_request");
       socket.off("context_request_sent");
       socket.off("context_request_rejected");
+      socket.off("chat_history_export_approval_requested");
+      socket.off("chat_history_export_approval_status");
+      socket.off("chat_history_export_request_cancelled");
+      socket.off("chat_history_export_request_completed");
+      socket.off("chat_history_export_ready");
       socket.off("message_reactions_sync");
       socket.off("message_reaction_update");
       socket.off("pinned_messages_sync");
@@ -3457,6 +4039,20 @@ const ChatRoom = ({
                           <LuMessageSquarePlus size={13} /> SEND CONTEXT TO ALL
                         </button>
                         <button
+                          onClick={requestChatHistoryExport}
+                          disabled={isRequestingChatExport}
+                          className="w-full border border-emerald-500/20 text-emerald-300 py-2.5 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-emerald-500/[0.04] mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <LuDownload size={13} />
+                          {isRequestingChatExport
+                            ? `AWAITING APPROVAL ${chatExportApprovalStatus?.approvedCount || 0}/${chatExportApprovalStatus?.totalRequired || 0}`
+                            : "DOWNLOAD FULL CHAT HISTORY"}
+                        </button>
+                        {isRequestingChatExport &&
+                          chatExportApprovalStatus?.pendingCount > 0 && (
+                            <p className="mb-2 text-[9px] uppercase tracking-[0.12em] text-emerald-200/80 text-center px-2 leading-relaxed"></p>
+                          )}
+                        <button
                           onClick={handleTerminateClick}
                           className="w-full border border-red-500/20 text-red-400 py-3 uppercase text-[10px] font-black tracking-[0.15em] hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-2 rounded-xl active:scale-[0.98] bg-red-500/[0.04]"
                         >
@@ -3972,7 +4568,7 @@ const ChatRoom = ({
                                 : msg.own
                                   ? "bg-gradient-to-br from-white via-zinc-50 to-zinc-100 text-zinc-900 shadow-[0_1px_20px_rgba(255,255,255,0.06)] rounded-xl rounded-br-sm"
                                   : "bg-zinc-900/60 text-zinc-300 border border-zinc-800/30 rounded-xl rounded-bl-sm"
-                          } ${isCommanderMessage ? "border-red-500/60 shadow-[0_0_0_1px_rgba(239,68,68,0.22),0_0_26px_rgba(239,68,68,0.10)]" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
+                          } ${isCommanderMessage ? "border-red-500/60" : ""} ${highlightMessageId === msg.id ? "highlight-flash" : ""} ${msg.isContextMessage ? `context-message ${msg.own ? "context-message-own" : "context-message-other"}` : ""}`}
                         >
                           <div
                             className={`flex justify-between items-start gap-4 ${hasHeaderContent ? "mb-2" : "mb-0"}`}
@@ -3983,12 +4579,6 @@ const ChatRoom = ({
                               </p>
                             )}
                             <div className="flex items-center gap-2 ml-auto shrink-0">
-                              {hasEveryoneMention(msg.message) &&
-                                !msg.deleted && (
-                                  <span className="flex items-center gap-1 text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
-                                    @EVERYONE
-                                  </span>
-                                )}
                               {msg.isContextMessage && !msg.deleted && (
                                 <span className="context-message-badge">
                                   CONTEXT
@@ -4644,10 +5234,6 @@ const ChatRoom = ({
                                             username: msg.username,
                                           });
                                         } catch (error) {
-                                          console.error(
-                                            "Failed to parse high-clearance message:",
-                                            error,
-                                          );
                                           openBiometricVault({
                                             id: msg.id,
                                             content: decrypt(msg.message),
@@ -5656,7 +6242,7 @@ const ChatRoom = ({
                               <span className="h-1 w-1 rounded-full bg-zinc-200" />
                             </div>
                             <img
-                              src={attachment.data}
+                              src={attachment.previewUrl || attachment.data}
                               alt={attachment.name}
                                 className="w-full h-full object-cover"
                             />
@@ -5825,7 +6411,10 @@ const ChatRoom = ({
                 {selectedAttachments[previewAttachmentIndex].type === "image" ? (
                   <div className="relative w-full h-full flex items-center justify-center">
                     <img
-                      src={selectedAttachments[previewAttachmentIndex].data}
+                      src={
+                        selectedAttachments[previewAttachmentIndex].previewUrl ||
+                        selectedAttachments[previewAttachmentIndex].data
+                      }
                       alt={selectedAttachments[previewAttachmentIndex].name}
                       className="max-w-full max-h-[90vh] object-contain"
                     />
@@ -5847,7 +6436,10 @@ const ChatRoom = ({
                       </div>
                     </div>
                     <audio
-                      src={selectedAttachments[previewAttachmentIndex].data}
+                      src={
+                        selectedAttachments[previewAttachmentIndex].previewUrl ||
+                        selectedAttachments[previewAttachmentIndex].data
+                      }
                       controls
                       className="w-full"
                     />
@@ -6486,6 +7078,70 @@ const ChatRoom = ({
               );
             })()}
         </AnimatePresence>
+
+        {pendingChatExportRequest && !isCurrentHost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9997] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ type: "spring", damping: 22, stiffness: 240 }}
+              className="w-full max-w-md bg-[#0f0f11] border border-zinc-800/40 shadow-[0_20px_80px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl overflow-hidden"
+            >
+              <div className="p-4 sm:p-5 border-b border-zinc-800/40">
+                <h3 className="text-base font-black text-white flex items-center gap-2.5 uppercase tracking-[0.1em]">
+                  <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-700/30">
+                    <LuDownload size={16} className="text-emerald-300" />
+                  </div>
+                  Export Approval Request
+                </h3>
+              </div>
+
+              <div className="p-4 sm:p-5 space-y-4">
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                  <span className="font-bold text-white">
+                    {"Host"}
+                  </span>{" "}
+                  requested approval to download the full encrypted chat history
+                  report with media/file previews and room timeline logs.
+                </p>
+
+                <div className="bg-zinc-900/70 border border-zinc-700/40 rounded-xl p-3 space-y-1">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 font-bold">
+                    Requested At
+                  </p>
+                  <p className="text-xs text-zinc-200">
+                    {new Date(
+                      pendingChatExportRequest.requestedAt || Date.now(),
+                    ).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => respondToChatExportApproval(false)}
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-red-600/40 text-red-300 font-bold uppercase text-xs tracking-wider hover:bg-red-500/10 transition-all active:scale-95"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => respondToChatExportApproval(true)}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-600 text-white font-bold uppercase text-xs tracking-wider hover:bg-emerald-700 transition-all active:scale-95"
+                  >
+                    Approve
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
 
         {/* Biometric Vault Modal */}
         {showContextModal && isCurrentHost && (
