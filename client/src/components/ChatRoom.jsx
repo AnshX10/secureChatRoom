@@ -52,6 +52,7 @@ import Logo from "./Logo";
 import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
 import { encryptMagicLinkPayload } from "../utils/magicLink";
+import { downloadChatHistoryReport as downloadChatHistoryReportUtil } from "../utils/chatHistoryReport";
 import BiometricVault from "./BiometricVault";
 import HighClearanceComposer from "./HighClearanceComposer";
 
@@ -1096,400 +1097,13 @@ const ChatRoom = ({
     }
   };
 
-  const formatReportTimestamp = (timestamp) => {
-    if (!timestamp) return "Unknown";
-    try {
-      return new Date(timestamp).toLocaleString();
-    } catch {
-      return "Unknown";
-    }
-  };
-
-  const escapeHtmlForReport = (value) => {
-    const normalized = value == null ? "" : String(value);
-    return normalized
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  };
-
-  const decryptForReport = (encryptedValue) => {
-    if (typeof encryptedValue !== "string") return "";
-    return decrypt(encryptedValue);
-  };
-
-  const decodeExportMessage = (rawMessage = {}) => {
-    const base = {
-      ...rawMessage,
-      type: rawMessage.type || "text",
-    };
-
-    const decodeReply = (replyTo) => {
-      if (!replyTo) return null;
-      return {
-        ...replyTo,
-        message: decryptForReport(replyTo.message),
-      };
-    };
-
-    if (base.type === "image") {
-      return {
-        ...base,
-        message: decryptForReport(base.message),
-        caption: base.caption ? decryptForReport(base.caption) : "",
-        replyTo: decodeReply(base.replyTo),
-      };
-    }
-
-    if (base.type === "image-batch") {
-      return {
-        ...base,
-        images: (Array.isArray(base.images) ? base.images : []).map((img) =>
-          decryptForReport(img),
-        ),
-        caption: base.caption ? decryptForReport(base.caption) : "",
-        replyTo: decodeReply(base.replyTo),
-      };
-    }
-
-    if (base.type === "audio") {
-      return {
-        ...base,
-        message: decryptForReport(base.message),
-        caption: base.caption ? decryptForReport(base.caption) : "",
-        replyTo: decodeReply(base.replyTo),
-      };
-    }
-
-    if (base.type === "file") {
-      return {
-        ...base,
-        message: decryptForReport(base.message),
-        fileName: decryptForReport(base.fileName),
-        caption: base.caption ? decryptForReport(base.caption) : "",
-        replyTo: decodeReply(base.replyTo),
-      };
-    }
-
-    if (base.type === "poll" || base.poll) {
-      const poll = base.poll || {};
-      return {
-        ...base,
-        poll: {
-          ...poll,
-          question: decryptForReport(poll.question),
-          options: (Array.isArray(poll.options) ? poll.options : []).map(
-            (option) => ({
-              ...option,
-              text: decryptForReport(option.text),
-            }),
-          ),
-        },
-        replyTo: decodeReply(base.replyTo),
-      };
-    }
-
-    return {
-      ...base,
-      message: decryptForReport(base.message),
-      caption: base.caption ? decryptForReport(base.caption) : "",
-      replyTo: decodeReply(base.replyTo),
-    };
-  };
-
-  const renderFilePreviewForReport = (fileData, fileType, fileName) => {
-    if (!fileData || typeof fileData !== "string") return "";
-    const safeFileType = (fileType || "").toLowerCase();
-    const safeName = escapeHtmlForReport(fileName || "Classified File");
-
-    if (safeFileType.startsWith("image/")) {
-      return `<img src="${fileData}" alt="${safeName}" style="max-width:320px;max-height:240px;border-radius:10px;border:1px solid #27272a;" />`;
-    }
-
-    if (safeFileType.startsWith("audio/")) {
-      return `<audio controls src="${fileData}" style="width:320px;max-width:100%;"></audio>`;
-    }
-
-    if (safeFileType.startsWith("video/")) {
-      return `<video controls src="${fileData}" style="max-width:420px;max-height:240px;border-radius:10px;border:1px solid #27272a;"></video>`;
-    }
-
-    if (safeFileType.includes("pdf")) {
-      return `<iframe src="${fileData}" title="${safeName}" style="width:100%;max-width:560px;height:280px;border:1px solid #27272a;border-radius:10px;background:#fff;"></iframe>`;
-    }
-
-    return `<a href="${fileData}" download="${safeName}" style="color:#60a5fa;font-weight:600;">Open / Download ${safeName}</a>`;
-  };
-
-  const renderMessageBodyForReport = (message) => {
-    const safeCaption = message.caption
-      ? `<div style="margin-top:8px;color:#a1a1aa;"><strong>Caption:</strong> ${escapeHtmlForReport(message.caption)}</div>`
-      : "";
-
-    if (message.type === "image") {
-      return `
-        <div>
-          <img src="${message.message}" alt="image" style="max-width:360px;max-height:260px;border-radius:10px;border:1px solid #27272a;" />
-          ${safeCaption}
-        </div>
-      `;
-    }
-
-    if (message.type === "image-batch") {
-      const items = (Array.isArray(message.images) ? message.images : [])
-        .map(
-          (img, index) =>
-            `<img src="${img}" alt="image-${index + 1}" style="max-width:180px;max-height:160px;border-radius:10px;border:1px solid #27272a;" />`,
-        )
-        .join("");
-
-      return `
-        <div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">${items}</div>
-          ${safeCaption}
-        </div>
-      `;
-    }
-
-    if (message.type === "audio") {
-      return `
-        <div>
-          <audio controls src="${message.message}" style="width:320px;max-width:100%;"></audio>
-          <div style="margin-top:6px;color:#a1a1aa;"><strong>Duration:</strong> ${escapeHtmlForReport(formatDuration(Number(message.audioDuration || 0)))}</div>
-          ${safeCaption}
-        </div>
-      `;
-    }
-
-    if (message.type === "file") {
-      return `
-        <div>
-          <div style="margin-bottom:8px;"><strong>File:</strong> ${escapeHtmlForReport(message.fileName || "Classified File")}</div>
-          <div style="margin-bottom:8px;color:#a1a1aa;">
-            <span><strong>Type:</strong> ${escapeHtmlForReport(message.fileType || "Unknown")}</span>
-            <span style="margin-left:12px;"><strong>Size:</strong> ${escapeHtmlForReport(formatFileSize(Number(message.fileSize || 0)))}</span>
-            <span style="margin-left:12px;"><strong>Pages:</strong> ${escapeHtmlForReport(getFilePageCountLabel(message.filePageCount || 1))}</span>
-          </div>
-          ${renderFilePreviewForReport(message.message, message.fileType, message.fileName)}
-          ${safeCaption}
-        </div>
-      `;
-    }
-
-    if (message.type === "poll" || message.poll) {
-      const poll = message.poll || {};
-      const options = (Array.isArray(poll.options) ? poll.options : [])
-        .map((option) => {
-          const voteCount = Array.isArray(option.votes) ? option.votes.length : 0;
-          return `<li>${escapeHtmlForReport(option.text || "")}
-            <span style="color:#a1a1aa;"> (${voteCount} vote${voteCount === 1 ? "" : "s"})</span>
-          </li>`;
-        })
-        .join("");
-
-      return `
-        <div>
-          <div><strong>Poll:</strong> ${escapeHtmlForReport(poll.question || "")}</div>
-          <ol style="margin-top:8px;padding-left:18px;">${options}</ol>
-        </div>
-      `;
-    }
-
-    return `<div>${escapeHtmlForReport(message.message || "")}</div>`;
-  };
-
-  const downloadChatHistoryReport = (exportPayload, approvalSnapshot = null) => {
-    if (!exportPayload) return;
-
-    const decodedMessages = (Array.isArray(exportPayload.messages)
-      ? exportPayload.messages
-      : []
-    )
-      .map((message) => decodeExportMessage(message))
-      .sort((a, b) => (a.sentAt || 0) - (b.sentAt || 0));
-
-    const activityLog = Array.isArray(exportPayload.activityLog)
-      ? exportPayload.activityLog
-      : [];
-
-    // Build anonymization mapping for agents who left or were kicked
-    const departedAgents = new Map();
-    const departedUsernameToAnon = new Map();
-    activityLog.forEach((entry) => {
-      if (entry.eventType === "agent_left" || entry.eventType === "agent_removed") {
-        if (entry.username && !departedUsernameToAnon.has(entry.username)) {
-          const randomNum = Math.floor(Math.random() * 10000);
-          departedUsernameToAnon.set(entry.username, `Anonymous_${randomNum}`);
-        }
-      }
+  const downloadChatHistoryReport = (exportPayload, approvalSnapshot = null) =>
+    downloadChatHistoryReportUtil({
+      exportPayload,
+      approvalSnapshot,
+      roomId,
+      roomPassword,
     });
-
-    // Helper to replace departed agent names in text
-    const anonifyTextForDeparted = (text) => {
-      let result = text;
-      departedUsernameToAnon.forEach((anonName, realName) => {
-        // Replace full mentions and display names
-        const regex = new RegExp(`\\b${escapeRegex(realName)}\\b`, "g");
-        result = result.replace(regex, anonName);
-      });
-      return result;
-    };
-
-    // Escape special regex characters
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    const entryEvents = activityLog.filter(
-      (entry) => entry.eventType === "agent_joined",
-    );
-
-    const messageRows = decodedMessages
-      .map((message, index) => {
-        // Apply anonymization to message sender and reply-to user
-        const displayUsername = departedUsernameToAnon.has(message.username || "")
-          ? departedUsernameToAnon.get(message.username || "")
-          : message.username || "UNKNOWN";
-
-        const replyToUsername = message.replyTo?.username
-          ? departedUsernameToAnon.has(message.replyTo.username)
-            ? departedUsernameToAnon.get(message.replyTo.username)
-            : message.replyTo.username
-          : "UNKNOWN";
-
-        const replyTo = message.replyTo
-          ? `<div style="margin-bottom:8px;padding:8px;border-radius:8px;background:#18181b;border:1px dashed #3f3f46;color:#d4d4d8;"><strong>Reply To:</strong> ${escapeHtmlForReport(replyToUsername)} — ${escapeHtmlForReport(anonifyTextForDeparted(message.replyTo.message || ""))}</div>`
-          : "";
-
-        return `
-          <article style="border:1px solid #27272a;border-radius:12px;padding:12px;margin-bottom:10px;background:#111113;">
-            <header style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-              <div><strong>#${index + 1}</strong> • ${escapeHtmlForReport(displayUsername)}</div>
-              <div style="color:#a1a1aa;">${escapeHtmlForReport(formatReportTimestamp(message.sentAt))} • ${escapeHtmlForReport((message.type || "text").toUpperCase())}</div>
-            </header>
-            ${replyTo}
-            ${renderMessageBodyForReport(message)}
-          </article>
-        `;
-      })
-      .join("");
-
-    const entryRows = entryEvents
-      .map(
-        (entry, index) => {
-          const displayUsername = departedUsernameToAnon.has(entry.username || "")
-            ? departedUsernameToAnon.get(entry.username || "")
-            : entry.username || "UNKNOWN";
-
-          return `
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${index + 1}</td>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(displayUsername)}</td>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(formatReportTimestamp(entry.timestamp))}</td>
-          </tr>
-        `;
-        },
-      )
-      .join("");
-
-    const activityRows = activityLog
-      .map(
-        (entry, index) => {
-          // Anonymize username, newHostUsername, rejectedBy, approvedBy if they are departed agents
-          let actor = entry.username || entry.newHostUsername || entry.rejectedBy || entry.approvedBy || "-";
-          if (actor !== "-" && departedUsernameToAnon.has(actor)) {
-            actor = departedUsernameToAnon.get(actor);
-          }
-
-          return `
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${index + 1}</td>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(entry.eventType || "unknown")}</td>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(actor)}</td>
-            <td style="padding:8px;border-bottom:1px solid #27272a;">${escapeHtmlForReport(formatReportTimestamp(entry.timestamp))}</td>
-          </tr>
-        `;
-        },
-      )
-      .join("");
-
-    const approvalMeta = approvalSnapshot
-      ? `<p><strong>Approval:</strong> ${escapeHtmlForReport(approvalSnapshot.approvedCount || 0)} / ${escapeHtmlForReport(approvalSnapshot.totalRequired || 0)} agents approved.</p>`
-      : "";
-
-    const html = `
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width,initial-scale=1" />
-          <title>Secure Chat History Report</title>
-        </head>
-        <body style="margin:0;background:#09090b;color:#fafafa;font-family:Inter,Segoe UI,Arial,sans-serif;padding:20px;line-height:1.5;">
-          <main style="max-width:1100px;margin:0 auto;">
-            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
-              <h1 style="margin:0 0 6px 0;font-size:22px;">Secure Chat Full History Report</h1>
-              <p style="margin:4px 0;"><strong>Room:</strong> ${escapeHtmlForReport(exportPayload.roomName || exportPayload.roomId || "Unknown")}</p>
-              <p style="margin:4px 0;"><strong>Room ID:</strong> ${escapeHtmlForReport(exportPayload.roomId || "Unknown")}</p>
-              <p style="margin:4px 0;"><strong>Created:</strong> ${escapeHtmlForReport(formatReportTimestamp(exportPayload.createdAt))}</p>
-              <p style="margin:4px 0;"><strong>Generated:</strong> ${escapeHtmlForReport(formatReportTimestamp(exportPayload.generatedAt))}</p>
-              <p style="margin:4px 0;"><strong>Total Messages:</strong> ${escapeHtmlForReport(decodedMessages.length)}</p>
-              ${approvalMeta}
-            </section>
-
-            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
-              <h2 style="margin-top:0;">Agent Entry Timeline</h2>
-              <table style="width:100%;border-collapse:collapse;font-size:14px;">
-                <thead>
-                  <tr style="text-align:left;background:#18181b;">
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">#</th>
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">Agent</th>
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">Entered At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${entryRows || '<tr><td colspan="3" style="padding:10px;color:#a1a1aa;">No agent entry records found.</td></tr>'}
-                </tbody>
-              </table>
-            </section>
-
-            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;margin-bottom:18px;">
-              <h2 style="margin-top:0;">Full Chat Messages (with previews)</h2>
-              ${messageRows || '<p style="color:#a1a1aa;">No messages found.</p>'}
-            </section>
-
-            <section style="padding:16px;border:1px solid #27272a;border-radius:12px;background:#111113;">
-              <h2 style="margin-top:0;">Room Activity Log</h2>
-              <table style="width:100%;border-collapse:collapse;font-size:14px;">
-                <thead>
-                  <tr style="text-align:left;background:#18181b;">
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">#</th>
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">Event</th>
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">Actor</th>
-                    <th style="padding:8px;border-bottom:1px solid #27272a;">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${activityRows || '<tr><td colspan="4" style="padding:10px;color:#a1a1aa;">No activity records found.</td></tr>'}
-                </tbody>
-              </table>
-            </section>
-          </main>
-        </body>
-      </html>
-    `;
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    link.href = url;
-    link.download = `secure-chat-history-${roomId}-${stamp}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
 
   useEffect(() => {
     setIsPinnedBannerExpanded(false);
@@ -3232,15 +2846,28 @@ const ChatRoom = ({
 
         if (!isCurrentHost || !exportPayload) return;
 
-        downloadChatHistoryReport(exportPayload, approval || null);
-        setMessageList((list) => [
-          ...list,
-          {
-            id: uuidv4(),
-            system: true,
-            message: "Full chat history report downloaded.",
-          },
-        ]);
+        downloadChatHistoryReport(exportPayload, approval || null)
+          .then(() => {
+            setMessageList((list) => [
+              ...list,
+              {
+                id: uuidv4(),
+                system: true,
+                message:
+                  "Encrypted full chat history report downloaded. Use room encryption key to open.",
+              },
+            ]);
+          })
+          .catch(() => {
+            setMessageList((list) => [
+              ...list,
+              {
+                id: uuidv4(),
+                system: true,
+                message: "Failed to generate encrypted chat history report.",
+              },
+            ]);
+          });
       },
     );
 
