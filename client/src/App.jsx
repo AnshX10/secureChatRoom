@@ -78,7 +78,7 @@ function App() {
     });
 
     // Handle Join Success (direct or after host approval)
-    socket.on("joined_room_success", ({ roomId, isHost, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
+    socket.on("joined_room_success", ({ roomId, isHost, roomPassword: serverRoomPassword, createdAt, users, roomName: serverRoomName, capacity, isLocked, silencedUserIds }) => {
       setRoomId(roomId);
       setStartTime(createdAt);
       setInitialUsers(users);
@@ -86,6 +86,9 @@ function App() {
       setRoomCapacity(capacity || 50);
       setRoomLocked(!!isLocked);
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
+      if (typeof serverRoomPassword === "string" && serverRoomPassword.length > 0) {
+        setRoomPassword(serverRoomPassword);
+      }
       setIsHost(isHost);
       setIsInChat(true);
       setIsWaitingApproval(false);
@@ -160,6 +163,54 @@ function App() {
     socket.emit("join_room", { username: user, roomId: room, password: password });
   };
 
+  const joinRoomWithInvite = (user, inviteToken) => {
+    if (!user || !inviteToken) return;
+    setErrorMessage("");
+    setUsername(user);
+    socket.emit("join_room_with_invite", { username: user, inviteToken });
+  };
+
+  const issueMagicLink = async ({ roomId, encryptionKey }) => {
+    const payload = {
+      roomId,
+      encryptionKey,
+    };
+
+    return new Promise((resolve, reject) => {
+      socket.timeout(7000).emit("issue_magic_invite", payload, (err, response) => {
+        if (err) {
+          reject(new Error("Failed to issue magic link."));
+          return;
+        }
+
+        if (!response?.ok || !response?.inviteToken || !response?.roomId) {
+          reject(new Error(response?.error || "Failed to issue magic link."));
+          return;
+        }
+
+        resolve(response);
+      });
+    });
+  };
+
+  const revokeMagicLink = async ({ roomId }) => {
+    return new Promise((resolve, reject) => {
+      socket.timeout(7000).emit("revoke_magic_invite", { roomId }, (err, response) => {
+        if (err) {
+          reject(new Error("Failed to revoke magic link."));
+          return;
+        }
+
+        if (!response?.ok) {
+          reject(new Error(response?.error || "Failed to revoke magic link."));
+          return;
+        }
+
+        resolve(response);
+      });
+    });
+  };
+
   const leaveRoom = () => {
     socket.disconnect();
     window.location.reload(); 
@@ -176,12 +227,15 @@ function App() {
       {!isInChat ? (
         <JoinRoom 
           createRoom={createRoom} 
-          joinRoom={joinRoom} 
+          joinRoom={joinRoom}
+          joinRoomWithInvite={joinRoomWithInvite}
           terminateRoom={terminateRoom}
           isCreatingRoom={isCreatingRoom}
           isWaitingForFirstAgent={isWaitingForFirstAgent}
           roomId={roomId}
           hostRoomPassword={roomPassword}
+          issueMagicLink={issueMagicLink}
+          revokeMagicLink={revokeMagicLink}
           errorMessage={errorMessage}
           setErrorMessage={setErrorMessage}
           clearError={() => setErrorMessage("")}

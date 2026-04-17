@@ -50,6 +50,26 @@ const MAX_ROOM_CAPACITY = parseInt(process.env.MAX_ROOM_CAPACITY, 10) || 50;
 const MAX_ROOM_AGE_MS = parseInt(process.env.MAX_ROOM_AGE_MS, 10) || 24 * 60 * 60 * 1000; // 24h
 const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS, 10) || 15 * 60 * 1000; // 15 min
 const DESTROYED_ROOM_MEMORY_MS = 7 * 24 * 60 * 60 * 1000; // remember destroyed rooms for 7 days
+const MAGIC_LINK_TOKEN_TTL_MS = parseInt(process.env.MAGIC_LINK_TOKEN_TTL_MS, 10) || 30 * 60 * 1000;
+const MAGIC_LINK_TOKEN_VERSION = "v1";
+
+const configuredMagicLinkSecret =
+  process.env.MAGIC_LINK_TOKEN_SECRET ||
+  process.env.MAGIC_INVITE_SECRET ||
+  process.env.MAGIC_LINK_SECRET ||
+  null;
+
+const runtimeMagicLinkSecret =
+  configuredMagicLinkSecret || crypto.randomBytes(32).toString("hex");
+
+if (!configuredMagicLinkSecret) {
+  console.warn("[security] MAGIC_LINK_TOKEN_SECRET missing; using ephemeral runtime secret for magic links.");
+}
+
+const MAGIC_LINK_TOKEN_KEY = crypto
+  .createHash("sha256")
+  .update(runtimeMagicLinkSecret)
+  .digest();
 
 // --- SOCKET LOGIC ---
 const rooms = {};
@@ -61,6 +81,83 @@ const destroyedRooms = new Map();
 const contextMessages = {};
 const ALLOWED_REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🙏"]);
 const IMAGE_PIN_SEPARATOR = "::img::";
+
+function toBase64Url(buffer) {
+  return Buffer.from(buffer)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function fromBase64Url(value) {
+  if (typeof value !== "string" || !value) {
+    throw new Error("Invalid base64url value.");
+  }
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padLength = (4 - (normalized.length % 4)) % 4;
+  return Buffer.from(`${normalized}${"=".repeat(padLength)}`, "base64");
+}
+
+function issueMagicInviteToken({ roomId, inviteVersion, inviteNonce, encryptionKey }) {
+  const issuedAt = Date.now();
+  const payload = {
+    ver: MAGIC_LINK_TOKEN_VERSION,
+    rid: roomId,
+    iv: inviteVersion,
+    iat: issuedAt,
+    exp: issuedAt + MAGIC_LINK_TOKEN_TTL_MS,
+    n: inviteNonce,
+    ek: encryptionKey,
+  };
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", MAGIC_LINK_TOKEN_KEY, iv);
+  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  return `${MAGIC_LINK_TOKEN_VERSION}.${toBase64Url(iv)}.${toBase64Url(ciphertext)}.${toBase64Url(authTag)}`;
+}
+
+function verifyMagicInviteToken(token) {
+  try {
+    if (typeof token !== "string") return null;
+    const parts = token.split(".");
+    if (parts.length !== 4) return null;
+
+    const [version, encodedIv, encodedCiphertext, encodedTag] = parts;
+    if (version !== MAGIC_LINK_TOKEN_VERSION) return null;
+
+    const iv = fromBase64Url(encodedIv);
+    const ciphertext = fromBase64Url(encodedCiphertext);
+    const authTag = fromBase64Url(encodedTag);
+    if (iv.length !== 12 || authTag.length !== 16 || ciphertext.length < 1) return null;
+
+    const decipher = crypto.createDecipheriv("aes-256-gcm", MAGIC_LINK_TOKEN_KEY, iv);
+    decipher.setAuthTag(authTag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    const payload = JSON.parse(plaintext.toString("utf8"));
+
+    if (
+      !payload ||
+      payload.ver !== MAGIC_LINK_TOKEN_VERSION ||
+      typeof payload.rid !== "string" ||
+      !Number.isInteger(payload.iv) ||
+      typeof payload.n !== "string" ||
+      typeof payload.ek !== "string" ||
+      !Number.isFinite(payload.exp)
+    ) {
+      return null;
+    }
+
+    if (Date.now() > payload.exp) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 function extractPinnedMessageId(pinKey) {
   if (!pinKey || typeof pinKey !== "string") return null;
@@ -266,6 +363,10 @@ io.on("connection", (socket) => {
       hostId: socket.id,
       username,
       password: hash(password),
+      inviteVersion: 1,
+      currentInviteToken: null,
+      currentInviteNonce: null,
+      currentInviteExpiresAt: 0,
       createdAt: createdAt,
       roomName: roomName || "",
       capacity: roomCapacity,
@@ -286,6 +387,354 @@ io.on("connection", (socket) => {
       capacity: pendingRooms[roomId].capacity,
       isWaitingForFirstAgent: true
     });
+  });
+
+  socket.on("issue_magic_invite", ({ roomId, encryptionKey }, callback) => {
+    const done = typeof callback === "function" ? callback : () => {};
+
+    if (typeof roomId !== "string" || typeof encryptionKey !== "string") {
+      return done({ ok: false, error: "INVALID_MAGIC_LINK_REQUEST" });
+    }
+
+    const keyLen = encryptionKey.length;
+    if (keyLen < MIN_ENCRYPTION_KEY_LENGTH || keyLen > MAX_ENCRYPTION_KEY_LENGTH) {
+      return done({
+        ok: false,
+        error: `ENCRYPTION KEY MUST BE BETWEEN ${MIN_ENCRYPTION_KEY_LENGTH} AND ${MAX_ENCRYPTION_KEY_LENGTH} CHARACTERS.`,
+      });
+    }
+
+    const pendingRoom = pendingRooms[roomId];
+    if (pendingRoom && pendingRoom.hostId === socket.id) {
+      if (pendingRoom.password !== hash(encryptionKey)) {
+        return done({ ok: false, error: "INVALID ENCRYPTION KEY." });
+      }
+
+      const now = Date.now();
+      if (
+        pendingRoom.currentInviteToken &&
+        pendingRoom.currentInviteNonce &&
+        Number.isFinite(pendingRoom.currentInviteExpiresAt) &&
+        pendingRoom.currentInviteExpiresAt > now
+      ) {
+        return done({
+          ok: true,
+          roomId,
+          inviteToken: pendingRoom.currentInviteToken,
+          expiresInMs: pendingRoom.currentInviteExpiresAt - now,
+          inviteVersion: pendingRoom.inviteVersion || 1,
+        });
+      }
+
+      const inviteNonce = crypto.randomBytes(16).toString("hex");
+      const inviteToken = issueMagicInviteToken({
+        roomId,
+        inviteVersion: pendingRoom.inviteVersion || 1,
+        inviteNonce,
+        encryptionKey,
+      });
+      pendingRoom.currentInviteToken = inviteToken;
+      pendingRoom.currentInviteNonce = inviteNonce;
+      pendingRoom.currentInviteExpiresAt = Date.now() + MAGIC_LINK_TOKEN_TTL_MS;
+
+      return done({
+        ok: true,
+        roomId,
+        inviteToken,
+        expiresInMs: MAGIC_LINK_TOKEN_TTL_MS,
+        inviteVersion: pendingRoom.inviteVersion || 1,
+      });
+    }
+
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) {
+      return done({ ok: false, error: "UNAUTHORIZED_MAGIC_LINK_REQUEST" });
+    }
+
+    if (room.password !== hash(encryptionKey)) {
+      return done({ ok: false, error: "INVALID ENCRYPTION KEY." });
+    }
+
+    const now = Date.now();
+    if (
+      room.currentInviteToken &&
+      room.currentInviteNonce &&
+      Number.isFinite(room.currentInviteExpiresAt) &&
+      room.currentInviteExpiresAt > now
+    ) {
+      return done({
+        ok: true,
+        roomId,
+        inviteToken: room.currentInviteToken,
+        expiresInMs: room.currentInviteExpiresAt - now,
+        inviteVersion: room.inviteVersion || 1,
+      });
+    }
+
+    const inviteNonce = crypto.randomBytes(16).toString("hex");
+    const inviteToken = issueMagicInviteToken({
+      roomId,
+      inviteVersion: room.inviteVersion || 1,
+      inviteNonce,
+      encryptionKey,
+    });
+    room.currentInviteToken = inviteToken;
+    room.currentInviteNonce = inviteNonce;
+    room.currentInviteExpiresAt = Date.now() + MAGIC_LINK_TOKEN_TTL_MS;
+
+    return done({
+      ok: true,
+      roomId,
+      inviteToken,
+      expiresInMs: MAGIC_LINK_TOKEN_TTL_MS,
+      inviteVersion: room.inviteVersion || 1,
+    });
+  });
+
+  socket.on("revoke_magic_invite", ({ roomId }, callback) => {
+    const done = typeof callback === "function" ? callback : () => {};
+
+    if (typeof roomId !== "string") {
+      return done({ ok: false, error: "INVALID_MAGIC_LINK_REVOKE_REQUEST" });
+    }
+
+    const pendingRoom = pendingRooms[roomId];
+    if (pendingRoom && pendingRoom.hostId === socket.id) {
+      pendingRoom.inviteVersion = (pendingRoom.inviteVersion || 1) + 1;
+      pendingRoom.currentInviteToken = null;
+      pendingRoom.currentInviteNonce = null;
+      pendingRoom.currentInviteExpiresAt = 0;
+      return done({ ok: true, roomId, inviteVersion: pendingRoom.inviteVersion });
+    }
+
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) {
+      return done({ ok: false, error: "UNAUTHORIZED_MAGIC_LINK_REVOKE_REQUEST" });
+    }
+
+    room.inviteVersion = (room.inviteVersion || 1) + 1;
+    room.currentInviteToken = null;
+    room.currentInviteNonce = null;
+    room.currentInviteExpiresAt = 0;
+    return done({ ok: true, roomId, inviteVersion: room.inviteVersion });
+  });
+
+  socket.on("join_room_with_invite", ({ username, inviteToken }) => {
+    if (typeof username !== "string" || !username.trim() || typeof inviteToken !== "string") {
+      return socket.emit("error", "INVALID OR EXPIRED MAGIC LINK.");
+    }
+
+    const normalizedUsername = username.trim();
+    const invitePayload = verifyMagicInviteToken(inviteToken);
+    if (!invitePayload) {
+      return socket.emit("error", "INVALID OR EXPIRED MAGIC LINK.");
+    }
+
+    const { rid: roomId, iv: inviteVersion, n: inviteNonce, ek: encryptionKey } = invitePayload;
+    const keyLen = typeof encryptionKey === "string" ? encryptionKey.length : 0;
+    if (keyLen < MIN_ENCRYPTION_KEY_LENGTH || keyLen > MAX_ENCRYPTION_KEY_LENGTH) {
+      return socket.emit("error", "INVALID OR EXPIRED MAGIC LINK.");
+    }
+
+    const pendingRoom = pendingRooms[roomId];
+    if (pendingRoom) {
+      if ((pendingRoom.inviteVersion || 1) !== inviteVersion) {
+        return socket.emit("error", "THIS MAGIC LINK HAS BEEN REVOKED.");
+      }
+
+      if (!pendingRoom.currentInviteNonce || pendingRoom.currentInviteNonce !== inviteNonce) {
+        return socket.emit("error", "THIS MAGIC LINK HAS BEEN REVOKED.");
+      }
+
+      if (pendingRoom.password !== hash(encryptionKey)) {
+        io.to(pendingRoom.hostId).emit("intrusion_detected", {
+          roomId,
+          attemptedCodename: normalizedUsername || "UNKNOWN",
+          sourceSocketId: socket.id,
+          detectedAt: Date.now(),
+        });
+        return socket.emit("error", "INVALID OR EXPIRED MAGIC LINK.");
+      }
+
+      if (normalizedUsername.toLowerCase() === pendingRoom.username.toLowerCase()) {
+        return socket.emit("error", "CODENAME ALREADY IN USE.");
+      }
+
+      const nowTime = Date.now();
+      const hostUser = { id: pendingRoom.hostId, username: pendingRoom.username, isHost: true, hasFullHistory: true, joinedAt: nowTime };
+      const newUser = { id: socket.id, username: normalizedUsername, isHost: false, hasFullHistory: true, joinedAt: nowTime };
+      const actualCreatedAt = Date.now();
+
+      rooms[roomId] = {
+        hostId: pendingRoom.hostId,
+        users: [hostUser, newUser],
+        password: pendingRoom.password,
+        inviteVersion: pendingRoom.inviteVersion || 1,
+        currentInviteToken: pendingRoom.currentInviteToken || null,
+        currentInviteNonce: pendingRoom.currentInviteNonce || null,
+        currentInviteExpiresAt: pendingRoom.currentInviteExpiresAt || 0,
+        createdAt: actualCreatedAt,
+        roomName: pendingRoom.roomName,
+        capacity: pendingRoom.capacity,
+        isLocked: pendingRoom.isLocked,
+        isHalted: false,
+        silencedUserIds: pendingRoom.silencedUserIds,
+        pinnedMessageIds: pendingRoom.pinnedMessageIds || [],
+        messageOwners: pendingRoom.messageOwners,
+        messageReactions: pendingRoom.messageReactions || {},
+        requireApproval: pendingRoom.requireApproval,
+        pendingRequests: pendingRoom.pendingRequests,
+        activityLog: [],
+        exportApproval: null,
+      };
+
+      appendRoomActivity(rooms[roomId], "room_created", {
+        roomName: rooms[roomId].roomName || "",
+        capacity: rooms[roomId].capacity,
+      });
+      appendRoomActivity(rooms[roomId], "host_joined", {
+        userId: hostUser.id,
+        username: hostUser.username,
+      });
+      appendRoomActivity(rooms[roomId], "agent_joined", {
+        userId: newUser.id,
+        username: newUser.username,
+      });
+
+      ensureContextData(roomId);
+      delete pendingRooms[roomId];
+
+      const hostSocket = io.sockets.sockets.get(pendingRoom.hostId);
+      if (hostSocket) {
+        hostSocket.join(roomId);
+      }
+
+      socket.join(roomId);
+
+      io.to(pendingRoom.hostId).emit("room_created", {
+        roomId,
+        createdAt: rooms[roomId].createdAt,
+        users: rooms[roomId].users,
+        roomName: rooms[roomId].roomName,
+        capacity: rooms[roomId].capacity,
+        isLocked: rooms[roomId].isLocked,
+        silencedUserIds: rooms[roomId].silencedUserIds,
+      });
+
+      socket.emit("joined_room_success", {
+        roomId,
+        isHost: false,
+        roomPassword: encryptionKey,
+        createdAt: rooms[roomId].createdAt,
+        users: rooms[roomId].users,
+        roomName: rooms[roomId].roomName,
+        capacity: rooms[roomId].capacity,
+        isLocked: rooms[roomId].isLocked,
+        silencedUserIds: rooms[roomId].silencedUserIds,
+      });
+
+      io.to(roomId).emit("receive_message", {
+        system: true,
+        message: `${normalizedUsername} has entered the frequency.`,
+      });
+
+      io.to(roomId).emit("update_users", rooms[roomId].users);
+
+      return;
+    }
+
+    const room = rooms[roomId];
+    if (room) {
+      if ((room.inviteVersion || 1) !== inviteVersion) {
+        return socket.emit("error", "THIS MAGIC LINK HAS BEEN REVOKED.");
+      }
+
+      if (!room.currentInviteNonce || room.currentInviteNonce !== inviteNonce) {
+        return socket.emit("error", "THIS MAGIC LINK HAS BEEN REVOKED.");
+      }
+
+      if (room.password !== hash(encryptionKey)) {
+        io.to(room.hostId).emit("intrusion_detected", {
+          roomId,
+          attemptedCodename: normalizedUsername || "UNKNOWN",
+          sourceSocketId: socket.id,
+          detectedAt: Date.now(),
+        });
+        return socket.emit("error", "INVALID OR EXPIRED MAGIC LINK.");
+      }
+
+      if (room.isLocked) {
+        return socket.emit("error", "ACCESS DENIED: Frequency Locked By Host.");
+      }
+      if (room.users.some(u => u.username.toLowerCase() === normalizedUsername.toLowerCase())) {
+        return socket.emit("error", "CODENAME ALREADY IN USE.");
+      }
+      if (room.users.length >= room.capacity) {
+        return socket.emit("error", "ROOM IS FULL.");
+      }
+
+      const requiresApprovalForThisJoin = room.requireApproval && !room.isHalted;
+      if (requiresApprovalForThisJoin) {
+        room.pendingRequests = room.pendingRequests || [];
+        if (room.pendingRequests.some(r => r.username.toLowerCase() === normalizedUsername.toLowerCase())) {
+          return socket.emit("error", "JOIN REQUEST ALREADY PENDING FOR THIS CODENAME.");
+        }
+
+        room.pendingRequests.push({ socketId: socket.id, username: normalizedUsername });
+        socket.emit("join_request_pending", { roomId });
+        io.to(room.hostId).emit("join_request", { roomId, username: normalizedUsername, socketId: socket.id });
+        return;
+      }
+
+      socket.join(roomId);
+      const contextData = ensureContextData(roomId);
+      const needsContext = contextData.messages.length > 0;
+      const nowTime = Date.now();
+      const newUser = { id: socket.id, username: normalizedUsername, isHost: false, hasFullHistory: !needsContext, joinedAt: nowTime };
+      room.users.push(newUser);
+      appendRoomActivity(room, "agent_joined", {
+        userId: newUser.id,
+        username: newUser.username,
+      });
+
+      if (room.isHalted) {
+        room.isHalted = false;
+        io.to(room.hostId).emit("room_resumed", {
+          roomId,
+          createdAt: room.createdAt,
+          users: room.users,
+          roomName: room.roomName || "",
+          capacity: room.capacity,
+          isLocked: room.isLocked,
+          silencedUserIds: room.silencedUserIds,
+        });
+      }
+
+      socket.emit("joined_room_success", {
+        roomId,
+        isHost: false,
+        roomPassword: encryptionKey,
+        createdAt: room.createdAt,
+        users: room.users,
+        roomName: room.roomName || "",
+        capacity: room.capacity,
+        isLocked: room.isLocked,
+        silencedUserIds: room.silencedUserIds,
+      });
+
+      io.to(roomId).emit("receive_message", {
+        system: true,
+        message: `${normalizedUsername} has entered the frequency.`,
+      });
+
+      io.to(roomId).emit("update_users", room.users);
+    } else {
+      if (destroyedRooms.has(roomId)) {
+        socket.emit("error", "THIS ROOM HAS ALREADY BEEN TERMINATED.");
+      } else {
+        socket.emit("error", "ROOM NOT FOUND.");
+      }
+    }
   });
 
   socket.on("join_room", ({ username, roomId, password }) => {
@@ -322,6 +771,10 @@ io.on("connection", (socket) => {
         hostId: pendingRoom.hostId,
         users: [hostUser, newUser],
         password: pendingRoom.password,
+        inviteVersion: pendingRoom.inviteVersion || 1,
+        currentInviteToken: pendingRoom.currentInviteToken || null,
+        currentInviteNonce: pendingRoom.currentInviteNonce || null,
+        currentInviteExpiresAt: pendingRoom.currentInviteExpiresAt || 0,
         createdAt: actualCreatedAt,
         roomName: pendingRoom.roomName,
         capacity: pendingRoom.capacity,

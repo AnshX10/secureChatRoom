@@ -15,10 +15,6 @@ import {
   LuEyeOff,
 } from "react-icons/lu";
 import Logo from "./Logo";
-import {
-  decryptMagicLinkPayload,
-  encryptMagicLinkPayload,
-} from "../utils/magicLink";
 
 const MIN_ENCRYPTION_KEY_LENGTH = 6;
 const MAX_ENCRYPTION_KEY_LENGTH = 64;
@@ -29,12 +25,14 @@ const ROOM_ID_BOX_COUNT = 8;
 
 const JoinRoom = ({
   joinRoom,
+  joinRoomWithInvite,
   createRoom,
   terminateRoom,
   isCreatingRoom,
   isWaitingForFirstAgent,
   roomId,
   hostRoomPassword,
+  issueMagicLink,
   errorMessage,
   setErrorMessage,
   clearError,
@@ -48,26 +46,31 @@ const JoinRoom = ({
   const [isMagicLink, setIsMagicLink] = useState(false);
   const [requireApproval, setRequireApproval] = useState(false);
   const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
-  const [magicLinkUrl, setMagicLinkUrl] = useState(""); // Store generated magic link
+  const [magicLinkUrl, setMagicLinkUrl] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
+  const [isMagicLinkBusy, setIsMagicLinkBusy] = useState(false);
   const [showEncryptionKey, setShowEncryptionKey] = useState(false);
 
-  // Parse URL hash for Magic Invite Link (encrypted payload)
+  // Parse URL hash/query for secure magic invite token
   useEffect(() => {
     const hash = window.location.hash.substring(1);
     const hashParams = new URLSearchParams(hash);
     const queryParams = new URLSearchParams(window.location.search);
-    const invitePayload = hashParams.get("invite") || queryParams.get("invite");
+    const tokenFromUrl =
+      hashParams.get("inv") ||
+      queryParams.get("inv") ||
+      hashParams.get("invite") ||
+      queryParams.get("invite");
+    const roomFromUrl = hashParams.get("r") || queryParams.get("r");
 
-    if (invitePayload) {
-      const data = decryptMagicLinkPayload(invitePayload);
-      if (data) {
-        setSharedRoomId(data.room.toUpperCase());
-        setRoomPassword(data.key);
-        setIsMagicLink(true);
-        setView("join");
-
-        window.history.replaceState(null, "", window.location.pathname);
+    if (tokenFromUrl) {
+      if (roomFromUrl) {
+        setSharedRoomId(roomFromUrl.toUpperCase());
       }
+      setInviteToken(tokenFromUrl);
+      setIsMagicLink(true);
+      setView("join");
+      window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
 
@@ -76,14 +79,6 @@ const JoinRoom = ({
     if (isWaitingForFirstAgent) {
       setSharedRoomId(roomId || "");
       setView("waiting");
-
-      // Generate magic link with room ID and password
-      const passwordForInvite = roomPassword || hostRoomPassword;
-      if (roomId && passwordForInvite) {
-        const encrypted = encryptMagicLinkPayload(roomId, passwordForInvite);
-        const magicUrl = `${window.location.origin}/chatroom?invite=${encrypted}`;
-        setMagicLinkUrl(magicUrl);
-      }
     }
   }, [isWaitingForFirstAgent, roomId, roomPassword, hostRoomPassword]);
 
@@ -96,6 +91,8 @@ const JoinRoom = ({
     setRequireApproval(false);
     setRoomCapacity(DEFAULT_ROOM_CAPACITY);
     setMagicLinkUrl("");
+    setInviteToken("");
+    setIsMagicLinkBusy(false);
     setShowEncryptionKey(false);
     setIsMagicLink(false);
     setView("menu");
@@ -120,6 +117,12 @@ const JoinRoom = ({
   };
 
   const handleJoin = () => {
+    if (isMagicLink && inviteToken) {
+      if (!username) return;
+      joinRoomWithInvite?.(username, inviteToken);
+      return;
+    }
+
     if (!username || !sharedRoomId || !roomPassword) return;
     if (!validateEncryptionKey(roomPassword)) return;
     joinRoom(username, sharedRoomId, roomPassword);
@@ -163,8 +166,48 @@ const JoinRoom = ({
     setTimeout(() => setCopiedRoomId(false), 2000);
   };
 
-  const copyMagicLink = () => {
-    navigator.clipboard.writeText(magicLinkUrl);
+  const buildMagicLinkUrl = (issuedRoomId, issuedToken) => {
+    const params = new URLSearchParams({
+      r: issuedRoomId,
+      inv: issuedToken,
+    });
+    return `${window.location.origin}/chatroom?${params.toString()}`;
+  };
+
+  const ensureMagicLink = async () => {
+    if (magicLinkUrl) {
+      return magicLinkUrl;
+    }
+
+    if (!roomId) {
+      setErrorMessage?.("ROOM NOT READY.");
+      return "";
+    }
+
+    const encryptionKey = roomPassword || hostRoomPassword;
+    if (!encryptionKey) {
+      setErrorMessage?.("ENCRYPTION KEY NOT AVAILABLE FOR MAGIC LINK.");
+      return "";
+    }
+
+    setIsMagicLinkBusy(true);
+    try {
+      const response = await issueMagicLink?.({ roomId, encryptionKey });
+      const nextUrl = buildMagicLinkUrl(response.roomId, response.inviteToken);
+      setMagicLinkUrl(nextUrl);
+      return nextUrl;
+    } catch (error) {
+      setErrorMessage?.(error?.message || "FAILED TO GENERATE MAGIC LINK.");
+      return "";
+    } finally {
+      setIsMagicLinkBusy(false);
+    }
+  };
+
+  const copyMagicLink = async () => {
+    const nextMagicLink = await ensureMagicLink();
+    if (!nextMagicLink) return;
+    navigator.clipboard.writeText(nextMagicLink);
     setCopiedMagicLink(true);
     setTimeout(() => setCopiedMagicLink(false), 2000);
   };
@@ -469,8 +512,8 @@ const JoinRoom = ({
                   {isMagicLink && (
                     <div className="bg-white/5 border border-zinc-700/20 p-4 mb-1 rounded-xl">
                       <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] text-center flex items-center justify-center gap-2">
-                        <LuShieldCheck size={12} /> Room credentials pre-filled
-                        via magic link
+                        <LuShieldCheck size={12} /> Secure token invite link
+                        detected
                       </p>
                     </div>
                   )}
@@ -589,7 +632,9 @@ const JoinRoom = ({
                     disabled={
                       isWaitingApproval ||
                       !username ||
-                      (!isMagicLink && (!sharedRoomId || !roomPassword))
+                      (isMagicLink
+                        ? !inviteToken
+                        : !sharedRoomId || !roomPassword)
                     }
                   >
                     {isWaitingApproval ? "Waiting For Host..." : "Connect"}
@@ -681,10 +726,11 @@ const JoinRoom = ({
                 </button>
 
                 {/* Magic Link card */}
-                {magicLinkUrl && (
+                <div className="w-full text-left group bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/50 hover:border-zinc-700 rounded-2xl p-4 transition-all duration-200">
                   <button
                     onClick={copyMagicLink}
-                    className="w-full text-left group bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/50 hover:border-zinc-700 rounded-2xl p-4 transition-all duration-200 active:scale-[0.99]"
+                    disabled={isMagicLinkBusy}
+                    className="w-full text-left disabled:opacity-50"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -699,15 +745,18 @@ const JoinRoom = ({
                         className={`text-xs flex items-center gap-1.5 transition-colors ${copiedMagicLink ? "text-green-400" : "text-zinc-600 group-hover:text-zinc-400"}`}
                       >
                         <LuCopy size={11} />
-                        {copiedMagicLink ? "Copied!" : "Click to copy"}
+                        {isMagicLinkBusy
+                          ? "Generating..."
+                          : copiedMagicLink
+                            ? "Copied!"
+                            : "Click to copy"}
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500 leading-relaxed">
-                      One-tap invite link — bundles the room ID and encryption
-                      key together. No manual entry needed on the agent's side.
+                      One-tap secure invite link for agents.
                     </p>
                   </button>
-                )}
+                </div>
 
                 {/* Footer note */}
                 <p className="text-center text-xs text-zinc-600">

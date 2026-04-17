@@ -51,7 +51,6 @@ import {
 import Logo from "./Logo";
 import CryptoJS from "crypto-js";
 import { v4 as uuidv4 } from "uuid";
-import { encryptMagicLinkPayload } from "../utils/magicLink";
 import { downloadChatHistoryReport as downloadChatHistoryReportUtil } from "../utils/chatHistoryReport";
 import BiometricVault from "./BiometricVault";
 import HighClearanceComposer from "./HighClearanceComposer";
@@ -260,6 +259,95 @@ const ChatRoom = ({
   const roomIdDisplay = (roomId || "")
     .toUpperCase()
     .slice(0, ROOM_ID_BOX_COUNT);
+  const [magicInviteUrl, setMagicInviteUrl] = useState("");
+  const [isMagicInviteBusy, setIsMagicInviteBusy] = useState(false);
+  const [copiedMagicInvite, setCopiedMagicInvite] = useState(false);
+  const [magicInviteRevoked, setMagicInviteRevoked] = useState(false);
+
+  const buildMagicInviteUrl = (issuedRoomId, inviteToken) => {
+    const params = new URLSearchParams({
+      r: issuedRoomId,
+      inv: inviteToken,
+    });
+    return `${window.location.origin}/chatroom?${params.toString()}`;
+  };
+
+  const issueMagicInviteLink = async () => {
+    if (!isCurrentHost || !roomId || !roomPassword) return "";
+    if (magicInviteUrl && !magicInviteRevoked) return magicInviteUrl;
+
+    setIsMagicInviteBusy(true);
+    try {
+      const response = await new Promise((resolve, reject) => {
+        socket.timeout(7000).emit(
+          "issue_magic_invite",
+          {
+            roomId,
+            encryptionKey: roomPassword,
+          },
+          (err, payload) => {
+            if (err) {
+              reject(new Error("Failed to issue magic invite."));
+              return;
+            }
+            if (!payload?.ok || !payload?.inviteToken || !payload?.roomId) {
+              reject(new Error(payload?.error || "Failed to issue magic invite."));
+              return;
+            }
+            resolve(payload);
+          },
+        );
+      });
+
+      const nextUrl = buildMagicInviteUrl(response.roomId, response.inviteToken);
+      setMagicInviteUrl(nextUrl);
+      setMagicInviteRevoked(false);
+      return nextUrl;
+    } catch (error) {
+      console.error(error);
+      return "";
+    } finally {
+      setIsMagicInviteBusy(false);
+    }
+  };
+
+  const copyMagicInvite = async () => {
+    const nextUrl = await issueMagicInviteLink();
+    if (!nextUrl) return;
+    navigator.clipboard.writeText(nextUrl);
+    setCopiedMagicInvite(true);
+    setTimeout(() => setCopiedMagicInvite(false), 2000);
+  };
+
+  const revokeMagicInvite = async () => {
+    if (!isCurrentHost || !roomId) return;
+
+    setMagicInviteRevoked(true);
+    setIsMagicInviteBusy(true);
+    try {
+      await new Promise((resolve, reject) => {
+        socket.timeout(7000).emit("revoke_magic_invite", { roomId }, (err, payload) => {
+          if (err) {
+            reject(new Error("Failed to revoke magic invite."));
+            return;
+          }
+          if (!payload?.ok) {
+            reject(new Error(payload?.error || "Failed to revoke magic invite."));
+            return;
+          }
+          resolve(payload);
+        });
+      });
+
+      setMagicInviteUrl("");
+      setCopiedMagicInvite(false);
+    } catch (error) {
+      setMagicInviteRevoked(false);
+      console.error(error);
+    } finally {
+      setIsMagicInviteBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser?.hasFullHistory) {
@@ -3315,30 +3403,43 @@ const ChatRoom = ({
                     </div>
                   </div>
 
-                  {isCurrentHost &&
-                    (() => {
-                      const encryptedPayload = encryptMagicLinkPayload(
-                        roomId,
-                        roomPassword,
-                      );
-                      const magicLink = `${window.location.origin}/chatroom/?invite=${encryptedPayload}`;
-                      return (
+                  {isCurrentHost && (
+                    <div className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 hover:border-zinc-700/60 hover:bg-zinc-900/50 transition-all group">
+                      <button
+                        type="button"
+                        onClick={copyMagicInvite}
+                        disabled={isMagicInviteBusy}
+                        className="w-full flex items-center justify-between gap-2 disabled:opacity-60"
+                      >
+                        <p className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
+                          <LuKeyRound size={11} /> Magic Invite
+                        </p>
+                        <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
+                          <LuCopy size={11} />
+                          {isMagicInviteBusy
+                            ? "Generating..."
+                            : copiedMagicInvite
+                              ? "Copied!"
+                              : "Tap to Copy"}
+                        </span>
+                      </button>
+                      <p className="mt-2 text-[10px] text-zinc-500 leading-relaxed">
+                        {magicInviteRevoked
+                          ? "Invite revoked. Tap copy to auto-generate a fresh link."
+                          : "Revocable secure invite token. Old links become invalid after revoke."}
+                      </p>
+                      {!magicInviteRevoked && (
                         <button
                           type="button"
-                          onClick={() =>
-                            navigator.clipboard.writeText(magicLink)
-                          }
-                          className="w-full rounded-xl p-4 mb-4 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 border border-zinc-800/40 flex items-center justify-between gap-2 hover:border-zinc-700/60 hover:bg-zinc-900/50 active:scale-[0.99] transition-all group"
+                          onClick={revokeMagicInvite}
+                          disabled={isMagicInviteBusy}
+                          className="mt-3 text-[10px] uppercase tracking-[0.18em] text-red-400 hover:text-red-300 disabled:opacity-50"
                         >
-                          <p className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5 group-hover:text-zinc-300 transition-colors">
-                            <LuKeyRound size={11} /> Magic Invite
-                          </p>
-                          <span className="flex items-center gap-1.5 text-[8px] uppercase font-bold text-zinc-600 group-hover:text-zinc-400 transition-colors">
-                            <LuCopy size={11} /> Tap to Copy
-                          </span>
+                          Revoke Magic link Invite
                         </button>
-                      );
-                    })()}
+                      )}
+                    </div>
+                  )}
 
                   {isCurrentHost && joinRequests.length > 0 && (
                     <div className="border border-zinc-700/40 bg-gradient-to-br from-zinc-900/40 to-zinc-900/20 rounded-xl p-4 mb-4 relative overflow-hidden">
@@ -3390,7 +3491,6 @@ const ChatRoom = ({
                   <div className="flex items-center gap-2 mb-4 mt-1">
                     <h3 className="text-[10px] uppercase font-bold text-zinc-200 tracking-[0.2em] flex items-center gap-1.5 shrink-0">
                       <LuUsers size={11} className="text-zinc-200" /> Agents
-                      Online
                     </h3>
                     <div className="min-w-0 flex-1 flex items-center gap-1.5 bg-zinc-900/70 border border-zinc-700/60 rounded-lg px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] focus-within:border-zinc-500/70 focus-within:bg-zinc-900/90">
                       <input
