@@ -95,8 +95,6 @@ const ChatRoom = ({
   roomLocked,
   roomSilencedUserIds,
 }) => {
-  const hostChatStorageKey =
-    isHost && roomId ? `host_chat_history_${roomId}` : null;
   const [currentMessage, setCurrentMessage] = useState("");
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -243,6 +241,8 @@ const ChatRoom = ({
   const [hostTransferSearch, setHostTransferSearch] = useState("");
   const currentUser = users.find((user) => user.id === socket.id);
   const isCurrentHost = currentUser ? !!currentUser.isHost : !!isHost;
+  const hostChatStorageKey =
+    isCurrentHost && roomId ? `host_chat_history_${roomId}` : null;
   const promotableUsers = users.filter((user) => user.id !== socket.id);
   const filteredUsers = users.filter((user) =>
     user.username.toLowerCase().includes(agentSearchQuery.trim().toLowerCase()),
@@ -1123,7 +1123,7 @@ const ChatRoom = ({
   }, [createdAt]);
 
   useEffect(() => {
-    if (!isHost || !hostChatStorageKey) return;
+    if (!isCurrentHost || !hostChatStorageKey) return;
     try {
       const rawHistory = sessionStorage.getItem(hostChatStorageKey);
       if (!rawHistory) return;
@@ -1157,10 +1157,10 @@ const ChatRoom = ({
     } catch {
       sessionStorage.removeItem(hostChatStorageKey);
     }
-  }, [isHost, hostChatStorageKey, roomPassword]);
+  }, [isCurrentHost, hostChatStorageKey, roomPassword]);
 
   useEffect(() => {
-    if (!isHost || !hostChatStorageKey) return;
+    if (!isCurrentHost || !hostChatStorageKey) return;
     try {
       const encryptedHistory = CryptoJS.AES.encrypt(
         JSON.stringify(messageList),
@@ -1173,7 +1173,7 @@ const ChatRoom = ({
       };
       sessionStorage.setItem(hostChatStorageKey, JSON.stringify(storageEnvelope));
     } catch {}
-  }, [isHost, hostChatStorageKey, messageList, roomPassword]);
+  }, [isCurrentHost, hostChatStorageKey, messageList, roomPassword]);
 
   const encrypt = (text) => CryptoJS.AES.encrypt(text, roomPassword).toString();
   const decrypt = (cipherText) => {

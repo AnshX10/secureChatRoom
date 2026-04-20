@@ -61,6 +61,7 @@ function App() {
       setRoomCapacity(capacity || 50);
       setRoomLocked(!!isLocked);
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
+      setIsHost(users.some((user) => user.id === socket.id && user.isHost));
       setIsInChat(false);
       setIsWaitingForFirstAgent(true);
     });
@@ -73,6 +74,7 @@ function App() {
       setRoomCapacity(capacity || 50);
       setRoomLocked(!!isLocked);
       setRoomSilencedUserIds(Array.isArray(silencedUserIds) ? silencedUserIds : []);
+      setIsHost(users.some((user) => user.id === socket.id && user.isHost));
       setIsWaitingForFirstAgent(false);
       setIsInChat(true);
     });
@@ -92,6 +94,10 @@ function App() {
       setIsHost(isHost);
       setIsInChat(true);
       setIsWaitingApproval(false);
+    });
+
+    socket.on("host_transferred", ({ newHostId }) => {
+      setIsHost(newHostId === socket.id);
     });
 
     // Join request is pending host approval
@@ -131,6 +137,7 @@ function App() {
       socket.off("room_halted");
       socket.off("room_resumed");
       socket.off("joined_room_success");
+      socket.off("host_transferred");
       socket.off("join_request_pending");
       socket.off("join_request_result");
       socket.off("room_closed");
